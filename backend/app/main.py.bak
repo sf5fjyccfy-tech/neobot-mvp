@@ -1,0 +1,607 @@
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from pydantic import BaseModel
+from typing import Optional
+import httpx
+import re
+
+from .database import get_db, engine, Base
+from .models import Tenant, Conversation, Message, PlanType, WhatsAppProvider
+from .ai_prompts import build_chat_messages
+
+AI_API_KEY = "sk-442c51d150d2471e87f3913a611737a2"
+AI_URL = "https://api.deepseek.com/v1/chat/completions"
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="NéoBot MVP API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class TenantCreate(BaseModel):
+    name: str
+    email: str
+    phone: str
+    business_type: Optional[str] = "autre"
+
+class MessageWebhook(BaseModel):
+    tenant_id: int
+    from_number: str
+    message: str
+
+async def generate_ai_response(tenant: Tenant, customer_message: str, conversation_history: list = None) -> str:
+    simple = {
+        r"^(salut|bonjour|bonsoir|hello|hi|hey)[\s!?]*$": f"Bonjour ! Bienvenue chez {tenant.name}. Comment puis-je vous aider ?",
+        r"^(merci|thank you|thanks)[\s!?]*$": "Avec plaisir ! N'hésitez pas.",
+        r"^(au revoir|bye|tchao)[\s!?]*$": f"Au revoir ! À bientôt chez {tenant.name}."
+    }
+    
+    msg_lower = customer_message.lower().strip()
+    for pattern, response in simple.items():
+        if re.match(pattern, msg_lower, re.IGNORECASE):
+            return response
+    
+    if len(customer_message.split()) <= 2:
+        return f"Bonjour ! Pouvez-vous préciser votre demande pour {tenant.name} ?"
+    
+    try:
+        messages = build_chat_messages(tenant, customer_message, conversation_history)
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            print(f"🔍 Appel IA DeepSeek pour: {customer_message[:50]}...")
+            response = await client.post(
+                AI_URL,
+                json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 150},
+                headers={"Authorization": f"Bearer {AI_API_KEY}"}
+            )
+            
+            print(f"📡 Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"💰 Tokens: {data['usage']['total_tokens']}")
+                return data["choices"][0]["message"]["content"]
+            elif response.status_code == 402:
+                print("⚠️ Balance insuffisante DeepSeek")
+                print("📢 NOTIFICATION: ⚠️ ALERTE: Crédit IA épuisé! Rechargez DeepSeek.")
+                return f"Merci pour votre message. Un conseiller vous répondra sous peu."
+            else:
+                print(f"❌ Erreur: {response.text[:200]}")
+                return f"Merci pour votre message. Un conseiller vous répondra sous peu."
+                
+    except Exception as e:
+        print(f"🔥 ERREUR: {type(e).__name__}: {str(e)}")
+        return f"Merci de nous contacter. Notre équipe vous répond rapidement."
+
+@app.get("/")
+def read_root():
+    return {"message": "NéoBot MVP API", "status": "running", "version": "1.0.0"}
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    from datetime import datetime
+    db.execute(text("SELECT 1"))
+    return {"status": "healthy", "database": "connected", "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/ai/status")
+async def check_ai_credits():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.deepseek.com/user/balance",
+                headers={"Authorization": f"Bearer {AI_API_KEY}"}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                balance = data.get("balance_usd", 0)
+                total = data.get("total_granted_usd", 0)
+                return {
+                    "status": "ok" if balance > 1 else "low",
+                    "balance_usd": balance,
+                    "total_granted": total,
+                    "message": f"Balance: ${balance}" if balance > 1 else "⚠️ Balance faible: $" + str(balance)
+                }
+            return {"status": "error", "message": response.text}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/tenants")
+def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
+    existing = db.query(Tenant).filter(Tenant.email == tenant.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email déjà enregistré")
+    
+    db_tenant = Tenant(
+        name=tenant.name,
+        email=tenant.email,
+        phone=tenant.phone,
+        business_type=tenant.business_type,
+        plan=PlanType.BASIQUE,
+        whatsapp_provider=WhatsAppProvider.WASENDER_API
+    )
+    
+    # Activer essai gratuit automatiquement
+    db_tenant.activate_trial()
+    
+    db.add(db_tenant)
+    db.commit()
+    db.refresh(db_tenant)
+    
+    plan_config = db_tenant.get_plan_config()
+    
+    print(f"✅ Nouveau tenant: {db_tenant.name} ({db_tenant.email})")
+    
+    return {
+        "id": db_tenant.id,
+        "name": db_tenant.name,
+        "email": db_tenant.email,
+        "plan": db_tenant.plan.value,
+        "trial_days": plan_config["trial_days"],
+        "trial_ends_at": db_tenant.trial_ends_at.isoformat() if db_tenant.trial_ends_at else None,
+        "messages_limit": plan_config["messages_limit"],
+        "status": "created"
+    }
+
+@app.get("/api/tenants/{tenant_id}")
+def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    plan_config = tenant.get_plan_config()
+    
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "email": tenant.email,
+        "phone": tenant.phone,
+        "business_type": tenant.business_type,
+        "plan": {
+            "current": tenant.plan.value,
+            "name": plan_config["name"],
+            "price_fcfa": plan_config["price_fcfa"],
+            "messages_limit": plan_config["messages_limit"],
+            "features": plan_config["features"]
+        },
+        "usage": {
+            "messages_used": tenant.messages_used,
+            "messages_limit": tenant.messages_limit,
+            "percentage": round((tenant.messages_used / tenant.messages_limit) * 100, 1) if tenant.messages_limit else 0
+        },
+        "trial": {
+            "is_trial": tenant.is_trial,
+            "ends_at": tenant.trial_ends_at.isoformat() if tenant.trial_ends_at else None,
+            "days_remaining": tenant.days_remaining_trial(),
+            "is_expired": tenant.is_trial_expired()
+        },
+        "whatsapp": {
+            "provider": tenant.whatsapp_provider.value,
+            "connected": tenant.whatsapp_connected
+        }
+    }
+
+@app.post("/webhook/whatsapp")
+async def whatsapp_webhook(data: MessageWebhook, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == data.tenant_id).first()
+    if not tenant:
+        return {"error": "Tenant non trouvé"}
+    
+    # Vérifier essai expiré
+    if tenant.is_trial_expired():
+        return {"error": "Essai gratuit expiré", "message": "Veuillez souscrire à un abonnement"}
+    
+    # Vérifier quota
+    if tenant.messages_used >= tenant.messages_limit:
+        return {"error": "Quota dépassé", "message": f"Limite de {tenant.messages_limit} messages atteinte"}
+    
+    conversation = db.query(Conversation).filter(
+        Conversation.tenant_id == data.tenant_id,
+        Conversation.customer_phone == data.from_number
+    ).first()
+    
+    if not conversation:
+        conversation = Conversation(
+            tenant_id=data.tenant_id,
+            customer_phone=data.from_number,
+            status="active"
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+    
+    incoming_msg = Message(
+        conversation_id=conversation.id,
+        content=data.message,
+        direction="incoming",
+        is_ai=False
+    )
+    db.add(incoming_msg)
+    
+    history = db.query(Message).filter(
+        Message.conversation_id == conversation.id
+    ).order_by(Message.created_at.desc()).limit(10).all()
+    history.reverse()
+    
+    ai_response = await generate_ai_response(tenant, data.message, history)
+    
+    outgoing_msg = Message(
+        conversation_id=conversation.id,
+        content=ai_response,
+        direction="outgoing",
+        is_ai=True
+    )
+    db.add(outgoing_msg)
+    
+    tenant.messages_used += 1
+    db.commit()
+    
+    print(f"📱 {data.from_number}: {data.message}")
+    print(f"🤖 {tenant.business_type}: {ai_response}")
+    
+    return {"response": ai_response, "conversation_id": conversation.id}
+
+@app.get("/api/plans")
+def get_plans():
+    plans = {}
+    for plan_type in PlanType:
+        tenant_temp = Tenant(plan=plan_type)
+        config = tenant_temp.get_plan_config()
+        plans[plan_type.value] = config
+    return {"plans": plans}
+
+@app.get("/api/tenants/{tenant_id}/whatsapp/status")
+def get_whatsapp_status(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404)
+    return {"tenant_id": tenant_id, "provider": tenant.whatsapp_provider.value, "connected": tenant.whatsapp_connected}
+
+@app.get("/api/tenants/{tenant_id}/analytics")
+def get_analytics(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404)
+    
+    total_convs = db.query(Conversation).filter(Conversation.tenant_id == tenant_id).count()
+    total_msgs = db.query(Message).join(Conversation).filter(Conversation.tenant_id == tenant_id).count()
+    ai_msgs = db.query(Message).join(Conversation).filter(Conversation.tenant_id == tenant_id, Message.is_ai == True).count()
+    
+    return {
+        "tenant_id": tenant_id,
+        "period": "all_time",
+        "conversations": {"total": total_convs},
+        "messages": {"total": total_msgs, "from_ai": ai_msgs, "from_customers": total_msgs - ai_msgs, "usage_this_month": tenant.messages_used, "limit": tenant.messages_limit},
+        "plan": {"current": tenant.plan.value, "is_trial": tenant.is_trial},
+        "trial": {"days_remaining": tenant.days_remaining_trial(), "is_expired": tenant.is_trial_expired()}
+    }
+
+@app.get("/api/tenants/{tenant_id}/conversations")
+def get_conversations(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404)
+    
+    convs = db.query(Conversation).filter(Conversation.tenant_id == tenant_id).order_by(Conversation.last_message_at.desc()).limit(50).all()
+    result = []
+    for c in convs:
+        last_msg = db.query(Message).filter(Message.conversation_id == c.id).order_by(Message.created_at.desc()).first()
+        result.append({
+            "id": c.id,
+            "customer_phone": c.customer_phone,
+            "last_message": last_msg.content[:50] if last_msg else None,
+            "created_at": c.created_at.isoformat()
+        })
+    return {"conversations": result}
+
+
+
+
+@app.get("/api/tenants/{tid}/alerts")
+def get_alerts(tid: int, db: Session = Depends(get_db)):
+    """Alertes pour le tenant"""
+    t = db.query(Tenant).filter(Tenant.id == tid).first()
+    if not t:
+        raise HTTPException(404)
+    
+    alerts = []
+    
+    # Alerte quota
+    percentage = (t.messages_used / t.messages_limit) * 100
+    if percentage >= 90:
+        alerts.append({
+            "type": "danger",
+            "title": "Quota presque atteint!",
+            "message": f"{t.messages_used}/{t.messages_limit} messages utilisés ({percentage:.0f}%)",
+            "action": "Passer au plan supérieur"
+        })
+    elif percentage >= 75:
+        alerts.append({
+            "type": "warning",
+            "title": "Quota à surveiller",
+            "message": f"{t.messages_used}/{t.messages_limit} messages ({percentage:.0f}%)",
+            "action": None
+        })
+    
+    # Alerte trial
+    if t.is_trial and t.trial_ends_at:
+        from datetime import datetime, timezone
+        days_left = (t.trial_ends_at - datetime.now(timezone.utc)).days
+        if days_left <= 1:
+            alerts.append({
+                "type": "danger",
+                "title": "Essai gratuit expire bientôt!",
+                "message": f"Plus que {days_left} jour(s)",
+                "action": "Souscrire maintenant"
+            })
+        elif days_left <= 3:
+            alerts.append({
+                "type": "warning",
+                "title": f"Essai gratuit: {days_left} jours restants",
+                "message": "Pensez à souscrire pour continuer",
+                "action": None
+            })
+    
+    # Alerte WhatsApp déconnecté
+    if not t.whatsapp_connected:
+        alerts.append({
+            "type": "info",
+            "title": "WhatsApp non connecté",
+            "message": "Connectez votre numéro pour recevoir des messages",
+            "action": "Configurer WhatsApp"
+        })
+    
+    return {"alerts": alerts}
+
+@app.get("/api/tenants/{tenant_id}/alerts")
+def get_alerts(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404)
+    
+    alerts = []
+    if tenant.usage.messages_used / tenant.usage.messages_limit > 0.8:
+        alerts.append({"type": "warning", "message": f"Quota à {round(tenant.usage.percentage)}%"})
+    if tenant.trial.is_expired:
+        alerts.append({"type": "danger", "message": "Essai expiré"})
+    
+    return {"alerts": alerts}
+
+from .services.alerts_service import AlertsService
+
+@app.get("/api/tenants/{tenant_id}/alerts")
+def get_tenant_alerts(tenant_id: int, db: Session = Depends(get_db)):
+    """
+    Récupère les alertes actives pour un tenant
+    
+    Returns:
+        {
+            "alerts": [
+                {
+                    "type": "warning",
+                    "title": "Quota élevé",
+                    "message": "...",
+                    "action": "Upgrade",
+                    "action_url": "/upgrade",
+                    "icon": "📊"
+                }
+            ],
+            "count": 2,
+            "has_critical": true
+        }
+    """
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    alerts_service = AlertsService()
+    alerts = alerts_service.get_priority_alerts(tenant, max_alerts=3)
+    
+    has_critical = any(alert["type"] == "danger" for alert in alerts)
+    
+    return {
+        "alerts": alerts,
+        "count": len(alerts),
+        "has_critical": has_critical
+    }
+
+# Créer table custom_responses si manquante
+try:
+    from .models import CustomResponse
+    Base.metadata.create_all(bind=engine)
+except:
+    pass
+
+@app.get("/api/tenants/{tid}/bot-config")
+def get_bot_config(tid: int, db: Session = Depends(get_db)):
+    """Récupérer la configuration du bot"""
+    from .models import CustomResponse
+    
+    responses = db.query(CustomResponse).filter(
+        CustomResponse.tenant_id == tid,
+        CustomResponse.is_active == True
+    ).order_by(CustomResponse.priority.desc()).all()
+    
+    return {
+        "custom_responses": [
+            {
+                "id": r.id,
+                "keywords": r.keywords,
+                "trigger_type": r.trigger_type,
+                "response_text": r.response_text,
+                "priority": r.priority,
+                "times_triggered": r.times_triggered
+            }
+            for r in responses
+        ]
+    }
+
+@app.post("/api/tenants/{tid}/bot-config/responses")
+def add_custom_response(tid: int, data: dict, db: Session = Depends(get_db)):
+    """Ajouter une réponse personnalisée"""
+    from .models import CustomResponse
+    import json
+    
+    keywords = data.get("keywords", [])
+    response_text = data.get("response_text", "")
+    trigger_type = data.get("trigger_type", "contains")
+    priority = data.get("priority", 0)
+    
+    if not keywords or not response_text:
+        raise HTTPException(400, "Keywords et response_text requis")
+    
+    custom_resp = CustomResponse(
+        tenant_id=tid,
+        keywords=json.dumps(keywords),
+        trigger_type=trigger_type,
+        response_text=response_text,
+        priority=priority
+    )
+    
+    db.add(custom_resp)
+    db.commit()
+    db.refresh(custom_resp)
+    
+    return {
+        "id": custom_resp.id,
+        "message": "Réponse personnalisée ajoutée",
+        "keywords": keywords,
+        "response": response_text
+    }
+
+@app.put("/api/tenants/{tid}/bot-config/responses/{response_id}")
+def update_custom_response(tid: int, response_id: int, data: dict, db: Session = Depends(get_db)):
+    """Modifier une réponse personnalisée"""
+    from .models import CustomResponse
+    import json
+    
+    resp = db.query(CustomResponse).filter(
+        CustomResponse.id == response_id,
+        CustomResponse.tenant_id == tid
+    ).first()
+    
+    if not resp:
+        raise HTTPException(404, "Réponse introuvable")
+    
+    if "keywords" in data:
+        resp.keywords = json.dumps(data["keywords"])
+    if "response_text" in data:
+        resp.response_text = data["response_text"]
+    if "trigger_type" in data:
+        resp.trigger_type = data["trigger_type"]
+    if "priority" in data:
+        resp.priority = data["priority"]
+    if "is_active" in data:
+        resp.is_active = data["is_active"]
+    
+    db.commit()
+    
+    return {"message": "Réponse mise à jour"}
+
+@app.delete("/api/tenants/{tid}/bot-config/responses/{response_id}")
+def delete_custom_response(tid: int, response_id: int, db: Session = Depends(get_db)):
+    """Supprimer une réponse personnalisée"""
+    from .models import CustomResponse
+    
+    resp = db.query(CustomResponse).filter(
+        CustomResponse.id == response_id,
+        CustomResponse.tenant_id == tid
+    ).first()
+    
+    if not resp:
+        raise HTTPException(404, "Réponse introuvable")
+    
+    db.delete(resp)
+    db.commit()
+    
+    return {"message": "Réponse supprimée"}
+
+@app.get("/api/tenants/{tenant_id}/messages/daily")
+def get_messages_daily(
+    tenant_id: int, 
+    days: int = 30,
+    db: Session = Depends(get_db)
+):
+    """
+    Statistiques messages par jour
+    
+    Args:
+        tenant_id: ID du tenant
+        days: Nombre de jours (7, 30, ou depuis début mois)
+    
+    Returns:
+        {
+            "data": [
+                {
+                    "date": "2025-10-15",
+                    "messages_client": 12,
+                    "messages_ai": 8,
+                    "ai_rate": 40.0
+                }
+            ]
+        }
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, case
+    
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+    
+    # Calculer date de début
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days)
+    
+    # Query : agréger messages par jour
+    daily_stats = db.query(
+        func.date(Message.created_at).label('date'),
+        func.count(case((Message.direction == 'incoming', 1))).label('messages_client'),
+        func.count(case((Message.direction == 'outgoing', 1))).label('messages_ai')
+    ).join(
+        Conversation, Message.conversation_id == Conversation.id
+    ).filter(
+        Conversation.tenant_id == tenant_id,
+        func.date(Message.created_at) >= start_date,
+        func.date(Message.created_at) <= end_date
+    ).group_by(
+        func.date(Message.created_at)
+    ).order_by(
+        func.date(Message.created_at)
+    ).all()
+    
+    # Créer dict avec toutes les dates (même 0 messages)
+    date_range = {}
+    current_date = start_date
+    while current_date <= end_date:
+        date_range[current_date.isoformat()] = {
+            "date": current_date.isoformat(),
+            "messages_client": 0,
+            "messages_ai": 0,
+            "ai_rate": 0.0
+        }
+        current_date += timedelta(days=1)
+    
+    # Remplir avec vraies données
+    for row in daily_stats:
+        date_str = row.date.isoformat()
+        total = row.messages_client + row.messages_ai
+        ai_rate = (row.messages_ai / total * 100) if total > 0 else 0.0
+        
+        date_range[date_str] = {
+            "date": date_str,
+            "messages_client": row.messages_client,
+            "messages_ai": row.messages_ai,
+            "ai_rate": round(ai_rate, 1)
+        }
+    
+    # Convertir en liste triée
+    data = [date_range[date] for date in sorted(date_range.keys())]
+    
+    return {"data": data}
