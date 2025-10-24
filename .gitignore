@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+env/
+backend/.env
+
+# Node / Next
+node_modules/
+.next/
+
+# WhatsApp session files
+auth_info_baileys/
+auth_info_multi/
+auth_*/
+qr.png
+backend/whatsapp-service/auth*
+backend/whatsapp-service/session-*.json
+whatsapp-service/auth_info_*
+whatsapp-service/session-*.json
+
+# Logs & pid
+*.log
+*.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups
+*.old
+*.backup
+*.broken
+*.bak
+gather_audit.sh
+output_audit.txt

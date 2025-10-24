@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: neobot-backend
+    env: python
+    region: fra
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "cd backend && bash start.sh"
+    healthCheckPath: /health
