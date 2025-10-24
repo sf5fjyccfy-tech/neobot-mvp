@@ -33,3 +33,5 @@ Thumbs.db
 *.backup
 *.broken
 *.bak
+gather_audit.sh
+output_audit.txt
