@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NéoBot - L'IA au service des entreprises camerounaises</title>
+  <meta name="description" content="NéoBot est un assistant WhatsApp intelligent créé par des étudiants camerounais. Automatisez vos réponses et augmentez vos ventes grâce à l’IA.">
+  <link rel="icon" href="Logo-neobot.jpg" type="image/jpeg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0a0a0a;
+      color: #f0f0f0;
+      overflow-x: hidden;
+    }
+
+    /* Section Hero */
+    .hero {
+      min-height: 100vh;
+      background: radial-gradient(circle at 20% 20%, #003366 0%, #000 90%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      text-align: center;
+      padding: 2rem;
+      overflow: hidden;
+    }
+
+    /* Particules animées (effet scientifique) */
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url('https://cdn.jsdelivr.net/gh/JulianLaval/canvas-particle-network/particles-bg.svg') center/cover no-repeat;
+      opacity: 0.15;
+      animation: float 20s infinite linear;
+      z-index: 0;
+    }
+
+    @keyframes float {
+      from { transform: translateY(0); }
+      to { transform: translateY(-10%); }
+    }
+
+    .hero-content { position: relative; z-index: 2; max-width: 700px; }
+
+    .logo {
+      width: 160px;
+      border-radius: 16px;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+      animation: fadeIn 1.5s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      margin: 1rem 0;
+      background: linear-gradient(90deg, #00ffff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.intro {
+      font-size: 1.1rem;
+      color: #c8c8c8;
+      margin-bottom: 1.5rem;
+      line-height: 1.7;
+    }
+
+    .cta {
+      display: inline-block;
+      background: linear-gradient(90deg, #00ff88, #00c0ff);
+      color: #000;
+      padding: 0.9rem 2rem;
+      border-radius: 30px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .cta:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+    }
+
+    /* Section avantages */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      padding: 4rem 2rem;
+      background: #101010;
+    }
+
+    .feature {
+      background: #151515;
+      border: 1px solid #222;
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: center;
+      transition: transform 0.3s;
+    }
+
+    .feature:hover { transform: translateY(-5px); }
+
+    .feature h3 { color: #00ffff; margin-bottom: 0.8rem; }
+
+    footer {
+      text-align: center;
+      padding: 2rem;
+      background: #0b0b0b;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HERO SECTION -->
+  <section class="hero">
+    <div class="hero-content">
+      <img src="Logo-neobot.jpg" alt="Logo NéoBot" class="logo">
+      <h1>L’intelligence au service de votre entreprise</h1>
+      <p class="intro">
+        Automatisez vos réponses WhatsApp avec une IA 100% locale. <br>
+        <strong>Essai gratuit 3 jours — à partir de 20 000 FCFA/mois</strong>.<br>
+        Votre assistant virtuel professionnel : <strong>+237 640 748 907</strong>
+      </p>
+      <a href="#plans" class="cta">🚀 Commencer maintenant</a>
+    </div>
+  </section>
+
+  <!-- AVANTAGES -->
+  <section class="features" id="features">
+    <div class="feature">
+      <h3>🤖 IA intelligente</h3>
+      <p>Comprend vos clients, répond naturellement et apprend de chaque conversation.</p>
+    </div>
+    <div class="feature">
+      <h3>💬 WhatsApp Business</h3>
+      <p>Intégration fluide avec votre numéro professionnel pour des réponses automatiques 24/7.</p>
+    </div>
+    <div class="feature">
+      <h3>📊 Statistiques avancées</h3>
+      <p>Suivez vos messages, taux de réponse et satisfaction client en temps réel.</p>
+    </div>
+    <div class="feature">
+      <h3>🔒 Sécurité et confidentialité</h3>
+      <p>Vos données sont protégées et hébergées localement pour plus de confiance.</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    🇨🇲 Créé avec passion par des étudiants camerounais — <strong>NéoBot 2025</strong><br>
+    <em>"L’IA qui comprend vos clients, même quand vous dormez."</em>
+  </footer>
+
+</body>
+</html>

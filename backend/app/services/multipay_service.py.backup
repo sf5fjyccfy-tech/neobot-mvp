@@ -1,0 +1,301 @@
+"""
+Service unifié de paiement multi-pays et multi-méthodes
+Supporte: NotchPay, Fedapay, Paystack
+"""
+
+import httpx
+import os
+from typing import Optional, Dict, List
+from datetime import datetime
+
+class MultiPayService:
+    def __init__(self):
+        # Clés API (à mettre dans .env)
+        self.notchpay_key = os.getenv("NOTCHPAY_PUBLIC_KEY", "")
+        self.fedapay_key = os.getenv("FEDAPAY_PUBLIC_KEY", "")
+        self.paystack_key = os.getenv("PAYSTACK_SECRET_KEY", "")
+        
+        # URLs API
+        self.notchpay_url = "https://api.notchpay.co"
+        self.fedapay_url = "https://api.fedapay.com/v1"
+        self.paystack_url = "https://api.paystack.co"
+    
+    def detect_best_provider(self, country_code: str, phone_prefix: str) -> str:
+        """
+        Détecter le meilleur provider selon pays/opérateur
+        
+        Args:
+            country_code: CM, SN, CI, BJ, TG, ML, GH, etc.
+            phone_prefix: +237, +221, +225, etc.
+        
+        Returns:
+            'notchpay', 'fedapay', ou 'paystack'
+        """
+        # NotchPay: optimal pour Cameroun
+        if country_code == "CM" or phone_prefix == "+237":
+            return "notchpay"
+        
+        # Fedapay: optimal pour Afrique de l'Ouest francophone
+        west_africa = ["SN", "CI", "BJ", "TG", "ML", "NE", "BF", "GN"]
+        if country_code in west_africa:
+            return "fedapay"
+        
+        # Paystack: backup universel (carte bancaire)
+        return "paystack"
+    
+    async def create_payment(self, 
+                            amount: int,
+                            customer_email: str,
+                            customer_phone: str,
+                            customer_name: str,
+                            plan_name: str,
+                            tenant_id: int,
+                            country_code: str = "CM") -> Dict:
+        """
+        Créer un paiement avec auto-sélection du provider
+        
+        Args:
+            amount: Montant en FCFA
+            customer_email: Email client
+            customer_phone: Format international (+237690000000)
+            customer_name: Nom du commerce
+            plan_name: basique/standard/pro
+            tenant_id: ID client NéoBot
+            country_code: Code pays ISO (CM, SN, CI...)
+        
+        Returns:
+            {
+                "success": bool,
+                "payment_url": str,
+                "reference": str,
+                "provider": str,
+                "expires_at": datetime
+            }
+        """
+        
+        # Détecter meilleur provider
+        provider = self.detect_best_provider(country_code, customer_phone)
+        
+        # Référence unique
+        reference = f"neo_{tenant_id}_{plan_name}_{int(datetime.now().timestamp())}"
+        
+        # Créer paiement selon provider
+        if provider == "notchpay":
+            return await self._create_notchpay(amount, customer_email, customer_phone, reference)
+        
+        elif provider == "fedapay":
+            return await self._create_fedapay(amount, customer_email, customer_phone, customer_name, reference)
+        
+        elif provider == "paystack":
+            return await self._create_paystack(amount, customer_email, reference)
+        
+        else:
+            return {"success": False, "error": "Provider non supporté"}
+    
+    async def _create_notchpay(self, amount: int, email: str, phone: str, reference: str) -> Dict:
+        """NotchPay - Cameroun (OM, MTN, Express Union)"""
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.notchpay_url}/payments",
+                    json={
+                        "amount": amount,
+                        "currency": "XAF",
+                        "email": email,
+                        "phone": phone,
+                        "reference": reference,
+                        "callback": f"{os.getenv('BASE_URL')}/webhook/notchpay",
+                        "description": f"Abonnement NéoBot - {amount} FCFA"
+                    },
+                    headers={
+                        "Authorization": f"Bearer {self.notchpay_key}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                
+                if response.status_code == 201:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "payment_url": data["authorization_url"],
+                        "reference": reference,
+                        "provider": "notchpay",
+                        "methods": ["orange_money", "mtn_money", "express_union"],
+                        "expires_at": datetime.now().timestamp() + 3600  # 1h
+                    }
+                else:
+                    return {"success": False, "error": response.text, "provider": "notchpay"}
+        
+        except Exception as e:
+            return {"success": False, "error": str(e), "provider": "notchpay"}
+    
+    async def _create_fedapay(self, amount: int, email: str, phone: str, name: str, reference: str) -> Dict:
+        """Fedapay - Afrique de l'Ouest (OM, Moov, MTN, Wave)"""
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.fedapay_url}/transactions",
+                    json={
+                        "amount": amount,
+                        "currency": {"iso": "XOF"},  # Franc CFA Ouest
+                        "description": f"Abonnement NéoBot - {name}",
+                        "callback_url": f"{os.getenv('BASE_URL')}/webhook/fedapay",
+                        "customer": {
+                            "email": email,
+                            "firstname": name.split()[0],
+                            "lastname": name.split()[-1] if len(name.split()) > 1 else name,
+                            "phone_number": {"number": phone, "country": "bj"}
+                        },
+                        "custom_metadata": {"reference": reference}
+                    },
+                    headers={
+                        "Authorization": f"Bearer {self.fedapay_key}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "payment_url": data["v1"]["token"],  # URL de paiement
+                        "reference": reference,
+                        "provider": "fedapay",
+                        "methods": ["orange_money", "moov_money", "mtn_money", "wave"],
+                        "expires_at": datetime.now().timestamp() + 3600
+                    }
+                else:
+                    return {"success": False, "error": response.text, "provider": "fedapay"}
+        
+        except Exception as e:
+            return {"success": False, "error": str(e), "provider": "fedapay"}
+    
+    async def _create_paystack(self, amount: int, email: str, reference: str) -> Dict:
+        """Paystack - Cartes bancaires (backup universel)"""
+        try:
+            # Convertir FCFA → NGN (Naira) pour Paystack
+            # 1 NGN ≈ 3.5 FCFA
+            amount_ngn = int(amount / 3.5) * 100  # Paystack utilise kobo (1/100 NGN)
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.paystack_url}/transaction/initialize",
+                    json={
+                        "amount": amount_ngn,
+                        "email": email,
+                        "reference": reference,
+                        "callback_url": f"{os.getenv('BASE_URL')}/webhook/paystack",
+                        "channels": ["card", "bank", "ussd", "mobile_money"]
+                    },
+                    headers={
+                        "Authorization": f"Bearer {self.paystack_key}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "payment_url": data["data"]["authorization_url"],
+                        "reference": reference,
+                        "provider": "paystack",
+                        "methods": ["carte_visa", "carte_mastercard", "mobile_money"],
+                        "expires_at": datetime.now().timestamp() + 3600
+                    }
+                else:
+                    return {"success": False, "error": response.text, "provider": "paystack"}
+        
+        except Exception as e:
+            return {"success": False, "error": str(e), "provider": "paystack"}
+    
+    async def verify_payment(self, reference: str, provider: str) -> Dict:
+        """
+        Vérifier statut d'un paiement
+        
+        Returns:
+            {
+                "success": bool,
+                "status": "pending" | "success" | "failed",
+                "amount": int,
+                "provider": str
+            }
+        """
+        
+        if provider == "notchpay":
+            return await self._verify_notchpay(reference)
+        elif provider == "fedapay":
+            return await self._verify_fedapay(reference)
+        elif provider == "paystack":
+            return await self._verify_paystack(reference)
+        else:
+            return {"success": False, "error": "Provider inconnu"}
+    
+    async def _verify_notchpay(self, reference: str) -> Dict:
+        """Vérifier paiement NotchPay"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.notchpay_url}/payments/{reference}",
+                    headers={"Authorization": f"Bearer {self.notchpay_key}"}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "status": data["status"],  # pending, complete, failed
+                        "amount": data["amount"],
+                        "provider": "notchpay"
+                    }
+                else:
+                    return {"success": False, "error": response.text}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    async def _verify_fedapay(self, reference: str) -> Dict:
+        """Vérifier paiement Fedapay"""
+        try:
+            async with httpx.AsyncClient() as client:
+                # Rechercher transaction par metadata
+                response = await client.get(
+                    f"{self.fedapay_url}/transactions",
+                    params={"reference": reference},
+                    headers={"Authorization": f"Bearer {self.fedapay_key}"}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data["v1"]:
+                        tx = data["v1"][0]
+                        return {
+                            "success": True,
+                            "status": tx["status"],  # pending, approved, declined
+                            "amount": tx["amount"],
+                            "provider": "fedapay"
+                        }
+                return {"success": False, "error": "Transaction introuvable"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    async def _verify_paystack(self, reference: str) -> Dict:
+        """Vérifier paiement Paystack"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.paystack_url}/transaction/verify/{reference}",
+                    headers={"Authorization": f"Bearer {self.paystack_key}"}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "status": data["data"]["status"],  # success, failed, abandoned
+                        "amount": data["data"]["amount"] // 100,  # Convertir kobo → naira
+                        "provider": "paystack"
+                    }
+                else:
+                    return {"success": False, "error": response.text}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

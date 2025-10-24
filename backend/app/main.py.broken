@@ -1,0 +1,352 @@
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from pydantic import BaseModel
+from typing import Optional
+import httpx
+import re
+
+from .database import get_db, engine, Base
+from .models import Tenant, Conversation, Message, PlanType, WhatsAppProvider
+from .ai_prompts import build_chat_messages
+# Ajouter dans main.py après les imports existants
+from .services.notchpay_service import NotchPayService
+
+# Nouveau endpoint
+@app.post("/api/tenants/{tenant_id}/payment/create")
+async def create_payment_link(tenant_id: int, db: Session = Depends(get_db)):
+    """Générer lien paiement pour abonnement"""
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404)
+    
+    plan_config = tenant.get_plan_config()
+    
+    notchpay = NotchPayService()
+    payment = await notchpay.create_payment(
+        amount=plan_config["price_fcfa"],
+        currency="XAF",
+        customer_email=tenant.email,
+        customer_phone=tenant.phone,
+        reference=f"neo_{tenant_id}_{int(time.time())}"
+    )
+    
+    if payment["success"]:
+        return {
+            "payment_url": payment["payment_url"],
+            "reference": payment["reference"],
+            "amount": plan_config["price_fcfa"]
+        }
+    else:
+        raise HTTPException(status_code=500, detail=payment["error"])
+
+@app.post("/webhook/notchpay")
+async def notchpay_webhook(request: Request, db: Session = Depends(get_db)):
+    """Callback NotchPay après paiement"""
+    data = await request.json()
+    
+    if data["status"] == "complete":
+        # Extraire tenant_id depuis reference (format: neo_1_1234567890)
+        tenant_id = int(data["reference"].split("_")[1])
+        
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if tenant:
+            # Activer abonnement
+            tenant.is_trial = False
+            tenant.trial_ends_at = None
+            db.commit()
+            
+            print(f"✅ Paiement reçu: {tenant.name} - {data['amount']} FCFA")
+    
+    return {"status": "ok"}
+AI_API_KEY = "sk-442c51d150d2471e87f3913a611737a2"
+AI_URL = "https://api.deepseek.com/v1/chat/completions"
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="NéoBot MVP API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class TenantCreate(BaseModel):
+    name: str
+    email: str
+    phone: str
+    business_type: Optional[str] = "autre"
+
+class MessageWebhook(BaseModel):
+    tenant_id: int
+    from_number: str
+    message: str
+
+async def generate_ai_response(tenant: Tenant, customer_message: str, conversation_history: list = None) -> str:
+    # Cache messages simples
+    simple = {
+        r"^(salut|bonjour|bonsoir|hello|hi|hey)[\s!?]*$": f"Bonjour ! Bienvenue chez {tenant.name}. Comment puis-je vous aider ?",
+        r"^(merci|thank you|thanks)[\s!?]*$": "Avec plaisir ! N'hésitez pas.",
+        r"^(au revoir|bye|tchao)[\s!?]*$": f"Au revoir ! À bientôt chez {tenant.name}."
+    }
+    
+    msg_lower = customer_message.lower().strip()
+    for pattern, response in simple.items():
+        if re.match(pattern, msg_lower, re.IGNORECASE):
+            return response
+    
+    try:
+        messages = build_chat_messages(tenant, customer_message, conversation_history)
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            print(f"🔍 Appel DeepSeek...")
+            response = await client.post(
+                AI_URL,
+                json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 150},
+                headers={"Authorization": f"Bearer {AI_API_KEY}"}
+            )
+            
+            print(f"📡 Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"💰 Tokens: {data['usage']['total_tokens']}")
+                return data["choices"][0]["message"]["content"]
+            else:
+                print(f"❌ Erreur: {response.text[:200]}")
+                return f"Merci pour votre message. Un conseiller vous répondra sous peu."
+                
+    except Exception as e:
+        print(f"🔥 ERREUR: {type(e).__name__}: {str(e)}")
+        return f"Merci de nous contacter. Notre équipe vous répond rapidement."
+
+@app.get("/")
+def read_root():
+    return {"message": "NéoBot MVP API", "status": "running", "version": "1.0.0"}
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "healthy", "database": "connected"}
+
+@app.get("/api/ai/status")
+async def check_ai_credits():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.deepseek.com/user/balance",
+                headers={"Authorization": f"Bearer {AI_API_KEY}"}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return {"status": "ok", "balance_usd": data.get("balance_usd", 0)}
+            return {"status": "error", "message": response.text}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/tenants")
+def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
+    existing = db.query(Tenant).filter(Tenant.email == tenant.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email déjà enregistré")
+    
+    db_tenant = Tenant(
+        name=tenant.name,
+        email=tenant.email,
+        phone=tenant.phone,
+        business_type=tenant.business_type,
+        plan=PlanType.BASIQUE,
+        whatsapp_provider=WhatsAppProvider.WASENDER_API
+    )
+    
+    db.add(db_tenant)
+    db.commit()
+    db.refresh(db_tenant)
+    
+    plan_config = db_tenant.get_plan_config()
+    
+    return {
+        "id": db_tenant.id,
+        "name": db_tenant.name,
+        "email": db_tenant.email,
+        "plan": db_tenant.plan.value,
+        "trial_days": plan_config["trial_days"],
+        "messages_limit": plan_config["messages_limit"],
+        "status": "created"
+    }
+
+@app.get("/api/tenants/{tenant_id}")
+def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    plan_config = tenant.get_plan_config()
+    
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "email": tenant.email,
+        "phone": tenant.phone,
+        "business_type": tenant.business_type,
+        "plan": {
+            "current": tenant.plan.value,
+            "name": plan_config["name"],
+            "price_fcfa": plan_config["price_fcfa"],
+            "messages_limit": plan_config["messages_limit"],
+            "features": plan_config["features"]
+        },
+        "usage": {
+            "messages_used": tenant.messages_used,
+            "messages_limit": tenant.messages_limit,
+            "percentage": round((tenant.messages_used / tenant.messages_limit) * 100, 1) if tenant.messages_limit else 0
+        },
+        "trial": {
+            "is_trial": tenant.is_trial,
+            "ends_at": tenant.trial_ends_at.isoformat() if tenant.trial_ends_at else None
+        },
+        "whatsapp": {
+            "provider": tenant.whatsapp_provider.value,
+            "connected": tenant.whatsapp_connected
+        }
+    }
+
+@app.post("/webhook/whatsapp")
+async def whatsapp_webhook(data: MessageWebhook, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == data.tenant_id).first()
+    if not tenant:
+        return {"error": "Tenant non trouvé"}
+    
+    conversation = db.query(Conversation).filter(
+        Conversation.tenant_id == data.tenant_id,
+        Conversation.customer_phone == data.from_number
+    ).first()
+    
+    if not conversation:
+        conversation = Conversation(
+            tenant_id=data.tenant_id,
+            customer_phone=data.from_number,
+            status="active"
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+    
+    incoming_msg = Message(
+        conversation_id=conversation.id,
+        content=data.message,
+        direction="incoming",
+        is_ai=False
+    )
+    db.add(incoming_msg)
+    
+    history = db.query(Message).filter(
+        Message.conversation_id == conversation.id
+    ).order_by(Message.created_at.desc()).limit(10).all()
+    history.reverse()
+    
+    ai_response = await generate_ai_response(tenant, data.message, history)
+    
+    outgoing_msg = Message(
+        conversation_id=conversation.id,
+        content=ai_response,
+        direction="outgoing",
+        is_ai=True
+    )
+    db.add(outgoing_msg)
+    
+    tenant.messages_used += 1
+    db.commit()
+    
+    print(f"📱 Message de {data.from_number}: {data.message}")
+    print(f"🤖 Réponse ({tenant.business_type}): {ai_response}")
+    
+    return {"response": ai_response, "conversation_id": conversation.id}
+
+@app.get("/api/plans")
+def get_plans():
+    plans = {}
+    for plan_type in PlanType:
+        tenant_temp = Tenant(plan=plan_type)
+        config = tenant_temp.get_plan_config()
+        plans[plan_type.value] = config
+    return {"plans": plans}
+
+@app.get("/api/tenants/{tenant_id}/whatsapp/status")
+def get_whatsapp_status(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    return {
+        "tenant_id": tenant_id,
+        "provider": tenant.whatsapp_provider.value,
+        "connected": tenant.whatsapp_connected
+    }
+
+@app.get("/api/tenants/{tenant_id}/analytics")
+def get_analytics(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    total_conversations = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id
+    ).count()
+    
+    total_messages = db.query(Message).join(Conversation).filter(
+        Conversation.tenant_id == tenant_id
+    ).count()
+    
+    ai_messages = db.query(Message).join(Conversation).filter(
+        Conversation.tenant_id == tenant_id,
+        Message.is_ai == True
+    ).count()
+    
+    return {
+        "tenant_id": tenant_id,
+        "period": "all_time",
+        "conversations": {"total": total_conversations},
+        "messages": {
+            "total": total_messages,
+            "from_ai": ai_messages,
+            "from_customers": total_messages - ai_messages,
+            "usage_this_month": tenant.messages_used,
+            "limit": tenant.messages_limit
+        },
+        "plan": {"current": tenant.plan.value, "is_trial": tenant.is_trial}
+    }
+
+@app.get("/api/tenants/{tenant_id}/conversations")
+def get_conversations(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    conversations = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id
+    ).order_by(Conversation.last_message_at.desc()).limit(50).all()
+    
+    result = []
+    for conv in conversations:
+        messages_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
+        last_message = db.query(Message).filter(Message.conversation_id == conv.id).order_by(Message.created_at.desc()).first()
+        
+        result.append({
+            "id": conv.id,
+            "customer_phone": conv.customer_phone,
+            "messages_count": messages_count,
+            "last_message": {
+                "content": last_message.content[:50] + "..." if last_message and len(last_message.content) > 50 else last_message.content if last_message else None,
+                "direction": last_message.direction if last_message else None,
+                "created_at": last_message.created_at.isoformat() if last_message else None
+            },
+            "created_at": conv.created_at.isoformat(),
+            "last_activity": conv.last_message_at.isoformat()
+        })
+    
+    return {"tenant_id": tenant_id, "conversations": result, "total": len(result)}
