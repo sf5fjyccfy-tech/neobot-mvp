@@ -12,7 +12,7 @@ class AutomationService:
         self.grey_api_key = os.getenv("GREY_API_KEY", "")
         self.grey_card_id = os.getenv("GREY_CARD_ID", "")
         
-        self.deepseek_key = os.getenv("DEEPSEEK_API_KEY", "sk-442c51d150d2471e87f3913a611737a2")
+        self.deepseek_key = os.getenv("DEEPSEEK_API_KEY", "***REDACTED***")
         self.openai_key = os.getenv("OPENAI_API_KEY", "")
         
         self.ai_balance_threshold = 1.0

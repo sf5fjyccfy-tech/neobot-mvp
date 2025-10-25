@@ -1,11 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://neobot:password123@localhost:5432/neobot")
+# Read DATABASE_URL from env. Default is a harmless placeholder for dev only.
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://neobot:changeme@localhost:5432/neobot")
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(DATABASE_URL, future=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

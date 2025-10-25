@@ -1,7 +1,7 @@
 import os
 import httpx
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-3e69ef3cc448412ca65629406152abd0")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "***REDACTED***")
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
 async def generate_ai_response(message: str, business_type: str, business_name: str, conversation_history: list = None) -> str:
