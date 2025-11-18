@@ -1,181 +1,175 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, JSON
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from .database import Base
+from datetime import datetime, timedelta
 import enum
-import os
-import json
-from cryptography.fernet import Fernet
+from .database import Base
 
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    ENCRYPTION_KEY = Fernet.generate_key().decode()
-cipher = Fernet(ENCRYPTION_KEY.encode())
-
-class PlanType(enum.Enum):
+class PlanType(str, enum.Enum):
     BASIQUE = "basique"
     STANDARD = "standard"
     PRO = "pro"
 
-class WhatsAppProvider(enum.Enum):
+class WhatsAppProvider(str, enum.Enum):
     WASENDER_API = "wasender_api"
     WHATSAPP_BUSINESS_API = "whatsapp_business_api"
+
+PLAN_LIMITS = {
+    PlanType.BASIQUE: {
+        "name": "Basique",
+        "price_fcfa": 20000,
+        "whatsapp_messages": 2000,
+        "other_platforms_messages": 4000,
+        "channels": 1,
+        "features": ["1 canal", "Réponses automatiques", "Dashboard basique"],
+        "trial_days": 14
+    },
+    PlanType.STANDARD: {
+        "name": "Standard",
+        "price_fcfa": 50000,
+        "whatsapp_messages": 2500,
+        "other_platforms_messages": -1,
+        "channels": 3,
+        "features": ["3 canaux", "IA avancée", "NÉOBRAIN", "Analytics"],
+        "trial_days": 7
+    },
+    PlanType.PRO: {
+        "name": "Pro",
+        "price_fcfa": 90000,
+        "whatsapp_messages": 4000,
+        "other_platforms_messages": -1,
+        "channels": -1,
+        "features": ["Canaux illimités", "CLOSEUR PRO", "API", "Support dédié"],
+        "trial_days": 0
+    }
+}
 
 class Tenant(Base):
     __tablename__ = "tenants"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
-    phone = Column(String(20), nullable=False)
-    business_type = Column(String(50), nullable=True)
-    is_active = Column(Boolean, default=True)
-    plan = Column(Enum(PlanType), default=PlanType.BASIQUE)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    phone = Column(String(50), nullable=False)
+    business_type = Column(String(100), default="ecommerce")
+    plan = Column(SQLEnum(PlanType), default=PlanType.BASIQUE, nullable=False)
     
-    messages_limit = Column(Integer, default=1000)
-    messages_used = Column(Integer, default=0)
-    
-    whatsapp_provider = Column(Enum(WhatsAppProvider), default=WhatsAppProvider.WASENDER_API)
+    whatsapp_provider = Column(SQLEnum(WhatsAppProvider), default=WhatsAppProvider.WASENDER_API)
     whatsapp_connected = Column(Boolean, default=False)
-    whatsapp_config = Column(Text, nullable=True)
+    
+    messages_used = Column(Integer, default=0)
+    messages_limit = Column(Integer, default=2000)
     
     is_trial = Column(Boolean, default=True)
-    trial_ends_at = Column(DateTime(timezone=True), nullable=True)
+    trial_ends_at = Column(DateTime, nullable=True)
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    conversations = relationship("Conversation", back_populates="tenant")
+    # Relations
+    conversations = relationship("Conversation", back_populates="tenant", overlaps="conversations")
+    products = relationship("Product", back_populates="tenant", overlaps="products")
+    transactions = relationship("Transaction", back_populates="tenant", overlaps="transactions")
     
     def get_plan_config(self):
-        plan_configs = {
-            PlanType.BASIQUE: {
-                "name": "Basique",
-                "price_fcfa": 20000,
-                "messages_limit": 1000,
-                "trial_days": 3,
-                "features": ["WhatsApp QR", "IA basique", "Support email"],
-                "whatsapp_provider": WhatsAppProvider.WASENDER_API,
-                "requires_client_tokens": False
-            },
-            PlanType.STANDARD: {
-                "name": "Standard",
-                "price_fcfa": 50000,
-                "messages_limit": 1500,
-                "trial_days": 5,
-                "features": ["WhatsApp Business API", "IA avancée", "Support prioritaire"],
-                "whatsapp_provider": WhatsAppProvider.WHATSAPP_BUSINESS_API,
-                "requires_client_tokens": True
-            },
-            PlanType.PRO: {
-                "name": "Pro",
-                "price_fcfa": 90000,
-                "messages_limit": 3000,
-                "trial_days": 7,
-                "features": ["Multi-canaux", "API complète", "Support dédié"],
-                "whatsapp_provider": WhatsAppProvider.WHATSAPP_BUSINESS_API,
-                "requires_client_tokens": True
-            }
-        }
-        return plan_configs.get(self.plan, plan_configs[PlanType.BASIQUE])
+        return PLAN_LIMITS.get(self.plan, PLAN_LIMITS[PlanType.BASIQUE])
     
-    def set_whatsapp_tokens(self, access_token: str, phone_number_id: str):
-        data = {"access_token": access_token, "phone_number_id": phone_number_id}
-        encrypted = cipher.encrypt(json.dumps(data).encode())
-        self.whatsapp_config = encrypted.decode()
-        self.whatsapp_connected = True
+    def activate_trial(self):
+        config = self.get_plan_config()
+        trial_days = config.get("trial_days", 14)
+        if trial_days > 0:
+            self.is_trial = True
+            self.trial_ends_at = datetime.utcnow() + timedelta(days=trial_days)
+            self.messages_limit = config["whatsapp_messages"]
     
-    def get_whatsapp_tokens(self):
-        if not self.whatsapp_config:
-            return None, None
-        try:
-            decrypted = cipher.decrypt(self.whatsapp_config.encode())
-            data = json.loads(decrypted.decode())
-            return data.get("access_token"), data.get("phone_number_id")
-        except:
-            return None, None
-    
-    def clear_whatsapp_tokens(self):
-        self.whatsapp_config = None
-        self.whatsapp_connected = False
-    
-    def has_valid_whatsapp_config(self):
-        if self.plan == PlanType.BASIQUE:
+    def check_message_limit(self, channel: str = "whatsapp") -> bool:
+        config = self.get_plan_config()
+        
+        if channel == "whatsapp":
+            limit = config["whatsapp_messages"]
+        else:
+            limit = config["other_platforms_messages"]
+        
+        if limit == -1:
             return True
-        access_token, phone_number_id = self.get_whatsapp_tokens()
-        return bool(access_token and phone_number_id)
+        
+        return self.messages_used < limit
     
-    def days_remaining_trial(self):
-        if not self.is_trial or not self.trial_ends_at:
-            return 0
-        from datetime import datetime, timezone
-        delta = self.trial_ends_at - datetime.now(timezone.utc)
-        return max(0, delta.days)
+    def increment_message_count(self, channel: str = "whatsapp"):
+        self.messages_used += 1
     
-    def is_trial_expired(self):
-        if not self.is_trial or not self.trial_ends_at:
-            return False
-        from datetime import datetime, timezone
-        return datetime.now(timezone.utc) > self.trial_ends_at
-
-class WhatsAppSession(Base):
-    __tablename__ = "whatsapp_sessions"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), unique=True)
-    qr_code = Column(Text, nullable=True)
-    is_connected = Column(Boolean, default=False)
-    phone_number = Column(String(20), nullable=True)
-    session_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    connected_at = Column(DateTime(timezone=True), nullable=True)
-    last_activity = Column(DateTime(timezone=True), nullable=True)
+    def get_remaining_messages(self, channel: str = "whatsapp") -> int:
+        config = self.get_plan_config()
+        
+        if channel == "whatsapp":
+            limit = config["whatsapp_messages"]
+        else:
+            limit = config["other_platforms_messages"]
+        
+        if limit == -1:
+            return -1
+        
+        return max(0, limit - self.messages_used)
 
 class Conversation(Base):
     __tablename__ = "conversations"
     
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"))
-    customer_phone = Column(String(20), nullable=False)
-    customer_name = Column(String(100), nullable=True)
-    status = Column(String(20), default="active")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    last_message_at = Column(DateTime(timezone=True), server_default=func.now())
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    customer_phone = Column(String(50), nullable=False)
+    customer_name = Column(String(255), nullable=True)
+    channel = Column(String(50), default="whatsapp")
+    status = Column(String(50), default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_message_at = Column(DateTime, default=datetime.utcnow)
     
-    tenant = relationship("Tenant", back_populates="conversations")
-    messages = relationship("Message", back_populates="conversation")
+    tenant = relationship("Tenant", back_populates="conversations", overlaps="conversations")
+    messages = relationship("Message", back_populates="conversation", overlaps="messages")
 
 class Message(Base):
     __tablename__ = "messages"
     
     id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     content = Column(Text, nullable=False)
-    direction = Column(String(10), nullable=False)
+    direction = Column(String(20), nullable=False)
     is_ai = Column(Boolean, default=False)
-    message_type = Column(String(20), default="text")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, default=datetime.utcnow)
     
-    conversation = relationship("Conversation", back_populates="messages")
+    conversation = relationship("Conversation", back_populates="messages", overlaps="messages")
 
-class CustomResponse(Base):
-    __tablename__ = "custom_responses"
+class Product(Base):
+    __tablename__ = "products"
     
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"))
-    keywords = Column(Text, nullable=False)
-    trigger_type = Column(String(20), default="contains")
-    response_text = Column(Text, nullable=False)
-    priority = Column(Integer, default=0)
-    times_triggered = Column(Integer, default=0)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    price = Column(Integer, nullable=False)
+    stock = Column(Integer, default=0)
+    category = Column(String(100), nullable=False)
+    images = Column(JSON, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    tenant = relationship("Tenant", back_populates="products", overlaps="products")
 
-    def activate_trial(self):
-        """Activer période d'essai gratuit"""
-        from datetime import datetime, timedelta
-        plan_config = self.get_plan_config()
-        self.is_trial = True
-        self.trial_ends_at = datetime.now() + timedelta(days=plan_config["trial_days"])
+class Transaction(Base):
+    __tablename__ = "transactions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    amount = Column(Integer, nullable=False)
+    commission_rate = Column(Integer, nullable=False)
+    commission_amount = Column(Integer, nullable=False)
+    net_amount = Column(Integer, nullable=False)
+    payment_reference = Column(String(100), nullable=False)
+    customer_phone = Column(String(50), nullable=False)
+    tenant_plan = Column(String(50), nullable=True)
+    status = Column(String(50), default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    paid_at = Column(DateTime, nullable=True)
+    
+    tenant = relationship("Tenant", back_populates="transactions", overlaps="transactions")
+
+

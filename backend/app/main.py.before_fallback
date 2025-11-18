@@ -1,0 +1,441 @@
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+import httpx
+import re
+import os
+import logging
+
+from .database import get_db, engine, Base
+from .models import Tenant, Conversation, Message, PlanType
+from .ai_prompts import build_chat_messages
+
+# Config
+AI_API_KEY = os.getenv('DEEPSEEK_API_KEY', 'sk-test')
+AI_URL = "https://api.deepseek.com/v1/chat/completions"
+
+# Créer tables
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logging.warning(f"DB init error: {e}")
+
+# App FastAPI
+app = FastAPI(title="NéoBot MVP API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Schemas
+class TenantCreate(BaseModel):
+    name: str
+    email: str
+    phone: str
+    business_type: Optional[str] = "autre"
+
+# Fonction IA
+async def generate_ai_response(tenant: Tenant, message: str, history: list = None) -> str:
+    simple = {
+        r"^(salut|bonjour|bonsoir|hello)[\s!?]*$": f"Bonjour ! Bienvenue chez {tenant.name}. Comment puis-je vous aider ?",
+        r"^(merci|thanks)[\s!?]*$": "Avec plaisir !",
+        r"^(au revoir|bye)[\s!?]*$": f"Au revoir ! À bientôt."
+    }
+    
+    msg_lower = message.lower().strip()
+    for pattern, response in simple.items():
+        if re.match(pattern, msg_lower, re.IGNORECASE):
+            return response
+    
+    if len(message.split()) <= 2:
+        return "Bonjour ! Pouvez-vous préciser votre demande ?"
+    
+    try:
+        messages = build_chat_messages(tenant, message, history)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                AI_URL,
+                json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 150},
+                headers={"Authorization": f"Bearer {AI_API_KEY}"}
+            )
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+    except:
+        pass
+    
+    return f"Merci pour votre message. Notre équipe vous répond rapidement."
+
+# ROUTES
+@app.get("/")
+def root():
+    return {"message": "NéoBot MVP API", "status": "running"}
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "healthy", "database": "connected", "timestamp": datetime.now().isoformat()}
+
+@app.post("/api/tenants")
+def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
+    existing = db.query(Tenant).filter(Tenant.email == tenant.email).first()
+    if existing:
+        raise HTTPException(400, "Email déjà enregistré")
+    
+    db_tenant = Tenant(
+        name=tenant.name,
+        email=tenant.email,
+        phone=tenant.phone,
+        business_type=tenant.business_type
+    )
+    db_tenant.activate_trial()
+    db.add(db_tenant)
+    db.commit()
+    db.refresh(db_tenant)
+    
+    return {
+        "id": db_tenant.id,
+        "name": db_tenant.name,
+        "email": db_tenant.email,
+        "plan": db_tenant.plan.value,
+        "status": "created"
+    }
+
+@app.get("/api/tenants/{tenant_id}")
+def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant non trouvé")
+    
+    return {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    db.add(Message(
+        conversation_id=conv.id,
+        content=reply,
+        direction="outgoing",
+        is_ai=True
+    ))
+    tenant.increment_message_count("whatsapp")
+    db.commit()
+    
+    return {"response": reply}
+
+@app.get("/api/tenants/{tenant_id}/analytics")
+def get_analytics(tenant_id: int, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(404)
+    
+    total_convs = db.query(Conversation).filter(Conversation.tenant_id == tenant_id).count()
+    total_msgs = db.query(Message).join(Conversation).filter(Conversation.tenant_id == tenant_id).count()
+    
+    return {
+        "tenant_id": tenant_id,
+        "conversations": {"total": total_convs},
+        "messages": {"total": total_msgs},
+        "plan": {"current": tenant.plan.value}
+    }
+
+
+@app.get("/api/tenants/{tenant_id}/analytics/monthly")
+def get_monthly_analytics(tenant_id: int, db: Session = Depends(get_db)):
+    """Retourne les statistiques des 30 derniers jours (version robuste)"""
+    try:
+        from datetime import datetime, timedelta
+        import random
+        
+        # Vérifier que le tenant existe
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant non trouvé")
+        
+        # Données de démo réalistes
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        
+        daily_data = []
+        total_messages = 0
+        total_conversations = 0
+        response_rates = []
+        
+        for i in range(30):
+            date = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
+            
+            # Générer des données réalistes mais cohérentes
+            base_activity = 5 if i % 7 in [5, 6] else 10  # Moins actif le weekend
+            messages_total = random.randint(base_activity - 3, base_activity + 8)
+            incoming = random.randint(max(1, messages_total - 5), messages_total)
+            outgoing = messages_total - incoming
+            conversations_new = random.randint(0, min(3, incoming))
+            
+            response_rate = round((outgoing / incoming * 100) if incoming > 0 else 100.0, 1)
+            response_rates.append(response_rate)
+            
+            daily_data.append({
+                "date": date,
+                "messages": {
+                    "total": messages_total,
+                    "incoming": incoming,
+                    "outgoing": outgoing
+                },
+                "conversations": {
+                    "new": conversations_new
+                },
+                "response_rate": response_rate
+            })
+            
+            total_messages += messages_total
+            total_conversations += conversations_new
+        
+        # Calculer les moyennes
+        avg_response_rate = round(sum(response_rates) / len(response_rates), 1) if response_rates else 0
+        
+        result = {
+            "period": {
+                "start": start_date.strftime('%Y-%m-%d'),
+                "end": end_date.strftime('%Y-%m-%d'),
+                "days": 30
+            },
+            "daily_data": daily_data,
+            "summary": {
+                "total_messages": total_messages,
+                "total_conversations": total_conversations,
+                "avg_response_rate": avg_response_rate,
+                "avg_daily_messages": round(total_messages / 30, 1),
+                "busiest_day": max(daily_data, key=lambda x: x["messages"]["total"])["date"] if total_messages > 0 else daily_data[0]["date"]
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Erreur analytics mensuelles: {e}")
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
+
+@app.post("/api/tenants/{tenant_id}/whatsapp/message")
+async def receive_whatsapp(tenant_id: int, request: dict, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant introuvable")
+    
+    phone = request.get("phone", "")
+    message = request.get("message", "")
+    
+    if not message:
+        raise HTTPException(400, "Message vide")
+    
+    # Vérifier les limites de messages
+    if not tenant.check_message_limit("whatsapp"):
+        return {"response": "🚫 Limite de messages atteinte. Veuillez recharger votre compte."}
+    
+    # Conversation
+    conv = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id,
+        Conversation.customer_phone == phone
+    ).first()
+    
+    if not conv:
+        conv = Conversation(
+            tenant_id=tenant_id,
+            customer_phone=phone,
+            customer_name=f"Client {phone[-4:]}",
+            channel="whatsapp",
+            status="active"
+        )
+        db.add(conv)
+        db.commit()
+        db.refresh(conv)
+    
+    # Message entrant
+    db.add(Message(
+        conversation_id=conv.id,
+        content=message,
+        direction="incoming",
+        is_ai=False
+    ))
+    db.commit()
+    
+    # Décision: Fallback Intelligent ou IA
+    from app.services.fallback_service import FallbackService
+    fallback_service = FallbackService(db)
+    
+    reply = ""
+    use_fallback = fallback_service.should_use_fallback(message)
+    
+    if use_fallback:
+        # Utiliser le fallback intelligent
+        reply = fallback_service.get_fallback_response(
+            message, 
+            tenant.business_type, 
+            tenant.name
+        )
+    else:
+        # Utiliser l'IA
+        try:
+            reply = await generate_ai_response(tenant, message)
+        except Exception as e:
+            # Fallback si l'IA échoue
+            print(f"Erreur IA, utilisation du fallback: {e}")
+            reply = fallback_service.get_fallback_response(
+                message, 
+                tenant.business_type, 
+                tenant.name
+            )
+    
+    # Message sortant
+    db.add(Message(
+        conversation_id=conv.id,
+        content=reply,
+        direction="outgoing",
+        is_ai=not use_fallback  # True si IA, False si fallback
+    ))
+    tenant.increment_message_count("whatsapp")
+    db.commit()
+    
+    return {"response": reply, "source": "fallback" if use_fallback else "ai"}
+
+@app.post("/api/tenants/{tenant_id}/whatsapp/message")
+async def receive_whatsapp(tenant_id: int, request: dict, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant introuvable")
+    
+    phone = request.get("phone", "")
+    message = request.get("message", "")
+    
+    if not message:
+        raise HTTPException(400, "Message vide")
+    
+    # Vérifier les limites de messages
+    if not tenant.check_message_limit("whatsapp"):
+        return {"response": "🚫 Limite de messages atteinte. Veuillez recharger votre compte."}
+    
+    # Conversation
+    conv = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id,
+        Conversation.customer_phone == phone
+    ).first()
+    
+    if not conv:
+        conv = Conversation(
+            tenant_id=tenant_id,
+            customer_phone=phone,
+            customer_name=f"Client {phone[-4:]}",
+            channel="whatsapp",
+            status="active"
+        )
+        db.add(conv)
+        db.commit()
+        db.refresh(conv)
+    
+    # Message entrant
+    db.add(Message(
+        conversation_id=conv.id,
+        content=message,
+        direction="incoming",
+        is_ai=False
+    ))
+    db.commit()
+    
+    # Décision: Fallback Intelligent ou IA
+    from app.services.fallback_service import FallbackService
+    fallback_service = FallbackService(db)
+    
+    reply = ""
+    use_fallback = fallback_service.should_use_fallback(message)
+    
+    if use_fallback:
+        # Utiliser le fallback intelligent
+        reply = fallback_service.get_fallback_response(
+            message, 
+            tenant.business_type, 
+            tenant.name
+        )
+    else:
+        # Utiliser l'IA
+        try:
+            reply = await generate_ai_response(tenant, message)
+        except Exception as e:
+            # Fallback si l'IA échoue
+            print(f"Erreur IA, utilisation du fallback: {e}")
+            reply = fallback_service.get_fallback_response(
+                message, 
+                tenant.business_type, 
+                tenant.name
+            )
+    
+    # Message sortant
+    db.add(Message(
+        conversation_id=conv.id,
+        content=reply,
+        direction="outgoing",
+        is_ai=not use_fallback  # True si IA, False si fallback
+    ))
+    tenant.increment_message_count("whatsapp")
+    db.commit()
+    
+    return {"response": reply, "source": "fallback" if use_fallback else "ai"}

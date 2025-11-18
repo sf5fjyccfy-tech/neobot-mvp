@@ -1,159 +1,150 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react';
+
+interface Message {
+  id: number;
+  content: string;
+  sender: 'customer' | 'bot';
+  timestamp: string;
+}
 
 interface Conversation {
-  id: number
-  customer_phone: string
-  messages_count: number
-  last_message: {
-    content: string
-    direction: string
-    created_at: string
-  }
-  created_at: string
-  last_activity: string
+  id: number;
+  customerName: string;
+  customerPhone: string;
+  lastMessage: string;
+  unread: boolean;
+  messages: Message[];
 }
 
 export default function ConversationsPage() {
-  const router = useRouter()
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const tenantId = localStorage.getItem('tenantId')
-    if (!tenantId) {
-      router.push('/signup')
-      return
+  const [conversations, setConversations] = useState<Conversation[]>([
+    {
+      id: 1,
+      customerName: 'Marie Kamga',
+      customerPhone: '+237612345678',
+      lastMessage: 'Je veux acheter le sac rouge',
+      unread: true,
+      messages: [
+        { id: 1, content: 'Bonjour, vous avez des sacs rouges?', sender: 'customer', timestamp: '10:30' },
+        { id: 2, content: 'Oui! Nous avons plusieurs modèles. Quel type cherchez-vous?', sender: 'bot', timestamp: '10:31' }
+      ]
+    },
+    {
+      id: 2,
+      customerName: 'Jean Mbarga',
+      customerPhone: '+237698765432',
+      lastMessage: 'Prix des chaussures Nike',
+      unread: false,
+      messages: [
+        { id: 1, content: 'Combien coûtent les Nike Air Max?', sender: 'customer', timestamp: '09:15' },
+        { id: 2, content: '45,000 FCFA. Toutes tailles disponibles!', sender: 'bot', timestamp: '09:15' }
+      ]
     }
+  ]);
 
-    fetch(`http://localhost:8000/api/tenants/${tenantId}/conversations`)
-      .then(res => res.json())
-      .then(data => {
-        setConversations(data.conversations || [])
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error(err)
-        setLoading(false)
-      })
-  }, [router])
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [newMessage, setNewMessage] = useState('');
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    
-    if (hours < 1) return 'À l\'instant'
-    if (hours < 24) return `Il y a ${hours}h`
-    const days = Math.floor(hours / 24)
-    if (days < 7) return `Il y a ${days}j`
-    return date.toLocaleDateString('fr-FR')
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
+  const sendMessage = () => {
+    if (newMessage.trim() && selectedConversation) {
+      // Ici, on enverrait le message à l'API
+      console.log('Message envoyé:', newMessage);
+      setNewMessage('');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                ← Retour
-              </button>
-              <h1 className="text-2xl font-bold text-gray-900">Conversations</h1>
-            </div>
-            <span className="text-sm text-gray-600">
-              {conversations.length} conversation{conversations.length > 1 ? 's' : ''}
-            </span>
-          </div>
+    <div className="flex h-screen bg-gray-100">
+      {/* Liste des conversations */}
+      <div className="w-1/3 bg-white border-r">
+        <div className="p-4 border-b">
+          <h1 className="text-2xl font-bold">Conversations</h1>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {conversations.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Aucune conversation
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Les conversations avec vos clients apparaîtront ici
-            </p>
-            <button
-              onClick={() => router.push('/whatsapp')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+        <div className="overflow-y-auto">
+          {conversations.map((conv) => (
+            <div
+              key={conv.id}
+              className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${
+                selectedConversation?.id === conv.id ? 'bg-blue-50' : ''
+              }`}
+              onClick={() => setSelectedConversation(conv)}
             >
-              Connecter WhatsApp
-            </button>
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm divide-y">
-            {conversations.map((conv) => (
-              <div
-                key={conv.id}
-                className="p-6 hover:bg-gray-50 transition cursor-pointer"
-                onClick={() => {
-                  // TODO: Ouvrir détails conversation
-                  alert(`Conversation avec ${conv.customer_phone}`)
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 font-semibold">
-                          {conv.customer_phone.slice(-2)}
-                        </span>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          {conv.customer_phone}
-                        </h3>
-                        <p className="text-xs text-gray-500">
-                          {conv.messages_count} message{conv.messages_count > 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {conv.last_message && (
-                      <div className="ml-13 mt-2">
-                        <p className="text-sm text-gray-600 line-clamp-2">
-                          {conv.last_message?.direction === 'incoming' ? '👤 ' : '🤖 '}
-                          {conv.last_message?.content}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="text-right">
-                    <span className="text-xs text-gray-500">
-                      {formatDate(conv.last_activity)}
-                    </span>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold">{conv.customerName}</h3>
+                  <p className="text-sm text-gray-600">{conv.customerPhone}</p>
+                  <p className="text-sm mt-1 truncate">{conv.lastMessage}</p>
+                </div>
+                {conv.unread && (
+                  <span className="bg-red-500 text-white text-xs rounded-full w-2 h-2"></span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Zone de chat */}
+      <div className="flex-1 flex flex-col">
+        {selectedConversation ? (
+          <>
+            {/* En-tête */}
+            <div className="bg-white p-4 border-b">
+              <h2 className="text-xl font-semibold">{selectedConversation.customerName}</h2>
+              <p className="text-sm text-gray-600">{selectedConversation.customerPhone}</p>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {selectedConversation.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    message.sender === 'customer' ? 'justify-start' : 'justify-end'
+                  }`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                      message.sender === 'customer'
+                        ? 'bg-gray-200 text-gray-800'
+                        : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    <p>{message.content}</p>
+                    <p className="text-xs opacity-70 mt-1">{message.timestamp}</p>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Input message */}
+            <div className="bg-white p-4 border-t">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Tapez votre message..."
+                  className="flex-1 p-2 border rounded"
+                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                />
+                <button
+                  onClick={sendMessage}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Envoyer
+                </button>
               </div>
-            ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            Sélectionnez une conversation pour commencer à chatter
           </div>
         )}
-      </main>
+      </div>
     </div>
-  )
+  );
 }

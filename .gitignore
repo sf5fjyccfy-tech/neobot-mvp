@@ -1,14 +1,43 @@
-# ignore envs and secrets
-*.env
+# ==================== SECRETS & ENVIRONMENT ====================
+.env
+.env.local
+.env.*.local
 backend/.env
 backend/.env.production
 frontend/.env*
+.secrets/
+
+# ==================== DONNÉES SENSIBLES ====================
 auth_info*/
 auth_*/
 auth_*
+*.log
+logs/
+*.db
+*.sqlite3
+neobot*.db
+
+# ==================== BUILD & DEPENDENCIES ====================
 node_modules/
 venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
 .output
-output_audit.txt
-gather_audit.sh
-neobot-mvp.git/
+
+# ==================== IDE & ÉDITEURS ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ==================== SYSTÈME ====================
+.git/
+.gitignore

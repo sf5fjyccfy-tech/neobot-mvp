@@ -1,24 +1,36 @@
-def get_system_prompt(business_name: str, business_type: str, custom_context: str = "") -> str:
-    base = f"Tu es l'assistant WhatsApp de {business_name}. Réponds en français camerounais, max 3 phrases."
+def build_chat_messages(tenant, customer_message: str, conversation_history: list = None):
+    """Construit les messages pour l'API IA"""
     
-    prompts = {
-        "restaurant": f"{base}\nTu connais le menu, les prix, tu prends des commandes. Menu: Ndolé 2500F, Poulet DG 3500F, Eru 2800F.",
-        "boutique": f"{base}\nTu vérifies le stock, donnes les prix, prends les commandes.",
-        "service": f"{base}\nTu proposes des rendez-vous, expliques les prestations.",
-        "autre": f"{base}\nTu fournis des infos générales."
-    }
-    return prompts.get(business_type.lower(), prompts["autre"])
+    system_prompt = f"""Tu es l'assistant virtuel de {tenant.name}, {tenant.business_type} au Cameroun.
 
-def get_examples_by_sector(business_type: str) -> list:
-    return []
+CONTEXTE:
+- Nom: {tenant.name}
+- Type: {tenant.business_type}
+- Ton: Courtois, chaleureux, professionnel
+- Langue: Français (Cameroun)
 
-def build_chat_messages(tenant, customer_message: str, conversation_history: list = None) -> list:
-    messages = [{"role": "system", "content": get_system_prompt(tenant.name, tenant.business_type or "autre")}]
+RÈGLES:
+- Réponses courtes (max 3 phrases)
+- Prix en FCFA
+- Horaires: 11h-22h (si restaurant)
+- Propose toujours d'aider davantage
+
+MENU TYPIQUE (si restaurant):
+- Ndolé: 2500 FCFA
+- Poulet DG: 3500 FCFA
+- Eru: 2800 FCFA
+- Poisson braisé: 3000 FCFA
+"""
     
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Ajouter historique
     if conversation_history:
         for msg in conversation_history[-5:]:
-            role = "user" if msg.direction == "incoming" else "assistant"
+            role = "assistant" if msg.is_ai else "user"
             messages.append({"role": role, "content": msg.content})
     
+    # Ajouter message actuel
     messages.append({"role": "user", "content": customer_message})
+    
     return messages
