@@ -4,7 +4,7 @@ import express from 'express'
 import axios from 'axios'
 import qrcode from 'qrcode-terminal'
 import pino from 'pino'
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys'
 
 // === CONFIG ===
 const API_URL = 'http://localhost:8000'
@@ -42,28 +42,34 @@ async function connectToWhatsApp() {
   })
 
   sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update
+    const { connection, lastDisconnect, qr, isNewLogin, isLatest } = update
 
     if (qr) {
       qrCodeValue = qr
       console.clear()
-      console.log('\n╔══════════════════════════════════════╗')
-      console.log('║   SCANNE CE QR CODE AVEC WHATSAPP   ║')
-      console.log('╚══════════════════════════════════════╝\n')
+      console.log('\n╔════════════════════════════════════════════════╗')
+      console.log('║      ⚠️  SCANNE CE QR CODE AVEC WHATSAPP       ║')
+      console.log('╚════════════════════════════════════════════════╝\n')
+      console.log('📱 Sur ton téléphone WhatsApp:')
+      console.log('   Menu → Appareils connectés → Connecter\n')
       qrcode.generate(qr, { small: true })
-      console.log('\n▶ Menu → Appareils connectés → Connecter\n')
+      console.log('\n⏳ En attente de scan...\n')
     }
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
-      console.log('⚠️  Connexion fermée. Code:', code)
+      const reason = DisconnectReason[code]
+      console.log(`⚠️  Connexion fermée. Code: ${code} (${reason})`)
       isConnected = false
 
-      if (code !== DisconnectReason.loggedOut) {
-        console.log('⏳ Reconnexion dans 3s...')
-        setTimeout(connectToWhatsApp, 3000)
-      } else {
-        console.log('🔴 Déconnecté. Relance npm start pour te reconnecter.')
+      if (code === DisconnectReason.loggedOut) {
+        console.log('🔴 Session expirée. Relance npm start.')
+        return
+      }
+      
+      if (code !== DisconnectReason.connectionClosed && code !== DisconnectReason.connectionLost) {
+        console.log('⏳ Reconnexion dans 5s...')
+        setTimeout(connectToWhatsApp, 5000)
       }
     } else if (connection === 'open') {
       isConnected = true

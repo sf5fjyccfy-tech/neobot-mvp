@@ -1,13 +1,17 @@
 {
-  "name": "neobot-whatsapp-service",
+  "name": "whatsapp-service",
   "version": "1.0.0",
-  "description": "Service WhatsApp pour NéoBot",
+  "description": "",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.4.0"
+    "baileys": "^6.7.21"
   }
 }
