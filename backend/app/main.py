@@ -3,7 +3,7 @@ NÉOBOT - SYSTÈME COMPLET ET FONCTIONNEL
 Version stable avec toutes les fonctionnalités
 """
 from __future__ import annotations
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -34,6 +34,13 @@ from .models import Tenant, Conversation, Message
 from .services.fallback_service import FallbackService
 from .services.closeur_pro_service import CloseurProService
 
+# IMPORTS API MODULES (Fix #1 - Intégration des modules cachés)
+try:
+    from app.api import analytics, conversations, products, payments, whatsapp_webhook, meta_webhook
+    print("✅ API modules importés avec succès")
+except ImportError as e:
+    print(f"⚠️ Erreur import API modules: {e}")
+
 # Création des tables
 try:
     Base.metadata.create_all(bind=engine)
@@ -58,6 +65,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== INTÉGRATION API MODULES (Fix #1) ====================
+# Inclure tous les routers des API modules
+try:
+    if 'analytics' in globals():
+        app.include_router(analytics.router, prefix="/api", tags=["Analytics"])
+    if 'conversations' in globals():
+        app.include_router(conversations.router, prefix="/api", tags=["Conversations"])
+    if 'products' in globals():
+        app.include_router(products.router, prefix="/api", tags=["Products"])
+    if 'payments' in globals():
+        app.include_router(payments.router, prefix="/api", tags=["Payments"])
+    if 'whatsapp_webhook' in globals():
+        app.include_router(whatsapp_webhook.router, prefix="/api", tags=["WhatsApp Webhook"])
+    if 'meta_webhook' in globals():
+        app.include_router(meta_webhook.router, prefix="/api", tags=["Meta Webhook"])
+    print("✅ Tous les API routers intégrés")
+except Exception as e:
+    logging.warning(f"⚠️ Erreur intégration routers: {e}")
 
 # Schémas Pydantic
 class TenantCreate(BaseModel):
@@ -343,8 +369,8 @@ def get_analytics(tenant_id: int, db: Session = Depends(get_db)):
 # ==================== CLOSEUR PRO ====================
 
 @app.post("/api/tenants/{tenant_id}/closeur-pro/analyze")
-def analyze_conversation_risk(tenant_id: int, conversation_id: int, db: Session = Depends(get_db)):
-    """Analyser le risque d'abandon d'une conversation"""
+def analyze_conversation_risk(tenant_id: int, conversation_id: int = Query(...), db: Session = Depends(get_db)):
+    """Analyser le risque d'abandon d'une conversation - Fix #2"""
     conversation = db.query(Conversation).filter(
         Conversation.id == conversation_id,
         Conversation.tenant_id == tenant_id
