@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Utiliser la variable d'environnement ou une valeur par défaut
+# Utiliser la variable d'environnement ou une valeur générique par défaut
+# IMPORTANT: Ne jamais hardcoder les vraies credentials ici
+# Voir SECRETS_MANAGEMENT.md pour les vraies valeurs
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://neobot:password@localhost:5432/neobot"
+    "postgresql://user:password@localhost:5432/neobot"
 )
 
 engine = create_engine(DATABASE_URL, future=True)
