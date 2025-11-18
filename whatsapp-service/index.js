@@ -9,7 +9,7 @@ import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys'
 // === CONFIG ===
 const API_URL = 'http://localhost:8000'
 const TENANT_ID = 1
-const PORT = 3000
+const PORT = 3001
 
 const logger = pino({ level: 'silent' })
 const app = express()
