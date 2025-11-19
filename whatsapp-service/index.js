@@ -4,7 +4,7 @@ import express from 'express'
 import axios from 'axios'
 import qrcode from 'qrcode-terminal'
 import pino from 'pino'
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys'
 
 // === CONFIG ===
 const API_URL = 'http://localhost:8000'
