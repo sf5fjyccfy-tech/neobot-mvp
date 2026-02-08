@@ -1,36 +1,13 @@
-# ==================== SECRETS & ENVIRONMENT ====================
+# Environment
 .env
 .env.local
 .env.*.local
-backend/.env
-backend/.env.production
-frontend/.env*
-.secrets/
-
-# ==================== DONNÉES SENSIBLES ====================
-auth_info*/
-auth_*/
-auth_*
-*.log
-logs/
-*.db
-*.sqlite3
-neobot*.db
-
-# ==================== BUILD & DEPENDENCIES ====================
-node_modules/
 venv/
 env/
-.venv/
-__pycache__/
 *.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
-.output
+__pycache__/
 
-# ==================== IDE & ÉDITEURS ====================
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -38,6 +15,27 @@ build/
 *~
 .DS_Store
 
-# ==================== SYSTÈME ====================
-.git/
-.gitignore
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Archive
+archive/
+backup_**/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Docker
+.dockerignore
