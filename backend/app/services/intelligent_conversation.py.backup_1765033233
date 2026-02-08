@@ -1,0 +1,379 @@
+"""
+Service de conversation intelligente pour NéoBot
+Combine : Flux SPIN (NeoBotSalesAgent) + Fallback Intelligent + IA DeepSeek
+"""
+import re
+import json
+import random
+from datetime import datetime
+from typing import Dict, Any, Optional, Tuple
+from sqlalchemy.orm import Session
+from app.models import Conversation, ConversationState, Tenant
+
+# ============================================================================
+# PARTIE 1 : DÉTECTION D'INTENTION UNIFIÉE
+# ============================================================================
+
+def detect_intent(message: str) -> str:
+    """Détecte l'intention du message avec regex améliorée"""
+    message_lower = message.lower().strip()
+    
+    # Salutations
+    if re.match(r"^(salut|bonjour|hello|coucou|bjr|bonsoir|hey)[\s!?]*$", message_lower):
+        return "greeting"
+    
+    # Accords
+    elif re.match(r"^(oui|d'accord|ok|ouais|yes|okay|exact|parfait|cool|super|go)[\s!?]*$", message_lower):
+        return "agreement"
+    
+    # Refus
+    elif re.match(r"^(non|non merci|pas maintenant|plus tard|non merci)[\s!?]*$", message_lower):
+        return "refusal"
+    
+    # Produit/Secteur
+    elif any(word in message_lower for word in ["vends", "fais", "secteur", "produit", "vêtements", 
+                                                "téléphones", "e-commerce", "restaurant", "boutique", 
+                                                "service", "coiffure", "livraison"]):
+        return "product_or_sector"
+    
+    # Nombres (volume)
+    elif re.match(r"^(\d+)\s*(messages?|par jour|ventes?|clients?)?[\s!?]*$", message_lower):
+        return "number_response"
+    
+    # Problèmes/Douleurs
+    elif any(word in message_lower for word in ["perds", "temps", "ventes", "fatigant", "problème", 
+                                                "difficile", "stress", "énervant", "fatigué", 
+                                                "manque", "perte", "trop long"]):
+        return "pain_point_or_implication"
+    
+    # Intérêt/Démonstration
+    elif any(word in message_lower for word in ["tester", "montre", "comment", "plus", "détails", 
+                                                "fonctionne", "essayer", "démo", "intéressé"]):
+        return "interest"
+    
+    # Prix
+    elif any(word in message_lower for word in ["prix", "tarif", "combien", "coûte", "coût", 
+                                                "abonnement", "facturation"]):
+        return "price_query"
+    
+    # Contact/Support
+    elif any(word in message_lower for word in ["contact", "appeler", "téléphone", "email", 
+                                                "support", "équipe", "personne"]):
+        return "contact_request"
+    
+    # Merci
+    elif re.match(r"^(merci|thank you|thanks|gracias)[\s!?]*$", message_lower):
+        return "thanks"
+    
+    # Au revoir
+    elif re.match(r"^(au revoir|bye|ciao|adieu|à plus)[\s!?]*$", message_lower):
+        return "goodbye"
+    
+    return "unknown"
+
+# ============================================================================
+# PARTIE 2 : AGENT DE VENTE SPIN (NÉOBOT)
+# ============================================================================
+
+class NeoBotSalesAgent:
+    """Agent de vente implémentant le framework SPIN pour NéoBot."""
+    
+    # Définition des stages SPIN
+    STAGES = ["initial", "situation", "problem", "implication", "need", "closing", "converted"]
+
+    def __init__(self, db: Session, tenant_id: int, phone: str):
+        self.db = db
+        self.tenant_id = tenant_id
+        self.phone = phone
+        self.conversation = None
+        self.state = None
+        self.load_conversation()
+
+    def load_conversation(self):
+        """Charge ou crée l'objet Conversation et ConversationState."""
+        self.conversation = self.db.query(Conversation).filter_by(
+            tenant_id=self.tenant_id, 
+            customer_phone=self.phone
+        ).first()
+
+        if not self.conversation:
+            self.conversation = Conversation(
+                tenant_id=self.tenant_id, 
+                customer_phone=self.phone,
+                customer_name=f"Prospect {self.phone[-4:]}",
+                channel="whatsapp"
+            )
+            self.db.add(self.conversation)
+            self.db.flush()
+            
+            # Créer l'état initial
+            self.state = ConversationState(
+                conversation_id=self.conversation.id,
+                current_stage="initial",
+                spin_data=json.dumps({"created_at": datetime.utcnow().isoformat()})
+            )
+            self.db.add(self.state)
+            self.db.commit()
+        else:
+            self.state = self.db.query(ConversationState).filter_by(
+                conversation_id=self.conversation.id
+            ).first()
+
+            if not self.state:
+                # Si la conversation existe mais pas l'état, créer l'état initial
+                self.state = ConversationState(
+                    conversation_id=self.conversation.id,
+                    current_stage="initial",
+                    spin_data=json.dumps({"created_at": datetime.utcnow().isoformat()})
+                )
+                self.db.add(self.state)
+                self.db.commit()
+
+    def update_state(self, new_stage: str, data: Optional[Dict[str, Any]] = None):
+        """Met à jour l'état de la conversation et les données SPIN."""
+        self.state.current_stage = new_stage
+        
+        # Mettre à jour les données SPIN
+        current_data = json.loads(self.state.spin_data) if self.state.spin_data else {}
+        if data:
+            current_data.update(data)
+        current_data["last_update"] = datetime.utcnow().isoformat()
+        
+        self.state.spin_data = json.dumps(current_data)
+        self.state.updated_at = datetime.utcnow()
+        self.db.commit()
+        
+        print(f"📊 [SPIN] État mis à jour: {new_stage}")
+
+    def get_response(self, message: str) -> str:
+        """Gère la conversation basée sur le stage actuel."""
+        intent = detect_intent(message)
+        current_stage = self.state.current_stage
+        
+        print(f"🎯 [SPIN] Stage: {current_stage}, Intent: {intent}, Message: '{message}'")
+        
+        # Dispatch par stage
+        if current_stage == "initial":
+            return self.handle_initial_stage(message, intent)
+        elif current_stage == "situation":
+            return self.handle_situation_stage(message, intent)
+        elif current_stage == "problem":
+            return self.handle_problem_stage(message, intent)
+        elif current_stage == "implication":
+            return self.handle_implication_stage(message, intent)
+        elif current_stage == "need":
+            return self.handle_need_stage(message, intent)
+        elif current_stage == "closing":
+            return self.handle_closing_stage(message, intent)
+        else:
+            # Stage 'converted' ou 'refusal'
+            return self.get_post_conversion_response()
+
+    # ============================================
+    # HANDLERS SPIN - AVEC LOGIQUE AMÉLIORÉE
+    # ============================================
+
+    def handle_initial_stage(self, message: str, intent: str) -> str:
+        """S - Situation: Accueil et identification du secteur."""
+        if intent in ["greeting", "unknown"]:
+            self.update_state("situation", {
+                "greeting_time": datetime.utcnow().isoformat(),
+                "first_message": message
+            })
+            return "👋 Salut ! Je suis NéoBot, l'assistant IA qui **convertit tes prospects WhatsApp 24/7** en clients payants. Pour mieux t'aider : quel est le **secteur ou le produit phare** que tu vends ?"
+        
+        # Si ce n'est pas une salutation, essayer de détecter le produit quand même
+        if intent == "product_or_sector":
+            return self.handle_situation_stage(message, intent)
+        
+        return "Bonjour ! 😊 Je suis NéoBot. Quel est votre secteur d'activité ?"
+
+    def handle_situation_stage(self, message: str, intent: str) -> str:
+        """P - Problem: Quantifier l'activité du prospect."""
+        if intent in ["product_or_sector", "unknown"]:
+            self.update_state("problem", {
+                "sector_or_product": message,
+                "situation_time": datetime.utcnow().isoformat()
+            })
+            return "📊 Excellent ! Maintenant, pour quantifier l'impact : combien de **messages WhatsApp** reçois-tu en moyenne par jour (pour les prix, stocks, etc.) ?"
+        
+        return "🎯 Intéressant ! Pour personnaliser mon aide, dis-moi : quel est ton **secteur d'activité principal** ? (e-commerce, service, restauration, etc.)"
+
+    def handle_problem_stage(self, message: str, intent: str) -> str:
+        """I - Implication: Identifier le coût du problème (douleur)."""
+        if intent in ["number_response", "unknown"]:
+            volume = re.findall(r"\d+", message)
+            volume_value = volume[0] if volume else "non précisé"
+            
+            self.update_state("implication", {
+                "daily_volume": volume_value,
+                "problem_time": datetime.utcnow().isoformat()
+            })
+            
+            return "❌ Je vois. Et à ton avis, quelle est la **principale conséquence** de répondre manuellement à tous ces messages ? (Ex: perte de temps, perte de ventes, fatigue, stress...)"
+        
+        return "🤔 Peux-tu me donner une estimation du **nombre de messages** que tu reçois par jour ? (ex: 20, 50, 100+)"
+
+    def handle_implication_stage(self, message: str, intent: str) -> str:
+        """N - Need-Payoff (Besoin): Proposer la solution (NéoBot)."""
+        if intent in ["pain_point_or_implication", "unknown"]:
+            self.update_state("need", {
+                "pain_point": message,
+                "implication_time": datetime.utcnow().isoformat()
+            })
+            
+            # Calcul estimatif
+            return f"""💰 Faisons un calcul rapide. Si tu perds 2h par jour à gérer WhatsApp :
+• Temps perdu : 60h/mois
+• Opportunités manquées : 5-10 ventes/semaine
+• Coût estimé : 50 000-100 000 FCFA/mois
+
+Ne penses-tu pas qu'un assistant qui répond instantanément 24/7 serait **LA** solution pour libérer ton temps et augmenter tes ventes ?"""
+        
+        return "Je comprends. Mais dis-moi, quelle est la **plus grande difficulté** que cette gestion manuelle des messages t'apporte ?"
+
+    def handle_need_stage(self, message: str, intent: str) -> str:
+        """Closing: Offre de valeur et CTA."""
+        if intent == "interest":
+            self.update_state("closing", {"need_time": datetime.utcnow().isoformat()})
+            return "🚀 Parfait ! Nous t'offrons 7 jours d'essai gratuit. Veux-tu qu'on programme une **installation rapide et gratuite** pour voir les résultats dès demain ? Réponds **OUI** pour commencer !"
+        
+        elif intent == "agreement":
+            return self.handle_closing_stage(message, intent)
+        
+        elif intent == "price_query":
+            return "💸 Nos tarifs commencent à 20 000 FCFA/mois. Mais voici le secret : nos clients récupèrent cet investissement en 1-2 semaines grâce aux ventes supplémentaires. Prêt à tester gratuitement ?"
+        
+        elif intent == "contact_request":
+            return "📞 Bien sûr ! Notre équipe te contactera sous 15 minutes. Pour l'instant, es-tu intéressé par l'essai gratuit de 7 jours ?"
+        
+        return "Imagine : un assistant qui travaille pendant que tu dors, qui convertit tes prospects 24/7. Es-tu prêt à voir ce que NéoBot peut faire pour toi ?"
+
+    def handle_closing_stage(self, message: str, intent: str) -> str:
+        """Conversion: Validation finale et fin de la vente."""
+        if intent in ["agreement", "interest"]:
+            self.update_state("converted", {
+                "conversion_time": datetime.utcnow().isoformat(),
+                "final_message": message
+            })
+            return """🎉 FÉLICITATIONS !
+
+Ton essai gratuit de 7 jours est activé ! 
+✅ Lien d'activation : https://neobot.ai/activate
+✅ Support dédié : +237 6XX XX XX XX
+✅ Démo personnalisée demain à 10h
+
+Notre équipe technique te contactera dans 15 minutes pour finaliser ! 🚀"""
+        
+        self.update_state("refusal", {"refusal_time": datetime.utcnow().isoformat()})
+        return """Dommage ! 😔
+
+Le temps que tu passes sur WhatsApp est la ressource la plus précieuse pour ton business.
+N'hésite pas à me recontacter si tu changes d'avis.
+
+Bonne journée et bon succès ! 👋"""
+
+    def get_post_conversion_response(self) -> str:
+        """Réponses après conversion ou refus."""
+        if self.state.current_stage == "converted":
+            responses = [
+                "Ton compte est en cours de configuration. Un conseiller te contacte bientôt !",
+                "L'équipe technique finalise ton installation. Patience, ça arrive !",
+                "Merci pour ta confiance ! Tu recevras un email de confirmation sous peu."
+            ]
+            return random.choice(responses)
+        
+        return "N'hésite pas si tu veux en savoir plus sur NéoBot ! 😊"
+
+# ============================================================================
+# PARTIE 3 : WRAPPER POUR INTÉGRATION AVEC MAIN.PY
+# ============================================================================
+
+def get_conversation_response(message: str, db: Session, tenant_id: int, phone: str) -> str:
+    """
+    Fonction wrapper principale pour compatibilité avec main.py
+    Décide automatiquement quel agent utiliser
+    """
+    
+    # 1. Pour le tenant NéoBot (ID 1) → Agent de vente SPIN
+    if tenant_id == 1:
+        try:
+            agent = NeoBotSalesAgent(db, tenant_id, phone)
+            return agent.get_response(message)
+        except Exception as e:
+            print(f"⚠️ Erreur agent SPIN, fallback: {e}")
+            # Fallback intelligent
+            return get_fallback_response(message, "SaaS")
+    
+    # 2. Pour les autres tenants → Fallback intelligent selon leur secteur
+    tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+    if tenant:
+        business_type = tenant.business_type or "autre"
+        return get_fallback_response(message, business_type)
+    
+    # 3. Fallback général
+    return "Merci pour votre message. Notre équipe vous répondra rapidement."
+
+def get_fallback_response(message: str, business_type: str) -> str:
+    """Fallback intelligent pour les autres tenants"""
+    intent = detect_intent(message)
+    
+    # Réponses par secteur et intention
+    fallback_responses = {
+        "restaurant": {
+            "greeting": "🍽️ Bonjour ! Bienvenue chez nous. Souhaitez-vous voir le menu ou réserver une table ?",
+            "agreement": "Parfait ! Puis-je vous aider avec autre chose ?",
+            "price_query": "💰 Nos plats vont de 2000 à 5000 FCFA. Que desirez-vous ?",
+            "default": "Je peux vous aider avec le menu, les horaires ou une réservation. Que souhaitez-vous ?"
+        },
+        "boutique": {
+            "greeting": "🛍️ Bonjour ! Bienvenue dans notre boutique. Je peux vous aider avec nos produits ou promotions.",
+            "agreement": "Super ! Quel produit vous intéresse ?",
+            "price_query": "Les prix varient selon les articles. Dites-moi ce qui vous plaît !",
+            "default": "Je peux vous montrer nos produits, vérifier les stocks ou expliquer la livraison."
+        },
+        "SaaS": {
+            "greeting": "👋 Bonjour ! Je suis l'assistant NéoBot. En quoi puis-je vous aider aujourd'hui ?",
+            "agreement": "Excellent ! Voulez-vous en savoir plus sur nos solutions d'automatisation ?",
+            "price_query": "Nos tarifs commencent à 20 000 FCFA/mois. Souhaitez-vous un devis personnalisé ?",
+            "default": "Je peux vous parler de l'automatisation WhatsApp, des tarifs ou programmer une démo."
+        }
+    }
+    
+    # Sélectionner la réponse
+    sector_responses = fallback_responses.get(business_type, fallback_responses["SaaS"])
+    response = sector_responses.get(intent, sector_responses["default"])
+    
+    return response
+
+# ============================================================================
+# PARTIE 4 : FONCTION D'INTÉGRATION DIRECTE (pour main.py)
+# ============================================================================
+
+def process_whatsapp_message(message: str, db: Session, tenant_id: int, phone: str) -> Dict[str, Any]:
+    """
+    Traitement complet d'un message WhatsApp
+    Retourne la réponse et des métadonnées
+    """
+    try:
+        # Obtenir la réponse
+        response = get_conversation_response(message, db, tenant_id, phone)
+        
+        # Déterminer la source
+        source = "spin_agent" if tenant_id == 1 else "fallback"
+        
+        return {
+            "response": response,
+            "source": source,
+            "success": True,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"❌ Erreur dans process_whatsapp_message: {e}")
+        return {
+            "response": "Désolé, une erreur est survenue. Notre équipe est notifiée.",
+            "source": "error",
+            "success": False,
+            "error": str(e)
+        }

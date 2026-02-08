@@ -1,0 +1,16 @@
+# ignore envs and secrets
+*.env
+# Ignore backend env
+backend/.env
+backend/.env.production
+frontend/.env*
+auth_info*/
+auth_*/
+auth_*
+node_modules/
+venv/
+.output
+output_audit.txt
+gather_audit.sh
+neobot-mvp.git/
+.env

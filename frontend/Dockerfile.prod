@@ -1,0 +1,41 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copier les dépendances
+COPY package*.json ./
+
+# Installer les dépendances de build
+RUN npm ci
+
+# Copier le code
+COPY . .
+
+# Build Next.js
+RUN npm run build
+
+# Stage de production
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Installer serve pour servir l'app
+RUN npm install -g serve
+
+# Copier les dépendances de prod
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copier les fichiers buildés
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+
+# Exposer le port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+
+# Démarrer l'app
+CMD ["npm", "start"]

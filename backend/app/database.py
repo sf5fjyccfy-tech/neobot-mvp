@@ -1,33 +1,83 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+"""
+Configuration PostgreSQL pour NéoBot - Version robuste et flexible
+"""
+from sqlalchemy import create_engine, pool, event
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.engine import Engine
 import os
 from dotenv import load_dotenv
+import logging
 
+# Charger les variables d'environnement
 load_dotenv()
 
-# Utiliser la variable d'environnement ou une valeur générique par défaut
-# IMPORTANT: Ne jamais hardcoder les vraies credentials ici
-# Voir SECRETS_MANAGEMENT.md pour les vraies valeurs
+logger = logging.getLogger(__name__)
+
+# ========== CONFIGURATION DATABASE ==========
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://user:password@localhost:5432/neobot"
+    "postgresql://neobot:neobot_secure_password@localhost:5432/neobot_db"
 )
 
-engine = create_engine(DATABASE_URL, future=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Pool configuration
+POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 10))
+MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 20))
+POOL_TIMEOUT = int(os.getenv("DATABASE_POOL_TIMEOUT", 30))
+
+# ========== ENGINE CREATION ==========
+engine = create_engine(
+    DATABASE_URL,
+    poolclass=pool.QueuePool,
+    pool_size=POOL_SIZE,
+    max_overflow=MAX_OVERFLOW,
+    pool_timeout=POOL_TIMEOUT,
+    pool_pre_ping=True,  # Vérifier la connexion avant utilisation
+    pool_recycle=3600,   # Recycler les connexions chaque heure
+    echo=os.getenv("DEBUG_MODE", "false").lower() == "true",  # Afficher les SQL en debug
+)
+
+# ========== SESSION FACTORY ==========
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+    expire_on_commit=False
+)
+
+# ========== BASE MODELS ==========
 Base = declarative_base()
 
+# ========== DEPENDENCY INJECTION ==========
 def get_db():
+    """Dépendance pour obtenir une session DB"""
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Database error: {e}")
+        raise
     finally:
         db.close()
 
+# ========== DATABASE INIT ==========
 def init_db():
-    """Initialiser la base de données"""
+    """Créer toutes les tables"""
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ Base de données initialisée")
+        logger.info("✅ Base de données initialisée")
     except Exception as e:
-        print(f"❌ Erreur initialisation DB: {e}")
+        logger.error(f"❌ Erreur init DB: {e}")
+        raise
+
+# ========== CONNECTION POOL EVENTS ==========
+@event.listens_for(Engine, "connect")
+def receive_connect(dbapi_conn, connection_record):
+    """Event listener pour les connexions"""
+    try:
+        cursor = dbapi_conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
+    except Exception as e:
+        logger.warning(f"Connection verification failed: {e}")

@@ -1,63 +1,40 @@
 """
-NÉOBOT - SYSTÈME COMPLET ET FONCTIONNEL
-Version stable avec toutes les fonctionnalités
+NÉOBOT - Backend principal robuste et production-ready
+Version: 1.0.0
 """
-from __future__ import annotations
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import text
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime, timedelta
-import httpx
-import re
-import os
+from datetime import datetime
 import logging
-import time
-import threading
-from pathlib import Path
+import os
 from dotenv import load_dotenv
+import httpx
 
-# Charger backend/.env automatiquement si présent
-env_path = Path(__file__).resolve().parents[1] / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-
-# Configuration
-AI_API_KEY = os.getenv('DEEPSEEK_API_KEY', 'sk-test')
-AI_URL = "https://api.deepseek.com/v1/chat/completions"
-
-# IMPORTS CRITIQUES - DOIVENT ÊTRE EN PREMIER
-from .database import get_db, Base, engine
+# Imports locaux
+from .database import get_db, init_db, Base, engine
 from .models import Tenant, Conversation, Message
-from .services.fallback_service import FallbackService
-from .services.closeur_pro_service import CloseurProService
+from .whatsapp_webhook import router as whatsapp_router
 
-# IMPORTS API MODULES (Fix #1 - Intégration des modules cachés)
-try:
-    from app.api import analytics, conversations, products, payments, whatsapp_webhook, meta_webhook
-    print("✅ API modules importés avec succès")
-except ImportError as e:
-    print(f"⚠️ Erreur import API modules: {e}")
+# Configuration logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Création des tables
-try:
-    Base.metadata.create_all(bind=engine)
-    print("✅ Base de données initialisée")
-except Exception as e:
-    logging.warning(f"⚠️  Erreur initialisation DB: {e}")
+# Charger .env
+load_dotenv()
 
-# Application FastAPI
+# ========== APP CREATION ==========
 app = FastAPI(
-    title="NéoBot API",
-    description="Chatbot intelligent pour entreprises africaines",
-    version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="NÉOBOT",
+    version="1.0.0",
+    description="WhatsApp Bot Assistant avec IA"
 )
 
-# CORS
+# ========== INCLUDE ROUTERS ==========
+app.include_router(whatsapp_router)
+
+# ========== CORS MIDDLEWARE ==========
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,400 +43,357 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== INTÉGRATION API MODULES (Fix #1) ====================
-# Inclure tous les routers des API modules
-try:
-    if 'analytics' in globals():
-        app.include_router(analytics.router, prefix="/api", tags=["Analytics"])
-    if 'conversations' in globals():
-        app.include_router(conversations.router, prefix="/api", tags=["Conversations"])
-    if 'products' in globals():
-        app.include_router(products.router, prefix="/api", tags=["Products"])
-    if 'payments' in globals():
-        app.include_router(payments.router, prefix="/api", tags=["Payments"])
-    if 'whatsapp_webhook' in globals():
-        app.include_router(whatsapp_webhook.router, prefix="/api", tags=["WhatsApp Webhook"])
-    if 'meta_webhook' in globals():
-        app.include_router(meta_webhook.router, prefix="/api", tags=["Meta Webhook"])
-    print("✅ Tous les API routers intégrés")
-except Exception as e:
-    logging.warning(f"⚠️ Erreur intégration routers: {e}")
-
-# Schémas Pydantic
-class TenantCreate(BaseModel):
-    name: str
-    email: str
-    phone: str
-    business_type: Optional[str] = "autre"
-
-class MessageRequest(BaseModel):
-    phone: str
-    message: str
-
-# ==================== FONCTION IA (DÉPLACÉE ICI) ====================
-
-async def generate_ai_response(tenant: "Tenant", message: str, history: List = None) -> str:
-    """Générer une réponse IA avec fallback intelligent"""
-    db = next(get_db())
+# ========== STARTUP/SHUTDOWN ==========
+@app.on_event("startup")
+async def startup():
+    """Initialiser la DB au démarrage"""
     try:
-        fallback_service = FallbackService(db)
-        
-        # Vérifier si on utilise le fallback
-        if fallback_service.should_use_fallback(message):
-            response = fallback_service.get_fallback_response(message, tenant.business_type, tenant.name)
-            print(f"🤖 Fallback utilisé: {response[:50]}...")
-            return response
-        
-        # Pour les messages complexes, essayer l'IA réelle
-        try:
-            # Import dynamique pour éviter les erreurs
-            from app.ai_prompts import build_chat_messages
-            messages = build_chat_messages(tenant, message, history)
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    AI_URL,
-                    json={
-                        "model": "deepseek-chat",
-                        "messages": messages,
-                        "temperature": 0.7,
-                        "max_tokens": 150
-                    },
-                    headers={"Authorization": f"Bearer {AI_API_KEY}"}
-                )
-                
-                if response.status_code == 200:
-                    return response.json()["choices"][0]["message"]["content"]
-                else:
-                    # En cas d'erreur API, utiliser le fallback
-                    print(f"❌ Erreur API DeepSeek: {response.status_code}")
-                    return fallback_service.get_fallback_response(message, tenant.business_type, tenant.name)
-                    
-        except Exception as ai_error:
-            print(f"⚠️ Erreur IA: {ai_error}")
-            return fallback_service.get_fallback_response(message, tenant.business_type, tenant.name)
-            
+        init_db()
+        logger.info("✅ Application démarrée")
     except Exception as e:
-        print(f"❌ Erreur générique: {e}")
-        return f"👋 Bonjour ! Bienvenue chez {tenant.name}. Comment puis-je vous aider ?"
-    finally:
-        db.close()
+        logger.error(f"❌ Erreur startup: {e}")
 
-# ==================== ROUTES ESSENTIELLES ====================
+@app.on_event("shutdown")
+async def shutdown():
+    """Cleanup au shutdown"""
+    logger.info("🛑 Application arrêtée")
 
-@app.get("/")
-def root():
-    """Route racine"""
-    return {
-        "message": "🚀 NéoBot API - Système complet",
-        "version": "2.0.0", 
-        "status": "running",
-        "timestamp": datetime.now().isoformat()
-    }
-
+# ========== HEALTH CHECKS ==========
 @app.get("/health")
-def health(db: Session = Depends(get_db)):
-    """Santé du système"""
-    try:
-        db.execute(text("SELECT 1"))
-        db_status = "connected"
-    except:
-        db_status = "error"
-    
+async def health():
+    """Health check simple"""
     return {
         "status": "healthy",
-        "database": db_status,
-        "timestamp": datetime.now().isoformat(),
-        "services": ["fallback", "closeur_pro", "whatsapp"]
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0"
     }
 
-@app.get("/api/whatsapp/status")
-def whatsapp_status():
-    """Statut WhatsApp"""
+@app.get("/api/health")
+async def api_health(db: Session = Depends(get_db)):
+    """Health check avec vérification DB"""
+    try:
+        db.execute("SELECT 1")
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"DB Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e)
+        }, 503
+
+# ========== ROOT ENDPOINT ==========
+@app.get("/")
+async def root():
+    """Root endpoint"""
     return {
-        "status": "connected",
-        "service": "baileys", 
-        "ready": True,
-        "timestamp": datetime.now().isoformat()
+        "message": "🚀 NÉOBOT API v1.0.0",
+        "docs": "/docs",
+        "status": "running"
     }
 
-# ==================== GESTION CLIENTS ====================
-
-@app.post("/api/tenants", response_model=dict)
-def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
-    """Créer un nouveau client"""
-    # Vérifier si l'email existe déjà
-    existing = db.query(Tenant).filter(Tenant.email == tenant.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
-    
-    # Créer le tenant
-    db_tenant = Tenant(
-        name=tenant.name,
-        email=tenant.email,
-        phone=tenant.phone,
-        business_type=tenant.business_type
-    )
-    db_tenant.activate_trial()
-    
-    db.add(db_tenant)
-    db.commit()
-    db.refresh(db_tenant)
-    
+@app.get("/docs")
+async def docs():
+    """Documentation API"""
     return {
-        "id": db_tenant.id,
-        "name": db_tenant.name,
-        "email": db_tenant.email,
-        "plan": db_tenant.plan.value,
-        "business_type": db_tenant.business_type,
-        "status": "active",
-        "trial_ends_at": db_tenant.trial_ends_at.isoformat() if db_tenant.trial_ends_at else None
+        "endpoints": {
+            "health": "GET /health",
+            "tenants": "GET /api/tenants",
+            "whatsapp": "POST /api/whatsapp/message",
+            "conversations": "GET /api/conversations/{tenant_id}"
+        }
+    }
+
+# ========== TENANT ENDPOINTS ==========
+@app.get("/api/tenants")
+async def list_tenants(db: Session = Depends(get_db)):
+    """Lister tous les tenants"""
+    tenants = db.query(Tenant).all()
+    return {
+        "count": len(tenants),
+        "tenants": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "email": t.email,
+                "plan": t.plan,
+                "whatsapp_connected": t.whatsapp_connected
+            }
+            for t in tenants
+        ]
     }
 
 @app.get("/api/tenants/{tenant_id}")
-def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
-    """Obtenir les informations d'un client"""
+async def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
+    """Récupérer un tenant"""
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
-        raise HTTPException(status_code=404, detail="Client non trouvé")
+        raise HTTPException(status_code=404, detail="Tenant not found")
     
     return {
         "id": tenant.id,
         "name": tenant.name,
         "email": tenant.email,
-        "phone": tenant.phone,
-        "business_type": tenant.business_type,
-        "plan": tenant.get_plan_config(),
+        "plan": tenant.plan.value,
         "whatsapp_connected": tenant.whatsapp_connected,
-        "is_trial": tenant.is_trial,
-        "trial_ends_at": tenant.trial_ends_at.isoformat() if tenant.trial_ends_at else None
+        "messages_used": tenant.messages_used,
+        "messages_limit": tenant.messages_limit
     }
 
-# ==================== FONCTIONNALITÉ PRINCIPALE ====================
-
-@app.post("/api/tenants/{tenant_id}/whatsapp/message")
-async def receive_whatsapp_message(tenant_id: int, request: MessageRequest, db: Session = Depends(get_db)):
-    """Recevoir un message WhatsApp - FONCTION PRINCIPALE"""
-    # Vérifier le client
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Client non trouvé")
-    
-    phone = request.phone
-    message_text = request.message
-    
-    if not message_text or not message_text.strip():
-        raise HTTPException(status_code=400, detail="Message vide")
-    
-    # Vérifier les limites de messages
-    if not tenant.check_message_limit("whatsapp"):
-        return {
-            "response": "🚫 Limite de messages atteinte pour ce mois. Veuillez recharger votre compte.",
-            "source": "system"
-        }
-    
-    # Gérer la conversation
-    conversation = db.query(Conversation).filter(
-        Conversation.tenant_id == tenant_id,
-        Conversation.customer_phone == phone
-    ).first()
-    
-    if not conversation:
-        conversation = Conversation(
-            tenant_id=tenant_id,
-            customer_phone=phone,
-            customer_name=f"Client {phone[-4:]}",
-            channel="whatsapp",
-            status="active"
+@app.post("/api/tenants")
+async def create_tenant(data: dict, db: Session = Depends(get_db)):
+    """Créer un nouveau tenant"""
+    try:
+        tenant = Tenant(
+            name=data.get("name"),
+            email=data.get("email"),
+            phone=data.get("phone"),
+            business_type=data.get("business_type", "autre")
         )
-        db.add(conversation)
+        db.add(tenant)
         db.commit()
-        db.refresh(conversation)
-        print(f"📞 Nouvelle conversation: {phone}")
-    
-    # Enregistrer le message entrant
-    incoming_message = Message(
-        conversation_id=conversation.id,
-        content=message_text,
-        direction="incoming",
-        is_ai=False
-    )
-    db.add(incoming_message)
-    db.commit()
-    
-    # Générer la réponse
-    start_time = time.time()
-    reply = await generate_ai_response(tenant, message_text)
-    response_time = time.time() - start_time
-    
-    # Enregistrer la réponse
-    outgoing_message = Message(
-        conversation_id=conversation.id,
-        content=reply,
-        direction="outgoing", 
-        is_ai=True
-    )
-    db.add(outgoing_message)
-    
-    # Mettre à jour les compteurs
-    tenant.increment_message_count("whatsapp")
-    conversation.last_message_at = datetime.utcnow()
-    
-    db.commit()
-    
-    print(f"💬 Réponse envoyée en {response_time:.2f}s: {reply[:50]}...")
-    
-    return {
-        "response": reply,
-        "source": "ai",
-        "response_time": response_time,
-        "conversation_id": conversation.id
-    }
+        db.refresh(tenant)
+        
+        logger.info(f"✅ Tenant créé: {tenant.name} (ID: {tenant.id})")
+        return {
+            "success": True,
+            "tenant_id": tenant.id,
+            "message": "Tenant créé"
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Erreur création tenant: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-# ==================== ANALYTICS ====================
+# ========== WHATSAPP WEBHOOK ==========
+@app.post("/api/whatsapp/message")
+async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Webhook WhatsApp: recevoir les messages et générer des réponses
+    """
+    try:
+        data = await request.json()
+        phone = data.get("from")
+        message_text = data.get("message")
+        tenant_id = data.get("tenant_id", 1)
+        
+        logger.info(f"📨 Message reçu de {phone}: {message_text}")
+        
+        # Vérifier le tenant
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not tenant:
+            return {"error": "Tenant not found"}, 404
+        
+        # Créer/récupérer la conversation
+        conversation = db.query(Conversation).filter(
+            Conversation.tenant_id == tenant_id,
+            Conversation.customer_phone == phone
+        ).first()
+        
+        if not conversation:
+            conversation = Conversation(
+                tenant_id=tenant_id,
+                customer_phone=phone,
+                customer_name=f"Client {phone[-4:]}"
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+            logger.info(f"📝 Conversation créée: {conversation.id}")
+        
+        # Sauvegarder le message entrant
+        incoming_msg = Message(
+            conversation_id=conversation.id,
+            content=message_text,
+            direction="incoming",
+            is_ai=False
+        )
+        db.add(incoming_msg)
+        
+        # Générer la réponse IA
+        ai_response = await get_ai_response(message_text, tenant.name)
+        
+        # Sauvegarder la réponse
+        outgoing_msg = Message(
+            conversation_id=conversation.id,
+            content=ai_response,
+            direction="outgoing",
+            is_ai=True
+        )
+        db.add(outgoing_msg)
+        
+        # Mettre à jour les métriques
+        tenant.messages_used += 2
+        conversation.last_message_at = datetime.utcnow()
+        
+        db.commit()
+        
+        logger.info(f"✅ Réponse générée: {ai_response[:50]}...")
+        
+        return {
+            "status": "ok",
+            "phone": phone,
+            "message": message_text,
+            "response": ai_response,
+            "conversation_id": conversation.id
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Erreur webhook: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "response": "Désolé, une erreur s'est produite."
+        }, 500
 
-@app.get("/api/tenants/{tenant_id}/analytics")
-def get_analytics(tenant_id: int, db: Session = Depends(get_db)):
-    """Obtenir les statistiques d'un client"""
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Client non trouvé")
-    
-    # Statistiques de base
-    total_conversations = db.query(Conversation).filter(Conversation.tenant_id == tenant_id).count()
-    total_messages = db.query(Message).join(Conversation).filter(Conversation.tenant_id == tenant_id).count()
-    
-    # Messages des 7 derniers jours
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    recent_messages = db.query(Message).join(Conversation).filter(
-        Conversation.tenant_id == tenant_id,
-        Message.created_at >= seven_days_ago
-    ).count()
+# ========== CONVERSATION ENDPOINTS ==========
+@app.get("/api/conversations/{tenant_id}")
+async def get_conversations(tenant_id: int, db: Session = Depends(get_db)):
+    """Lister les conversations d'un tenant"""
+    conversations = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id
+    ).all()
     
     return {
         "tenant_id": tenant_id,
-        "period": "all_time",
-        "conversations": {
-            "total": total_conversations,
-            "active": db.query(Conversation).filter(
-                Conversation.tenant_id == tenant_id,
-                Conversation.status == "active"
-            ).count()
-        },
-        "messages": {
-            "total": total_messages,
-            "last_7_days": recent_messages,
-            "incoming": db.query(Message).join(Conversation).filter(
-                Conversation.tenant_id == tenant_id,
-                Message.direction == "incoming"
-            ).count(),
-            "outgoing": db.query(Message).join(Conversation).filter(
-                Conversation.tenant_id == tenant_id,
-                Message.direction == "outgoing" 
-            ).count()
-        },
-        "plan": tenant.get_plan_config(),
-        "limits": {
-            "messages_used": tenant.messages_used,
-            "messages_limit": tenant.messages_limit,
-            "remaining": tenant.get_remaining_messages("whatsapp")
-        }
+        "count": len(conversations),
+        "conversations": [
+            {
+                "id": c.id,
+                "customer_phone": c.customer_phone,
+                "customer_name": c.customer_name,
+                "status": c.status,
+                "messages": len(c.messages),
+                "last_message": c.last_message_at.isoformat()
+            }
+            for c in conversations
+        ]
     }
 
-# ==================== CLOSEUR PRO ====================
-
-@app.post("/api/tenants/{tenant_id}/closeur-pro/analyze")
-def analyze_conversation_risk(tenant_id: int, conversation_id: int = Query(...), db: Session = Depends(get_db)):
-    """Analyser le risque d'abandon d'une conversation - Fix #2"""
-    conversation = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.tenant_id == tenant_id
-    ).first()
-    
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation non trouvée")
-    
-    closeur_service = CloseurProService(db)
-    analysis = closeur_service.analyze_conversation(conversation)
+@app.get("/api/messages/{conversation_id}")
+async def get_messages(conversation_id: int, db: Session = Depends(get_db)):
+    """Récupérer les messages d'une conversation"""
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id
+    ).order_by(Message.created_at).all()
     
     return {
         "conversation_id": conversation_id,
-        "analysis": analysis,
-        "should_persuade": closeur_service.should_send_persuasion(conversation),
-        "timestamp": datetime.now().isoformat()
+        "count": len(messages),
+        "messages": [
+            {
+                "id": m.id,
+                "content": m.content,
+                "direction": m.direction,
+                "is_ai": m.is_ai,
+                "created_at": m.created_at.isoformat()
+            }
+            for m in messages
+        ]
     }
 
-# ==================== SYSTÈME BACKGROUND ====================
-
-def background_persuasion_check():
-    """Vérification périodique des conversations pour persuasion"""
-    while True:
-        try:
-            from app.database import SessionLocal
-            db = SessionLocal()
-            
-            # Conversations actives des dernières 24h
-            time_threshold = datetime.utcnow() - timedelta(hours=24)
-            
-            conversations = db.query(Conversation).filter(
-                Conversation.last_message_at >= time_threshold,
-                Conversation.status == "active"
-            ).all()
-            
-            closeur_service = CloseurProService(db)
-            persuasion_count = 0
-            
-            for conv in conversations:
-                if closeur_service.should_send_persuasion(conv):
-                    result = closeur_service.process_conversation_persuasion(conv)
-                    if result:
-                        persuasion_count += 1
-            
-            if persuasion_count > 0:
-                print(f"💬 {persuasion_count} persuasions éthiques envoyées")
-            
-            db.close()
-            time.sleep(180)  # 3 minutes entre les vérifications
-            
-        except Exception as e:
-            print(f"❌ Erreur vérification persuasion: {e}")
-            time.sleep(60)  # Attente plus courte en cas d'erreur
-
-@app.on_event("startup")
-async def startup_event():
-    """Démarrage de l'application"""
-    # Démarrer le thread de background
-    thread = threading.Thread(target=background_persuasion_check, daemon=True)
-    thread.start()
+# ========== IA INTEGRATION ==========
+async def get_ai_response(message: str, business_name: str = "NéoBot") -> str:
+    """
+    Générer une réponse IA via DeepSeek
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        logger.warning("⚠️ DEEPSEEK_API_KEY not set, using fallback")
+        return get_fallback_response(message, business_name)
     
-    print("🚀 NéoBot démarré avec succès!")
-    print("   • Fallback Intelligent ✓")
-    print("   • Closeur Pro Éthique ✓") 
-    print("   • API REST complète ✓")
-    print("   • Système background ✓")
-    print(f"   • Accès: http://localhost:8000")
-    print(f"   • Documentation: http://localhost:8000/docs")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": f"Tu es l'assistant de {business_name}. Réponds en français, sois courtois et concis (max 2 phrases)."
+                        },
+                        {
+                            "role": "user",
+                            "content": message
+                        }
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 150
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_response = data['choices'][0]['message']['content']
+                logger.info(f"🤖 IA réponse générée")
+                return ai_response
+            else:
+                logger.warning(f"⚠️ DeepSeek API error: {response.status_code}")
+                return get_fallback_response(message, business_name)
+                
+    except Exception as e:
+        logger.error(f"❌ Erreur IA: {e}")
+        return get_fallback_response(message, business_name)
 
-# ==================== DOCUMENTATION ====================
+def get_fallback_response(message: str, business_name: str = "NéoBot") -> str:
+    """
+    Réponse de fallback quand l'IA ne répond pas
+    """
+    msg_lower = message.lower()
+    
+    if any(word in msg_lower for word in ["bonjour", "salut", "hello", "hi"]):
+        return f"👋 Bonjour ! Bienvenue chez {business_name}. Comment puis-je vous aider ?"
+    elif any(word in msg_lower for word in ["prix", "tarif", "coût", "combien"]):
+        return f"💰 Pour plus d'informations sur nos tarifs, veuillez nous contacter directement."
+    elif any(word in msg_lower for word in ["horaire", "ouvert", "ferme"]):
+        return f"🕐 Pour connaître nos horaires, veuillez nous contacter."
+    elif any(word in msg_lower for word in ["merci", "thank"]):
+        return f"😊 De rien ! Avez-vous autre chose ?"
+    else:
+        return f"✅ Merci pour votre message ! Notre équipe vous répondra rapidement."
 
-@app.get("/api/help")
-def get_help():
-    """Aide et documentation de l'API"""
-    return {
-        "api_name": "NéoBot API",
-        "version": "2.0.0",
-        "endpoints": {
-            "health": "GET /health - Santé du système",
-            "create_tenant": "POST /api/tenants - Créer un client",
-            "get_tenant": "GET /api/tenants/{id} - Obtenir un client", 
-            "whatsapp_message": "POST /api/tenants/{id}/whatsapp/message - Envoyer/réception message",
-            "analytics": "GET /api/tenants/{id}/analytics - Statistiques",
-            "closeur_pro": "POST /api/tenants/{id}/closeur-pro/analyze - Analyser conversation"
-        },
-        "business_types": ["restaurant", "boutique", "service", "autre"],
-        "support": "contact@neobot.cm"
-    }
+# ========== ERROR HANDLERS ==========
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handler personnalisé pour les erreurs HTTP"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "status": "error",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
 
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handler générique pour les erreurs"""
+    logger.error(f"❌ Erreur non gérée: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "status": "error",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+# ========== RUN APP ==========
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=os.getenv("BACKEND_HOST", "0.0.0.0"),
+        port=int(os.getenv("BACKEND_PORT", 8000)),
+        reload=os.getenv("BACKEND_RELOAD", "true").lower() == "true"
+    )

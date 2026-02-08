@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "lucide-react": "^0.544.0",
-    "qrcode.react": "^4.2.0",
-    "recharts": "^3.2.0"
-  }
-}
