@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Analytics } from '@/types';
+import { buildApiUrl } from '@/lib/api';
 
 const AnalyticsPage = () => {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -13,7 +14,7 @@ const AnalyticsPage = () => {
 
   const fetchAnalytics = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/tenants/1/analytics/monthly`);
+      const response = await fetch(buildApiUrl('/api/tenants/1/analytics/monthly'));
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { buildApiUrl } from '@/lib/api';
 
 interface Conversation {
   id: number;
@@ -59,7 +60,7 @@ const ConversationsPage = () => {
 
     // Ici, appeler ton endpoint WhatsApp
     try {
-      const response = await fetch('http://localhost:8000/api/tenants/1/whatsapp/message', {
+      const response = await fetch(buildApiUrl('/api/tenants/1/whatsapp/message'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

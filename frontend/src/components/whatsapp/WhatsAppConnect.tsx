@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { buildApiUrl } from '@/lib/api';
 
 interface WhatsAppStatus {
   connected: boolean;
@@ -28,7 +29,7 @@ const WhatsAppConnect: React.FC = () => {
 
   const fetchWhatsAppStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/whatsapp/status');
+      const response = await fetch(buildApiUrl('/api/whatsapp/status'));
       if (response.ok) {
         const data = await response.json();
         setStatus(data);
@@ -44,7 +45,7 @@ const WhatsAppConnect: React.FC = () => {
   const restartConnection = async () => {
     try {
       setLoading(true);
-      await fetch('http://localhost:8000/api/whatsapp/restart', { 
+      await fetch(buildApiUrl('/api/whatsapp/restart'), { 
         method: 'POST' 
       });
       // Attendre un peu puis rafraîchir le statut
