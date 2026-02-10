@@ -1,53 +1,61 @@
 #!/bin/bash
-# 🎯 NEOBOT MVP - MASTER COMMANDS
-# Quick reference for all common operations
+# 🎯 NEOBOT MVP - COMMANDES PRINCIPALES
+# Menu interactif pour contrôler le projet NeoBOT
 
+# Arrêter le script s'il y a une erreur
 set -e
+
+# Répertoire racine du projet
 ROOT_DIR="/home/tim/neobot-mvp"
 cd "$ROOT_DIR" || exit 1
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Couleurs pour afficher le texte de manière lisible
+ROUGE='\033[0;31m'
+VERT='\033[0;32m'
+JAUNE='\033[1;33m'
+BLEU='\033[0;34m'
+NC='\033[0m' # Pas de couleur
 
+# Fonction : afficher un titre/section
 print_section() {
-    echo -e "\n${BLUE}================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}================================${NC}\n"
+    echo -e "\n${BLEU}================================${NC}"
+    echo -e "${BLEU}$1${NC}"
+    echo -e "${BLEU}================================${NC}\n"
 }
 
+# Fonction : afficher un message de succès (en vert)
 print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${VERT}✅ $1${NC}"
 }
 
+# Fonction : afficher un message d'erreur (en rouge)
 print_error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${ROUGE}❌ $1${NC}"
 }
 
+# Fonction : afficher un message informatif (en jaune)
 print_info() {
-    echo -e "${YELLOW}ℹ️  $1${NC}"
+    echo -e "${JAUNE}ℹ️  $1${NC}"
 }
 
+# Fonction : afficher le menu principal avec toutes les options
 show_menu() {
-    print_section "NEOBOT MVP - MASTER COMMANDS"
-    echo "1.  Check system status"
-    echo "2.  Run full diagnostic"
-    echo "3.  Start all services (integrated)"
-    echo "4.  Start backend only"
-    echo "5.  Start WhatsApp service only"
-    echo "6.  Run integration tests"
-    echo "7.  View recent logs"
-    echo "8.  Check git status"
-    echo "9.  View project documentation"
-    echo "10. Quick fix summary"
-    echo "11. Database health check"
-    echo "12. Reset and restart"
-    echo "0.  Exit"
+    print_section "NEOBOT MVP - MENU PRINCIPAL"
+    echo "1.  Vérifier l'état du système"
+    echo "2.  Diagnostic complet"
+    echo "3.  Démarrer tous les services (intégré)"
+    echo "4.  Démarrer backend uniquement"
+    echo "5.  Démarrer service WhatsApp uniquement"
+    echo "6.  Exécuter les tests d'intégration"
+    echo "7.  Afficher les logs récents"
+    echo "8.  Vérifier l'état Git"
+    echo "9.  Voir la documentation du projet"
+    echo "10. Résumé rapide des corrections"
+    echo "11. Vérifier la santé de la base de données"
+    echo "12. Réinitialiser et redémarrer"
+    echo "0.  Quitter"
     echo ""
-    read -p "Select option (0-12): " choice
+    read -p "Sélectionner option (0-12): " choice
     
     case $choice in
         1) check_status ;;
@@ -63,7 +71,7 @@ show_menu() {
         11) db_health ;;
         12) reset_restart ;;
         0) exit 0 ;;
-        *) print_error "Invalid option"; show_menu ;;
+        *) print_error "Option invalide"; show_menu ;;
     esac
 }
 

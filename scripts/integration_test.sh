@@ -1,4 +1,3 @@
-#!/bin/bash
 
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║        🚀 NEOBOT INTEGRATION TEST - FULL SYSTEM CHECK          ║"

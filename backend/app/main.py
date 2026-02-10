@@ -12,6 +12,11 @@ import os
 from dotenv import load_dotenv
 import httpx
 
+# Rate limiting
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # Imports locaux
 from .database import get_db, init_db, Base, engine
 from .models import Tenant, Conversation, Message
@@ -31,16 +36,32 @@ app = FastAPI(
     description="WhatsApp Bot Assistant avec IA"
 )
 
+# ========== RATE LIMITING ==========
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please try again later."}
+    )
+
 # ========== INCLUDE ROUTERS ==========
 app.include_router(whatsapp_router)
 
 # ========== CORS MIDDLEWARE ==========
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",      # Development frontend
+        "http://127.0.0.1:3000",      # Development frontend
+        "https://app.votre-domaine.com",  # Production frontend (change this)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    max_age=3600,
 )
 
 # ========== STARTUP/SHUTDOWN ==========
