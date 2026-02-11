@@ -64,6 +64,49 @@ async def startup():
         db = next(get_db())
         BusinessKBService.initialize_business_types(db)
         
+        # Auto-configurer le tenant 1 comme NéoBot si pas encore configuré
+        from app.models import TenantBusinessConfig, BusinessTypeModel
+        import json
+        
+        existing_config = db.query(TenantBusinessConfig).filter(
+            TenantBusinessConfig.tenant_id == 1
+        ).first()
+        
+        if not existing_config:
+            neobot_type = db.query(BusinessTypeModel).filter(
+                BusinessTypeModel.slug == "neobot"
+            ).first()
+            
+            if neobot_type:
+                new_config = TenantBusinessConfig(
+                    tenant_id=1,
+                    business_type_id=neobot_type.id,
+                    company_name="NéoBot",
+                    company_description="Plateforme d'automatisation WhatsApp avec IA",
+                    tone="Professional, Friendly, Expert",
+                    selling_focus="Automatisation, Efficacité, Scaling",
+                    products_services=json.dumps([
+                        {
+                            "name": "NéoBot Starter",
+                            "price": 20000,
+                            "description": "500 messages/mois + Support"
+                        },
+                        {
+                            "name": "NéoBot Pro",
+                            "price": 50000,
+                            "description": "Messages illimités + Analytics + API"
+                        },
+                        {
+                            "name": "NéoBot Enterprise",
+                            "price": 100000,
+                            "description": "Tout illimité + Support prioritaire"
+                        }
+                    ])
+                )
+                db.add(new_config)
+                db.commit()
+                logger.info("✅ NéoBot tenant configuration initialized")
+        
         logger.info("✅ Application démarrée")
     except Exception as e:
         logger.error(f"❌ Erreur startup: {e}")
