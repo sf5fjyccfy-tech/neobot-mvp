@@ -1,7 +1,7 @@
 """
 MODÈLES NÉOBOT OPTIMISÉS - Version robuste sans dépendances circulaires
 """
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 import enum
@@ -19,6 +19,17 @@ class ConversationStatus(str, enum.Enum):
     PENDING = "pending"
     CLOSED = "closed"
     ARCHIVED = "archived"
+
+class BusinessType(str, enum.Enum):
+    """Types de business supportés par NéoBot"""
+    NEOBOT = "neobot"         # NéoBot se vend lui-même
+    RESTAURANT = "restaurant"
+    ECOMMERCE = "ecommerce"
+    TRAVEL = "travel"
+    SALON = "salon"
+    FITNESS = "fitness"
+    CONSULTING = "consulting"
+    CUSTOM = "custom"
 
 # ========== PLAN LIMITS ==========
 PLAN_LIMITS = {
@@ -121,6 +132,64 @@ class Message(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     conversation = relationship("Conversation", back_populates="messages")
+
+# ========== NOUVEAUX MODÈLES: BUSINESS INTELLIGENCE ==========
+
+class BusinessTypeModel(Base):
+    """Types de business supportés (Restaurant, E-commerce, etc)"""
+    __tablename__ = "business_types"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(50), unique=True, nullable=False)  # "restaurant", "ecommerce"
+    name = Column(String(100), nullable=False)              # "Restaurant", "E-commerce"
+    description = Column(Text, nullable=True)
+    icon = Column(String(50), nullable=True)               # emoji or icon name
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    configs = relationship("TenantBusinessConfig", back_populates="business_type")
+
+class TenantBusinessConfig(Base):
+    """Configuration personnalisée par tenant (ses produits, ton, focus)"""
+    __tablename__ = "tenant_business_config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    business_type_id = Column(Integer, ForeignKey("business_types.id"), nullable=False)
+    
+    # Infos spécifiques au business du client
+    company_name = Column(String(255), nullable=True)           # "La Saveur Restaurant"
+    company_description = Column(Text, nullable=True)
+    
+    # Produits/Services en JSON
+    products_services = Column(JSON, nullable=True)            # [{"name": "Pizza", "price": 5000}...]
+    
+    # Configuration IA
+    tone = Column(String(50), nullable=True)                   # "Friendly", "Professional"
+    selling_focus = Column(String(255), nullable=True)         # "Quality", "Price", "Service"
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    business_type = relationship("BusinessTypeModel", back_populates="configs")
+    contexts = relationship("ConversationContext", back_populates="config")
+
+class ConversationContext(Base):
+    """Contexte amélioré pour chaque conversation"""
+    __tablename__ = "conversation_context"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, unique=True)
+    config_id = Column(Integer, ForeignKey("tenant_business_config.id"), nullable=True)
+    
+    # Infos client
+    client_name = Column(String(255), nullable=True)           # "Patrick"
+    client_previous_interest = Column(JSON, nullable=True)    # {"interested_in": ["Pizza", "Pasta"]}
+    conversation_stage = Column(String(50), nullable=True)     # "discovery", "consideration", "closing"
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    config = relationship("TenantBusinessConfig", back_populates="contexts")
 
 # ========== MODÈLES OPTIONNELS ==========
 # Si ConversationState n'est pas essentiel, on peut le commenter

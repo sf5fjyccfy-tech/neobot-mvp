@@ -1,0 +1,6 @@
+ id  | conversation_id |                                                                                             content                                                                                              | direction 
+-----+-----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------
+ 116 |              27 | Bienvenue à La Saveur ! 🍽️ Nous proposons aujourd'hui notre délicieux Coq au Vin traditionnel, ainsi que Pizza Margherita, Pasta Carbonara et Tiramisu. Avez-vous des préférences particulières ? | outgoing
+ 115 |              27 | Quels plats avez vous?                                                                                                                                                                           | incoming
+(2 rows)
+

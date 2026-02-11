@@ -16,6 +16,9 @@ import httpx
 from .database import get_db, init_db, Base, engine
 from .models import Tenant, Conversation, Message
 from .whatsapp_webhook import router as whatsapp_router
+from .routers.tenant_business import router as tenant_business_router
+from .routers.business import router as business_router
+from .services.business_kb_service import BusinessKBService
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +36,8 @@ app = FastAPI(
 
 # ========== INCLUDE ROUTERS ==========
 app.include_router(whatsapp_router)
+app.include_router(tenant_business_router)
+app.include_router(business_router)
 
 # ========== CORS MIDDLEWARE ==========
 app.add_middleware(
@@ -54,6 +59,11 @@ async def startup():
     """Initialiser la DB au démarrage"""
     try:
         init_db()
+        
+        # Initialiser les types de business
+        db = next(get_db())
+        BusinessKBService.initialize_business_types(db)
+        
         logger.info("✅ Application démarrée")
     except Exception as e:
         logger.error(f"❌ Erreur startup: {e}")
