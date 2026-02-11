@@ -4,8 +4,6 @@ Receives messages from WhatsApp service and processes them
 """
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -16,9 +14,8 @@ import logging
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Create router and limiter
+# Create router
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
-limiter = Limiter(key_func=get_remote_address)
 
 # ===== Models =====
 
@@ -206,7 +203,6 @@ brain = BrainOrchestrator()
 # ===== Webhook Endpoint =====
 
 @router.post("/whatsapp")
-@limiter.limit("100/minute")
 async def whatsapp_webhook(request: Request, message: WhatsAppMessage, background_tasks: BackgroundTasks):
     """
     Receive messages from WhatsApp service
