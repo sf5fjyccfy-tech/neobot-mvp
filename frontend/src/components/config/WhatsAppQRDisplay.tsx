@@ -17,11 +17,13 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
 
+  // fetchQRCode depends on tenantId and polling lifecycle for this component.
   useEffect(() => {
     fetchQRCode();
     // Poll every 5 seconds to check connection status
     const interval = setInterval(fetchQRCode, 5000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const fetchQRCode = async () => {
@@ -50,7 +52,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         body: JSON.stringify({ whatsapp_phone: phone }),
       });
 
-      const data = await response.json();
+      await response.json();
       setPhone('');
       fetchQRCode();
     } catch (err) {

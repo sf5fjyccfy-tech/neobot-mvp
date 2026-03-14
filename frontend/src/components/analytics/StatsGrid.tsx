@@ -29,8 +29,10 @@ export default function StatsGrid({ tenantId }: StatsGridProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // fetchStats depends on tenantId and is intentionally re-run only when tenant changes.
   useEffect(() => {
     fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const fetchStats = async () => {

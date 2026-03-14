@@ -62,8 +62,10 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // loadConfig depends on tenantId and should rerun when tenant changes.
   useEffect(() => {
     loadConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const loadConfig = async () => {
@@ -121,7 +123,7 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
         body: JSON.stringify(config),
       });
 
-      const data = await response.json();
+      await response.json();
       setSuccess('✅ Configuration sauvegardée avec succès!');
       
       setTimeout(() => setSuccess(''), 3000);

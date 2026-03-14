@@ -19,8 +19,25 @@ export default function RevenueStats({ tenantId }: RevenueStatsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const getWidthClass = (revenue: number): string => {
+    const ratio = maxRevenue > 0 ? revenue / maxRevenue : 0;
+    if (ratio >= 0.95) return 'w-full';
+    if (ratio >= 0.85) return 'w-11/12';
+    if (ratio >= 0.75) return 'w-10/12';
+    if (ratio >= 0.65) return 'w-9/12';
+    if (ratio >= 0.55) return 'w-8/12';
+    if (ratio >= 0.45) return 'w-7/12';
+    if (ratio >= 0.35) return 'w-6/12';
+    if (ratio >= 0.25) return 'w-5/12';
+    if (ratio >= 0.15) return 'w-4/12';
+    if (ratio >= 0.08) return 'w-3/12';
+    return 'w-2/12';
+  };
+
+  // fetchData depends on tenantId and is intentionally re-run only when tenant changes.
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const fetchData = async () => {
@@ -109,8 +126,7 @@ export default function RevenueStats({ tenantId }: RevenueStatsProps) {
                 <span className="text-xs font-medium text-gray-600 w-16">{month.month}</span>
                 <div className="flex-1 bg-gray-200 rounded-full h-6 overflow-hidden">
                   <div
-                    className="bg-gradient-to-r from-green-400 to-green-600 h-full flex items-center justify-end pr-2"
-                    style={{ width: `${(month.revenue / maxRevenue) * 100}%` }}
+                    className={`bg-gradient-to-r from-green-400 to-green-600 h-full flex items-center justify-end pr-2 ${getWidthClass(month.revenue)}`}
                   >
                     {month.revenue > 0 && (
                       <span className="text-xs font-bold text-white">

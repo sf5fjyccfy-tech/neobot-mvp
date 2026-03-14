@@ -18,8 +18,25 @@ export default function TopClients({ tenantId }: TopClientsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const getWidthClass = (count: number): string => {
+    const ratio = maxMessages > 0 ? count / maxMessages : 0;
+    if (ratio >= 0.95) return 'w-full';
+    if (ratio >= 0.85) return 'w-11/12';
+    if (ratio >= 0.75) return 'w-10/12';
+    if (ratio >= 0.65) return 'w-9/12';
+    if (ratio >= 0.55) return 'w-8/12';
+    if (ratio >= 0.45) return 'w-7/12';
+    if (ratio >= 0.35) return 'w-6/12';
+    if (ratio >= 0.25) return 'w-5/12';
+    if (ratio >= 0.15) return 'w-4/12';
+    if (ratio >= 0.08) return 'w-3/12';
+    return 'w-2/12';
+  };
+
+  // fetchClients depends on tenantId and is intentionally re-run only when tenant changes.
   useEffect(() => {
     fetchClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const fetchClients = async () => {
@@ -111,8 +128,7 @@ export default function TopClients({ tenantId }: TopClientsProps) {
                         idx === 1 ? 'bg-gray-400' :
                         idx === 2 ? 'bg-orange-400' :
                         'bg-blue-400'
-                      }`}
-                      style={{ width: `${(client.message_count / maxMessages) * 100}%` }}
+                      } ${getWidthClass(client.message_count)}`}
                     />
                   </div>
                   <span className="text-sm font-bold text-gray-900 w-10 text-right">

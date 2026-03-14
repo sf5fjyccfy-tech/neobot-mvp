@@ -32,8 +32,26 @@ export default function UsageDisplay({ tenantId }: { tenantId: number }) {
   const [overage, setOverage] = useState<OverageData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const getProgressWidthClass = (percent: number): string => {
+    const clamped = Math.max(0, Math.min(percent, 100));
+    if (clamped < 5) return 'w-[4%]';
+    if (clamped < 10) return 'w-[8%]';
+    if (clamped < 20) return 'w-[16%]';
+    if (clamped < 30) return 'w-[24%]';
+    if (clamped < 40) return 'w-[32%]';
+    if (clamped < 50) return 'w-[40%]';
+    if (clamped < 60) return 'w-[48%]';
+    if (clamped < 70) return 'w-[56%]';
+    if (clamped < 80) return 'w-[64%]';
+    if (clamped < 90) return 'w-[80%]';
+    if (clamped < 100) return 'w-[92%]';
+    return 'w-full';
+  };
+
+  // fetchUsageData depends on tenantId and should rerun on tenant change.
   useEffect(() => {
     fetchUsageData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const fetchUsageData = async () => {
@@ -89,8 +107,7 @@ export default function UsageDisplay({ tenantId }: { tenantId: number }) {
 
         <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
           <div
-            className={`h-3 rounded-full transition-all ${percentColor}`}
-            style={{ width: `${Math.min(usage.percent, 100)}%` }}
+            className={`h-3 rounded-full transition-all ${percentColor} ${getProgressWidthClass(usage.percent)}`}
           ></div>
         </div>
 

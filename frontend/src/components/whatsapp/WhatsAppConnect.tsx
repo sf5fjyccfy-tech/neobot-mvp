@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { buildApiUrl } from '@/lib/api';
 
 interface WhatsAppStatus {
@@ -18,6 +19,8 @@ const WhatsAppConnect: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Polling callback intentionally remains stable for mount lifecycle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchWhatsAppStatus();
     
@@ -36,7 +39,7 @@ const WhatsAppConnect: React.FC = () => {
         setError(null);
       }
       setLoading(false);
-    } catch (err) {
+    } catch {
       setError('Impossible de se connecter au serveur');
       setLoading(false);
     }
@@ -50,7 +53,7 @@ const WhatsAppConnect: React.FC = () => {
       });
       // Attendre un peu puis rafraîchir le statut
       setTimeout(fetchWhatsAppStatus, 2000);
-    } catch (err) {
+    } catch {
       setError('Erreur lors du redémarrage');
       setLoading(false);
     }
@@ -93,9 +96,12 @@ const WhatsAppConnect: React.FC = () => {
         <div className="qr-section">
           <p className="qr-title">📱 Scannez ce QR code avec WhatsApp</p>
           <div className="qr-code">
-            <img 
-              src={`data:image/png;base64,${status.qr_code}`} 
-              alt="QR Code WhatsApp" 
+            <Image
+              src={`data:image/png;base64,${status.qr_code}`}
+              alt="QR Code WhatsApp"
+              width={250}
+              height={250}
+              unoptimized
             />
           </div>
           <div className="instructions">

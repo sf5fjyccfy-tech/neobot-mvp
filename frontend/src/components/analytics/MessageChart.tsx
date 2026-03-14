@@ -18,8 +18,24 @@ export default function MessageChart({ tenantId }: MessageChartProps) {
   const [error, setError] = useState<string | null>(null);
   const [maxValue, setMaxValue] = useState(0);
 
+  const getHeightClass = (count: number): string => {
+    const ratio = maxValue > 0 ? count / maxValue : 0;
+    if (ratio >= 0.9) return 'h-40';
+    if (ratio >= 0.8) return 'h-36';
+    if (ratio >= 0.7) return 'h-32';
+    if (ratio >= 0.6) return 'h-28';
+    if (ratio >= 0.5) return 'h-24';
+    if (ratio >= 0.4) return 'h-20';
+    if (ratio >= 0.3) return 'h-16';
+    if (ratio >= 0.2) return 'h-12';
+    if (ratio >= 0.1) return 'h-8';
+    return 'h-2';
+  };
+
+  // fetchData depends on tenantId and is intentionally re-run only when tenant changes.
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const fetchData = async () => {
@@ -90,21 +106,19 @@ export default function MessageChart({ tenantId }: MessageChartProps) {
       <div className="space-y-2">
         <div className="grid grid-cols-7 gap-1">
           {data.map((point, idx) => {
-            const height = (point.count / maxValue) * 100;
             const dateObj = new Date(point.date);
             const dayLabel = dateObj.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
             
             return (
               <div key={idx} className="flex flex-col items-center">
                 <div
-                  className={`w-full rounded-t ${ 
+                  className={`w-full rounded-t ${getHeightClass(point.count)} ${
                     point.count > maxValue * 0.7
                       ? 'bg-blue-600'
                       : point.count > maxValue * 0.4
                       ? 'bg-blue-400'
                       : 'bg-blue-200'
                   }`}
-                  style={{ height: `${Math.max(height, 2)}px` }}
                   title={`${point.date}: ${point.count} msg`}
                 />
                 <p className="text-xs text-gray-600 mt-1 text-center">{dayLabel}</p>
