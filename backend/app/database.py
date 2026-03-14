@@ -2,8 +2,7 @@
 Configuration PostgreSQL pour NéoBot - Version robuste et flexible
 """
 from sqlalchemy import create_engine, pool, event
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.engine import Engine
 import os
 from dotenv import load_dotenv

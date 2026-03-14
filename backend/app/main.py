@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
+from contextlib import asynccontextmanager
 import logging
 import os
 from dotenv import load_dotenv
@@ -41,11 +42,85 @@ logger = logging.getLogger(__name__)
 # Charger .env
 load_dotenv()
 
+# ========== STARTUP/SHUTDOWN ==========
+async def _startup_tasks():
+    """Initialiser la DB au démarrage"""
+    try:
+        init_db()
+
+        # Initialiser les types de business
+        db = next(get_db())
+        BusinessKBService.initialize_business_types(db)
+
+        # Auto-configurer le tenant 1 comme NéoBot si pas encore configuré
+        from app.models import TenantBusinessConfig, BusinessTypeModel
+        import json
+
+        existing_config = db.query(TenantBusinessConfig).filter(
+            TenantBusinessConfig.tenant_id == 1
+        ).first()
+
+        if not existing_config:
+            neobot_type = db.query(BusinessTypeModel).filter(
+                BusinessTypeModel.slug == "neobot"
+            ).first()
+
+            if neobot_type:
+                new_config = TenantBusinessConfig(
+                    tenant_id=1,
+                    business_type_id=neobot_type.id,
+                    company_name="NéoBot",
+                    company_description="Plateforme d'automatisation WhatsApp avec IA",
+                    tone="Professional, Friendly, Expert",
+                    selling_focus="Automatisation, Efficacité, Scaling",
+                    products_services=json.dumps([
+                        {
+                            "name": "NéoBot Starter",
+                            "price": 20000,
+                            "description": "500 messages/mois + Support"
+                        },
+                        {
+                            "name": "NéoBot Pro",
+                            "price": 50000,
+                            "description": "Messages illimités + Analytics + API"
+                        },
+                        {
+                            "name": "NéoBot Enterprise",
+                            "price": 100000,
+                            "description": "Tout illimité + Support prioritaire"
+                        }
+                    ])
+                )
+                db.add(new_config)
+                db.commit()
+                logger.info("✅ NéoBot tenant configuration initialized")
+
+        logger.info("✅ Application démarrée")
+    except Exception as e:
+        logger.error(f"❌ Erreur startup: {e}")
+
+
+async def _shutdown_tasks():
+    """Cleanup au shutdown"""
+    await close_http_client()
+    logger.info("🛑 Application arrêtée")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _startup_tasks()
+    try:
+        yield
+    finally:
+        await _shutdown_tasks()
+
+
 # ========== APP CREATION ==========
 app = FastAPI(
     title="NÉOBOT",
     version="1.0.0",
-    description="WhatsApp Bot Assistant avec IA"
+    description="WhatsApp Bot Assistant avec IA",
+    lifespan=lifespan,
 )
 
 # ========== INCLUDE ROUTERS ==========
@@ -77,70 +152,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
     max_age=3600,
 )
-
-# ========== STARTUP/SHUTDOWN ==========
-@app.on_event("startup")
-async def startup():
-    """Initialiser la DB au démarrage"""
-    try:
-        init_db()
-        
-        # Initialiser les types de business
-        db = next(get_db())
-        BusinessKBService.initialize_business_types(db)
-        
-        # Auto-configurer le tenant 1 comme NéoBot si pas encore configuré
-        from app.models import TenantBusinessConfig, BusinessTypeModel
-        import json
-        
-        existing_config = db.query(TenantBusinessConfig).filter(
-            TenantBusinessConfig.tenant_id == 1
-        ).first()
-        
-        if not existing_config:
-            neobot_type = db.query(BusinessTypeModel).filter(
-                BusinessTypeModel.slug == "neobot"
-            ).first()
-            
-            if neobot_type:
-                new_config = TenantBusinessConfig(
-                    tenant_id=1,
-                    business_type_id=neobot_type.id,
-                    company_name="NéoBot",
-                    company_description="Plateforme d'automatisation WhatsApp avec IA",
-                    tone="Professional, Friendly, Expert",
-                    selling_focus="Automatisation, Efficacité, Scaling",
-                    products_services=json.dumps([
-                        {
-                            "name": "NéoBot Starter",
-                            "price": 20000,
-                            "description": "500 messages/mois + Support"
-                        },
-                        {
-                            "name": "NéoBot Pro",
-                            "price": 50000,
-                            "description": "Messages illimités + Analytics + API"
-                        },
-                        {
-                            "name": "NéoBot Enterprise",
-                            "price": 100000,
-                            "description": "Tout illimité + Support prioritaire"
-                        }
-                    ])
-                )
-                db.add(new_config)
-                db.commit()
-                logger.info("✅ NéoBot tenant configuration initialized")
-        
-        logger.info("✅ Application démarrée")
-    except Exception as e:
-        logger.error(f"❌ Erreur startup: {e}")
-
-@app.on_event("shutdown")
-async def shutdown():
-    """Cleanup au shutdown"""
-    await close_http_client()
-    logger.info("🛑 Application arrêtée")
 
 # ========== HEALTH CHECKS ==========
 @app.get("/health")

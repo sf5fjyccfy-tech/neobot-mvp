@@ -3,8 +3,7 @@ Configuration Oracle Cloud (OCI) pour NéoBot
 Migration from PostgreSQL to Oracle Database with Redis caching
 """
 from sqlalchemy import create_engine, pool, event, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.engine import Engine
 import redis
 import os

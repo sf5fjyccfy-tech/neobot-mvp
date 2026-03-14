@@ -3,7 +3,7 @@ WhatsApp Router - Gestion des sessions et QR codes
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 import logging
 import os
@@ -29,8 +29,7 @@ class WhatsAppSessionResponse(BaseModel):
     last_connected_at: datetime | None
     failed_attempts: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class WhatsAppQRResponse(BaseModel):
     tenant_id: int

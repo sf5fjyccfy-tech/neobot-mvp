@@ -3,7 +3,7 @@ Phase 8M Request/Response Schemas - Pydantic Models
 Validation & documentation for API endpoints
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 
 
@@ -15,20 +15,22 @@ class AIToggleRequest(BaseModel):
     """Toggle AI for specific contact"""
     ai_enabled: bool = Field(..., description="Enable or disable AI for this contact")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"ai_enabled": False}
         }
+    )
 
 
 class BulkPhoneRequest(BaseModel):
     """Bulk operation on multiple phone numbers"""
     phones: List[str] = Field(..., description="List of phone numbers")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"phones": ["237666123456", "237777777777"]}
         }
+    )
 
 
 class ContactInfoResponse(BaseModel):
@@ -40,8 +42,8 @@ class ContactInfoResponse(BaseModel):
     first_seen: Optional[str]
     last_seen: Optional[str]
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "phone_number": "237666123456",
                 "ai_enabled": True,
@@ -51,6 +53,7 @@ class ContactInfoResponse(BaseModel):
                 "last_seen": "2025-01-15T14:30:00Z"
             }
         }
+    )
 
 
 # ============================================================================
@@ -64,10 +67,11 @@ class SetTenantDelayRequest(BaseModel):
         description="Delay in seconds: 0, 15, 30, 60, or 120"
     )
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"response_delay_seconds": 30}
         }
+    )
 
 
 class SetContactDelayRequest(BaseModel):
@@ -77,10 +81,11 @@ class SetContactDelayRequest(BaseModel):
         description="Custom delay in seconds for this contact: 0, 15, 30, 60, or 120"
     )
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"response_delay_seconds": 0}
         }
+    )
 
 
 class TenantSettingsResponse(BaseModel):
@@ -90,8 +95,8 @@ class TenantSettingsResponse(BaseModel):
     contact_delays: Optional[Dict[str, int]]
     last_updated: Optional[str]
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "tenant_id": 1,
                 "response_delay_seconds": 30,
@@ -102,6 +107,7 @@ class TenantSettingsResponse(BaseModel):
                 "last_updated": "2025-01-15T14:30:00Z"
             }
         }
+    )
 
 
 class QueuedMessageResponse(BaseModel):
@@ -115,8 +121,8 @@ class QueuedMessageResponse(BaseModel):
     retry_count: int
     created_at: Optional[str]
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": 1,
                 "conversation_id": 42,
@@ -128,14 +134,15 @@ class QueuedMessageResponse(BaseModel):
                 "created_at": "2025-01-15T14:30:00Z"
             }
         }
+    )
 
 
 class DelayOptionsResponse(BaseModel):
     """Available delay options"""
     options: Dict[int, str]
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "options": {
                     0: "Instantané (urgent)",
@@ -146,6 +153,7 @@ class DelayOptionsResponse(BaseModel):
                 }
             }
         }
+    )
 
 
 # ============================================================================
@@ -159,10 +167,11 @@ class MarkHumanRequest(BaseModel):
         description="Confidence level (0-100%) for human detection"
     )
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"confidence": 85.5}
         }
+    )
 
 
 class ConversationStateResponse(BaseModel):
@@ -173,8 +182,8 @@ class ConversationStateResponse(BaseModel):
     last_human_message_at: Optional[str]
     detection_confidence: float
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "conversation_id": 42,
                 "human_active": True,
@@ -183,6 +192,7 @@ class ConversationStateResponse(BaseModel):
                 "detection_confidence": 92.0
             }
         }
+    )
 
 
 # ============================================================================
@@ -193,10 +203,11 @@ class GenerateQRRequest(BaseModel):
     """Generate new WhatsApp QR code"""
     session_id: Optional[str] = Field(None, description="Optional custom session ID")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"session_id": "tenant-123-session"}
         }
+    )
 
 
 class QRStatusResponse(BaseModel):
@@ -209,8 +220,8 @@ class QRStatusResponse(BaseModel):
     session_expires_at: Optional[str]
     created_at: Optional[str]
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "tenant-123-session",
                 "phone_number": "237666123456",
@@ -221,26 +232,29 @@ class QRStatusResponse(BaseModel):
                 "created_at": "2025-01-15T14:30:00Z"
             }
         }
+    )
 
 
 class RegenerateQRRequest(BaseModel):
     """Regenerate QR if expired"""
     force: bool = Field(False, description="Force regenerate even if not expired")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"force": False}
         }
+    )
 
 
 class DisconnectReconnectRequest(BaseModel):
     """Disconnect and get new QR"""
     reason: Optional[str] = Field(None, description="Reason for reconnection")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"reason": "Session expired"}
         }
+    )
 
 
 # ============================================================================
