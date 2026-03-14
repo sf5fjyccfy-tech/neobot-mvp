@@ -8,8 +8,14 @@ from sqlalchemy import and_
 from ..models import TenantSettings, QueuedMessage, ConversationHumanState
 from datetime import datetime, timedelta
 import logging
+import os
+import httpx
 
 logger = logging.getLogger(__name__)
+
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+WHATSAPP_SERVICE_TIMEOUT = float(os.getenv("WHATSAPP_SERVICE_TIMEOUT", "10"))
+MAX_QUEUE_RETRIES = 3
 
 
 class ResponseDelayService:
@@ -201,6 +207,42 @@ class ResponseDelayService:
         }
     
     @staticmethod
+    async def _send_via_whatsapp_service(tenant_id: int, phone_number: str, response_text: str):
+        """
+        Envoie un message via le service WhatsApp (Baileys) avec fallback legacy.
+        """
+        tenant_send_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/send-message"
+        legacy_send_url = f"{WHATSAPP_SERVICE_URL}/send"
+
+        async with httpx.AsyncClient(timeout=WHATSAPP_SERVICE_TIMEOUT) as client:
+            # Endpoint multi-tenant moderne
+            tenant_payload = {
+                "to": phone_number,
+                "message": response_text,
+            }
+            try:
+                resp = await client.post(tenant_send_url, json=tenant_payload)
+                resp.raise_for_status()
+                return
+            except Exception as tenant_err:
+                logger.warning(
+                    "Tenant send endpoint failed, trying legacy /send",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "phone": phone_number,
+                        "error": str(tenant_err),
+                    },
+                )
+
+            # Fallback endpoint historique
+            legacy_payload = {
+                "to": phone_number,
+                "text": response_text,
+            }
+            legacy_resp = await client.post(legacy_send_url, json=legacy_payload)
+            legacy_resp.raise_for_status()
+
+    @staticmethod
     async def send_queued_messages(db: Session) -> dict:
         """
         Task périodique (toutes les secondes): envoie les messages en queue dont le délai est passé
@@ -212,7 +254,8 @@ class ResponseDelayService:
         pending = db.query(QueuedMessage).filter(
             and_(
                 QueuedMessage.send_at <= now,
-                QueuedMessage.sent == False
+                QueuedMessage.sent == False,
+                QueuedMessage.retry_count < MAX_QUEUE_RETRIES,
             )
         ).all()
         
@@ -232,8 +275,12 @@ class ResponseDelayService:
                     logger.info(f"⏸️ {item.id}: Report envoi (humain actif)")
                     continue
                 
-                # TODO: Appeler Baileys pour envoyer le message
-                # await baileys_service.send_message(item.phone_number, item.response_text)
+                # Envoi réel via le service WhatsApp/Baileys
+                await ResponseDelayService._send_via_whatsapp_service(
+                    tenant_id=item.tenant_id,
+                    phone_number=item.phone_number,
+                    response_text=item.response_text,
+                )
                 
                 item.sent = True
                 item.sent_at = now
@@ -247,10 +294,11 @@ class ResponseDelayService:
                 item.retry_count = (item.retry_count or 0) + 1
                 item.last_retry_at = now
                 
-                # Après 3 tentatives, donne up
-                if item.retry_count >= 3:
-                    item.sent = False  # Marque comme failed
-                    logger.error(f"❌ Message {item.id}: donnée up après 3 tentatives")
+                # Après MAX_QUEUE_RETRIES tentatives, ne plus retraiter cet item
+                if item.retry_count >= MAX_QUEUE_RETRIES:
+                    logger.error(
+                        f"❌ Message {item.id}: abandon après {MAX_QUEUE_RETRIES} tentatives"
+                    )
                 
                 db.commit()
         
