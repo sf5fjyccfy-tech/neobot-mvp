@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 import logging
+import os
+import httpx
 
 from app.database import get_db
 from app.models import WhatsAppSession, Tenant, User
@@ -13,6 +15,9 @@ from app.models import WhatsAppSession, Tenant, User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tenants", tags=["whatsapp"])
+
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+WHATSAPP_SERVICE_TIMEOUT = float(os.getenv("WHATSAPP_SERVICE_TIMEOUT", "8"))
 
 # ========== SCHEMAS ==========
 
@@ -158,7 +163,7 @@ async def get_whatsapp_qr(
     2. Si session existe + is_connected: Retourner status "connecté"
     3. Si session existe + !is_connected: Retourner QR code à scanner
     
-    TODO: Intégrer avec Baileys pour générer/récupérer le QR code réel
+    Intégré avec le service WhatsApp/Baileys pour récupérer le vrai QR code.
     """
     # Vérifier que le tenant existe
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
@@ -191,16 +196,84 @@ async def get_whatsapp_qr(
             message=f"✅ Connecté: {session.whatsapp_phone}"
         )
     
-    # TODO: Appeler Baileys pour obtenir le QR code réel
-    # Pour maintenant, retourner un placeholder
-    
-    return WhatsAppQRResponse(
-        tenant_id=tenant_id,
-        status="awaiting_scan",
-        qr_code=None,  # TODO: Générer QR code réel avec Baileys
-        phone=session.whatsapp_phone,
-        message=f"En attente de scan du QR code pour {session.whatsapp_phone}"
-    )
+    service_qr_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/qr"
+    service_connect_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/connect"
+
+    try:
+        async with httpx.AsyncClient(timeout=WHATSAPP_SERVICE_TIMEOUT) as client:
+            # 1) Read current QR state
+            qr_resp = await client.get(service_qr_url)
+            qr_resp.raise_for_status()
+            qr_payload = qr_resp.json()
+
+            has_qr = bool(qr_payload.get("hasQR"))
+            is_connected = bool(qr_payload.get("connected"))
+            state = qr_payload.get("state", "unknown")
+            qr_image = qr_payload.get("qrImageDataUrl")
+
+            # 2) If not connected and no QR yet, ask service to initialize connection and refetch once
+            if not is_connected and not has_qr:
+                logger.info(f"🔄 No QR yet for tenant {tenant_id}, requesting connect")
+                connect_resp = await client.post(service_connect_url)
+                connect_resp.raise_for_status()
+
+                qr_resp = await client.get(service_qr_url)
+                qr_resp.raise_for_status()
+                qr_payload = qr_resp.json()
+
+                has_qr = bool(qr_payload.get("hasQR"))
+                is_connected = bool(qr_payload.get("connected"))
+                state = qr_payload.get("state", state)
+                qr_image = qr_payload.get("qrImageDataUrl")
+
+        # Keep DB state in sync with live service state when known
+        if is_connected and not session.is_connected:
+            session.is_connected = True
+            session.last_connected_at = datetime.utcnow()
+            session.failed_attempts = 0
+            db.commit()
+
+        if is_connected:
+            return WhatsAppQRResponse(
+                tenant_id=tenant_id,
+                status="connected",
+                qr_code=None,
+                phone=session.whatsapp_phone,
+                message=f"✅ Connecté: {session.whatsapp_phone}",
+            )
+
+        if has_qr and qr_image:
+            return WhatsAppQRResponse(
+                tenant_id=tenant_id,
+                status="awaiting_scan",
+                qr_code=qr_image,
+                phone=session.whatsapp_phone,
+                message=f"QR prêt. Scannez pour connecter {session.whatsapp_phone}",
+            )
+
+        return WhatsAppQRResponse(
+            tenant_id=tenant_id,
+            status="awaiting_scan",
+            qr_code=None,
+            phone=session.whatsapp_phone,
+            message=f"Connexion en cours ({state}). Le QR sera disponible sous peu.",
+        )
+
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            f"WhatsApp service HTTP error for tenant {tenant_id}: "
+            f"{e.response.status_code} {e.response.text}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Service WhatsApp indisponible temporairement"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"WhatsApp service request error for tenant {tenant_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Impossible de joindre le service WhatsApp"
+        )
 
 @router.post("/{tenant_id}/whatsapp/session/mark-connected")
 async def mark_whatsapp_connected(
