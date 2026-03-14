@@ -26,15 +26,13 @@ export default function MessageChart({ tenantId }: MessageChartProps) {
     try {
       setLoading(true);
       const response = await apiCall(`/api/tenants/${tenantId}/analytics/chart/messages?days=30`);
-      
-      if (response.data) {
-        const chartData = response.data as DataPoint[];
-        setData(chartData);
-        
-        // Trouver le max pour l'échelle
-        const max = Math.max(...chartData.map(d => d.count), 1);
-        setMaxValue(max);
-      }
+
+      const chartData = (await response.json()) as DataPoint[];
+      setData(chartData);
+
+      // Trouver le max pour l'échelle
+      const max = Math.max(...chartData.map(d => d.count), 1);
+      setMaxValue(max);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Erreur de chargement');

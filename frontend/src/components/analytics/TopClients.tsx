@@ -26,10 +26,9 @@ export default function TopClients({ tenantId }: TopClientsProps) {
     try {
       setLoading(true);
       const response = await apiCall(`/api/tenants/${tenantId}/analytics/clients/top?limit=10`);
-      
-      if (response.data) {
-        setClients(response.data);
-      }
+
+      const payload = (await response.json()) as Client[];
+      setClients(payload);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Erreur de chargement');

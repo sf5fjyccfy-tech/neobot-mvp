@@ -41,9 +41,12 @@ export default function StatsGrid({ tenantId }: StatsGridProps) {
         apiCall(`/api/tenants/${tenantId}/analytics/messages`),
         apiCall(`/api/tenants/${tenantId}/analytics/conversations`)
       ]);
-      
-      if (msgRes.data) setMessageStats(msgRes.data);
-      if (convRes.data) setConversationStats(convRes.data);
+
+      const msgData = (await msgRes.json()) as MessageStats;
+      const convData = (await convRes.json()) as ConversationStats;
+
+      setMessageStats(msgData);
+      setConversationStats(convData);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Erreur de chargement');

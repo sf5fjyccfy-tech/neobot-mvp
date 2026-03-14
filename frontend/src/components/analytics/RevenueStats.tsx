@@ -27,10 +27,9 @@ export default function RevenueStats({ tenantId }: RevenueStatsProps) {
     try {
       setLoading(true);
       const response = await apiCall(`/api/tenants/${tenantId}/analytics/revenue?months=12`);
-      
-      if (response.data) {
-        setData(response.data);
-      }
+
+      const payload = (await response.json()) as RevenueData;
+      setData(payload);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Erreur de chargement');
