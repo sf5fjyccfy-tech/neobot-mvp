@@ -5,7 +5,7 @@ Phase 8M: Feature 3 - Temps de réponse modulable
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from ..models import TenantSettings, QueuedMessage, ConversationHumanState
+from ..models import TenantSettings, QueuedMessage, ConversationHumanState, Message, Conversation
 from datetime import datetime, timedelta
 import logging
 import os
@@ -281,6 +281,21 @@ class ResponseDelayService:
                     phone_number=item.phone_number,
                     response_text=item.response_text,
                 )
+
+                # Historiser le message sortant dans la conversation
+                db_msg = Message(
+                    conversation_id=item.conversation_id,
+                    content=item.response_text,
+                    direction="outgoing",
+                    is_ai=True,
+                )
+                db.add(db_msg)
+
+                conv = db.query(Conversation).filter(
+                    Conversation.id == item.conversation_id
+                ).first()
+                if conv:
+                    conv.last_message_at = now
                 
                 item.sent = True
                 item.sent_at = now
