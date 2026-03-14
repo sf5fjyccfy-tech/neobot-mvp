@@ -7,7 +7,7 @@ echo "=================================="
 case "$1" in
     start)
         echo "🚀 Démarrage Smart WhatsApp ES6..."
-        node whatsapp_smart.mjs 2>&1 | tee -a smart_whatsapp.log &
+        node whatsapp_stable.mjs 2>&1 | tee -a smart_whatsapp.log &
         echo $! > whatsapp.pid
         echo "✅ PID: $(cat whatsapp.pid)"
         echo "📊 Logs: tail -f smart_whatsapp.log"
