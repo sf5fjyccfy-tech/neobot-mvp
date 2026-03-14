@@ -102,7 +102,7 @@ fi
 
 # Test 2: Vérifier les clés d'environnement
 log "Test: Variables d'environnement..."
-if python3 << 'PYEOF'
+ENV_CHECK_OUTPUT=$(python3 << 'PYEOF'
 import os
 from dotenv import load_dotenv
 from pathlib import Path
@@ -125,23 +125,27 @@ if env_path.exists():
 else:
     print("ℹ️  .env n'existe pas (normal en prod)")
 PYEOF
-2>&1 | grep "✅" | head -2 | while read line; do
-    log_pass "Backend: $line"
-done
+)
+
+if echo "$ENV_CHECK_OUTPUT" | grep -q "✅"; then
+    echo "$ENV_CHECK_OUTPUT" | grep "✅" | head -2 | while read line; do
+        log_pass "Backend: $line"
+    done
+else
+    log_warn "Backend: Variables d'environnement incomplètes"
 fi
 
 # Test 3: Vérifier les routers
 log "Test: Vérification des routers..."
 if python3 << 'PYEOF' 2>&1 | grep -q "routers.*OK"; then
 import os
-os.environ['DEEPSEEK_API_KEY'] = 'sk-test'
+os.environ['DEEPSEEK_API_KEY'] = 'DUMMY_KEY_FOR_IMPORT_CHECKS'
 
 from app.main import app
 
 router_count = len(app.routes)
 print(f"routers: {router_count} OK")
 PYEOF
-then
     log_pass "Backend: Routers intégrés ✅"
 fi
 
@@ -230,7 +234,7 @@ log "Vérification de l'architecture..."
 
 # Test: Structure des dossiers
 REQUIRED_DIRS=(
-    "$BACKEND_DIR/app/api"
+    "$BACKEND_DIR/app/routers"
     "$BACKEND_DIR/app/services"
     "$BACKEND_DIR/app/models"
     "$FRONTEND_DIR/src/app"

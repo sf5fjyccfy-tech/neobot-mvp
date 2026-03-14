@@ -58,13 +58,22 @@ else
     echo "Database: ⚠️  UNREACHABLE" >> "$REPORT_FILE"
 fi
 
-# Test 3: Vérifier les modules importés
-if python3 -c "from app.api import analytics, conversations, products, payments; print('✅')" 2>&1 | grep -q "✅"; then
-    echo "   ✅ Tous les modules API importent"
-    echo "API Modules: ✅ LOADED" >> "$REPORT_FILE"
+# Test 3: Vérifier les routeurs actifs (architecture actuelle)
+if python3 -c "from app.routers import auth, analytics, whatsapp, usage, contacts; print('✅')" 2>&1 | grep -q "✅"; then
+    echo "   ✅ Tous les routeurs actifs importent"
+    echo "Active Routers: ✅ LOADED" >> "$REPORT_FILE"
 else
-    echo "   ⚠️  Erreur lors du chargement des modules API"
-    echo "API Modules: ⚠️  PARTIAL" >> "$REPORT_FILE"
+    echo "   ⚠️  Erreur lors du chargement des routeurs actifs"
+    echo "Active Routers: ⚠️  PARTIAL" >> "$REPORT_FILE"
+fi
+
+# Test 3b: Garde-fou architecture (éviter le retour vers app/api legacy)
+if grep -q "app\.api" "$BACKEND_DIR/app/main.py"; then
+    echo "   ⚠️  Référence legacy app.api détectée dans main.py"
+    echo "Architecture Guard: ⚠️  LEGACY_REFERENCE" >> "$REPORT_FILE"
+else
+    echo "   ✅ Aucun couplage legacy app.api dans main.py"
+    echo "Architecture Guard: ✅ CLEAN" >> "$REPORT_FILE"
 fi
 
 # Test 4: Vérifier les services
@@ -91,7 +100,7 @@ PYEOF
     echo "   ✅ Clé DeepSeek chargée"
     echo "Secrets: ✅ LOADED" >> "$REPORT_FILE"
 else
-    echo "   ⚠️  Clé DeepSeek non chargée (utilisera fallback sk-test)"
+    echo "   ⚠️  Clé DeepSeek non chargée (pas de fallback autorisé)"
     echo "Secrets: ⚠️  FALLBACK" >> "$REPORT_FILE"
 fi
 
@@ -223,7 +232,7 @@ echo "════════════════════════�
 # Vérifier les répertoires clés
 REQUIRED_DIRS=(
     "$BACKEND_DIR/app"
-    "$BACKEND_DIR/app/api"
+    "$BACKEND_DIR/app/routers"
     "$BACKEND_DIR/app/services"
     "$FRONTEND_DIR/src"
     "$FRONTEND_DIR/src/app"

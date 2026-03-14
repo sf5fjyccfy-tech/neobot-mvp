@@ -1,3 +1,5 @@
-# Fichier d'initialisation du module API
-# Nous allons importer les routeurs directement dans main.py pour un meilleur contrôle
-# Exemple : from . import auth
+"""Deprecated legacy API package.
+
+This package is intentionally not mounted in ``app.main``.
+Active endpoints live under ``app.routers``.
+"""
