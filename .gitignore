@@ -46,3 +46,11 @@ frontend/.eslintrc.json
 *.pid
 whatsapp.pid
 whatsapp-service/auth_info_baileys/
+
+# Local sensitive env files
+backend/.env.oracle
+whatsapp-service/.env.cleanup
+
+# Generated local reports
+diagnostic_report_*.json
+simulation_report_*.json
