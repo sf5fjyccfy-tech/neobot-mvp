@@ -13,6 +13,7 @@ import logging
 import hmac
 import hashlib
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 # Imports locaux
 from app.database import get_db
@@ -375,34 +376,31 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
                 "message": "Quota dépassé. Veuillez renouveler votre plan."
             }
         
-        # Find or create conversation for this tenant+phone
-        conversation = db.query(Conversation).filter(
-            Conversation.tenant_id == tenant_id,
-            Conversation.customer_phone == phone
-        ).first()
-        
-        if not conversation:
-            conversation = Conversation(
-                tenant_id=tenant_id,
-                customer_phone=phone,
-                customer_name=message.senderName,
-                channel="whatsapp",
-                status="active"
-            )
-            db.add(conversation)
-            db.commit()
-            db.refresh(conversation)
-            logger.info(f"✅ Created new conversation {conversation.id} for {phone}")
-        
-        # Save incoming message to database
-        incoming_msg = Message(
-            conversation_id=conversation.id,
-            content=message.text,
+        # Check per-customer guardrails (daily/monthly)
+        if is_daily_limit_reached(phone, tenant_id=tenant_id, db=db):
+            logger.warning(f"⚠️  Daily customer limit reached for {phone} (tenant {tenant_id})")
+            return {
+                "status": "error",
+                "message": "Limite journaliere atteinte pour ce client.",
+            }
+
+        if is_monthly_limit_reached(phone, tenant_id=tenant_id, db=db):
+            logger.warning(f"⚠️  Monthly customer limit reached for {phone} (tenant {tenant_id})")
+            return {
+                "status": "error",
+                "message": "Limite mensuelle atteinte pour ce client.",
+            }
+
+        # Save incoming message (create conversation if needed)
+        conversation, incoming_msg = await save_message_to_db(
+            phone=phone,
+            sender_name=message.senderName,
+            text=message.text,
             direction="incoming",
-            is_ai=False
+            tenant_id=tenant_id,
+            db=db,
+            is_ai=False,
         )
-        db.add(incoming_msg)
-        db.commit()
         logger.info(f"✅ Saved incoming message {incoming_msg.id}")
         
         # Process message with brain (now with business context)
@@ -415,14 +413,15 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         )
         
         # Save outgoing message to database
-        outgoing_msg = Message(
-            conversation_id=conversation.id,
-            content=response_text,
+        _, outgoing_msg = await save_message_to_db(
+            phone=phone,
+            sender_name=message.senderName,
+            text=response_text,
             direction="outgoing",
-            is_ai=True
+            tenant_id=tenant_id,
+            db=db,
+            is_ai=True,
         )
-        db.add(outgoing_msg)
-        db.commit()
         logger.info(f"✅ Saved outgoing message {outgoing_msg.id}")
         
         # INCREMENT USAGE: 1 for incoming message + 1 for outgoing message = 2 total
@@ -492,25 +491,100 @@ async def send_whatsapp_response(phone: str, text: str):
 
 # ===== Utils =====
 
-async def save_message_to_db(phone: str, sender_name: str, text: str, direction: str):
+async def save_message_to_db(
+    phone: str,
+    sender_name: str,
+    text: str,
+    direction: str,
+    tenant_id: int,
+    db: Session,
+    is_ai: bool = False,
+):
     """
-    TODO: Implement database saving
-    - Find or create Conversation
-    - Add Message to conversation
-    - Track message count for billing
+    Save message for a tenant/customer pair and create conversation when missing.
     """
-    pass
+    conversation = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id,
+        Conversation.customer_phone == phone,
+    ).first()
+
+    if not conversation:
+        conversation = Conversation(
+            tenant_id=tenant_id,
+            customer_phone=phone,
+            customer_name=sender_name,
+            channel="whatsapp",
+            status="active",
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+        logger.info(f"✅ Created new conversation {conversation.id} for {phone}")
+
+    # Keep customer name fresh if we receive a better value later.
+    if sender_name and conversation.customer_name != sender_name:
+        conversation.customer_name = sender_name
+
+    message = Message(
+        conversation_id=conversation.id,
+        content=text,
+        direction=direction,
+        is_ai=is_ai,
+    )
+    db.add(message)
+    conversation.last_message_at = datetime.utcnow()
+    db.commit()
+    db.refresh(message)
+
+    return conversation, message
 
 
-def is_daily_limit_reached(phone: str) -> bool:
+def is_daily_limit_reached(phone: str, tenant_id: int, db: Session) -> bool:
     """
-    TODO: Check if customer has reached daily message limit
+    Check per-customer daily incoming message limit.
+
+    Env override:
+    - WHATSAPP_CUSTOMER_DAILY_LIMIT (default: 200)
     """
-    return False
+    daily_limit = int(os.getenv("WHATSAPP_CUSTOMER_DAILY_LIMIT", "200"))
+    if daily_limit <= 0:
+        return False
+
+    start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    count = db.query(func.count(Message.id)).join(
+        Conversation, Message.conversation_id == Conversation.id
+    ).filter(
+        Conversation.tenant_id == tenant_id,
+        Conversation.customer_phone == phone,
+        Message.direction == "incoming",
+        Message.created_at >= start_of_day,
+    ).scalar() or 0
+
+    return count >= daily_limit
 
 
-def is_monthly_limit_reached(phone: str) -> bool:
+def is_monthly_limit_reached(phone: str, tenant_id: int, db: Session) -> bool:
     """
-    TODO: Check if customer has reached monthly message limit
+    Check per-customer monthly incoming message limit.
+
+    Env override:
+    - WHATSAPP_CUSTOMER_MONTHLY_LIMIT (default: 2000)
     """
-    return False
+    monthly_limit = int(os.getenv("WHATSAPP_CUSTOMER_MONTHLY_LIMIT", "2000"))
+    if monthly_limit <= 0:
+        return False
+
+    now = datetime.utcnow()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    count = db.query(func.count(Message.id)).join(
+        Conversation, Message.conversation_id == Conversation.id
+    ).filter(
+        Conversation.tenant_id == tenant_id,
+        Conversation.customer_phone == phone,
+        Message.direction == "incoming",
+        Message.created_at >= start_of_month,
+    ).scalar() or 0
+
+    return count >= monthly_limit
