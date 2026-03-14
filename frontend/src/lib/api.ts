@@ -26,6 +26,32 @@ export const buildApiUrl = (endpoint: string): string => {
 };
 
 /**
+ * JWT Token Management
+ */
+export const setToken = (token: string): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('jwt_token', token);
+  }
+};
+
+export const getToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('jwt_token');
+  }
+  return null;
+};
+
+export const clearToken = (): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('jwt_token');
+  }
+};
+
+export const isAuth = (): boolean => {
+  return getToken() !== null;
+};
+
+/**
  * Helper function for API calls with proper error handling
  */
 export const apiCall = async (
@@ -33,15 +59,25 @@ export const apiCall = async (
   options?: RequestInit
 ): Promise<Response> => {
   const url = buildApiUrl(endpoint);
+  const token = getToken();
   
   try {
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options?.headers,
       },
       ...options,
     });
+    
+    // If unauthorized, clear token and redirect to login
+    if (response.status === 401) {
+      clearToken();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
     
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
