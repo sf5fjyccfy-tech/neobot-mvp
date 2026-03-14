@@ -6,23 +6,17 @@ Handles JWT validation and extracting current user/tenant
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-import jwt
-from datetime import datetime
 import logging
-import os
 from dotenv import load_dotenv
 
 from app.database import get_db
 from app.models import User, Tenant
+from app.services.auth_service import decode_access_token
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
-
-# Get JWT secret from environment
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
 
 
 async def get_current_user(
@@ -36,16 +30,15 @@ async def get_current_user(
     """
     token = credentials.credentials
     
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("user_id")
-        
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-            )
-    except jwt.InvalidTokenError:
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    user_id: int = payload.get("user_id")
+    if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",

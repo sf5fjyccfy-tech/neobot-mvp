@@ -13,6 +13,7 @@ from app.services.auth_service import (
     create_access_token,
     get_password_hash,
 )
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -151,14 +152,21 @@ async def register(
 @router.get("/me")
 async def get_current_user_info(
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda db=Depends(get_db): None),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Retourne les infos de l'utilisateur actuel
     Nécessite un token valide dans Authorization header
     """
-    # Ce endpoint n'est pas vraiment utilisé pour MVP
-    # TODO: Implémenter avec get_current_user du service auth
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+
     return {
-        "message": "À implémenter avec middleware JWT"
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "tenant_id": current_user.tenant_id,
+        "tenant_name": tenant.name if tenant else None,
+        "tenant_plan": tenant.plan.value if tenant else None,
     }
