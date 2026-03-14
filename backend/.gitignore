@@ -6,7 +6,7 @@ backend/.env.production
 frontend/.env*
 auth_info*/
 auth_*/
-auth_*
+auth_state*
 node_modules/
 venv/
 .output

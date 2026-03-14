@@ -167,6 +167,10 @@ function reconnectDelayMs(retryCount) {
 }
 
 function shouldResetAuthFromCode(code) {
+  if (code === 401 || code === 403) {
+    return true;
+  }
+
   return (
     code === DisconnectReason.loggedOut ||
     code === DisconnectReason.connectionReplaced ||
@@ -268,6 +272,7 @@ async function forwardIncomingMessage(tenantId, msg) {
   }
 
   const payloadV1 = {
+    tenant_id: tenantId,
     from_: phone,
     text,
     senderName: msg?.pushName || 'Client',

@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class EscalationService:
     """
     Détecte quand escalader vers un humain
     """
+    MAX_ATTEMPTS_THRESHOLD = int(os.getenv("ESCALATION_MAX_ATTEMPTS", "200"))
     
     @staticmethod
     def detect_escalation_trigger(message: str, conversation_id: Optional[int], db: Session) -> Optional[EscalationReason]:
@@ -85,7 +87,7 @@ class EscalationService:
                             Message.conversation_id == conversation_id
                         ).count()
                         
-                        if message_count > 6:
+                        if message_count > EscalationService.MAX_ATTEMPTS_THRESHOLD:
                             logger.info(f"🚨 Escalade détectée: MAX_ATTEMPTS ({message_count} msgs)")
                             return EscalationReason.MAX_ATTEMPTS
                 except:

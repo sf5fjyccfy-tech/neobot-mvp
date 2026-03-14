@@ -51,6 +51,7 @@ def _is_valid_webhook_signature(request: Request, message: "WhatsAppMessage") ->
 
 class WhatsAppMessage(BaseModel):
     """Incoming message from WhatsApp service"""
+    tenant_id: Optional[int] = None
     from_: Optional[str] = None  # Phone number
     to: Optional[str] = None     # Bot number (optional)
     text: str
@@ -186,7 +187,7 @@ Ou posez votre question!
             # 🚨 PHASE 7F STEP 1: ESCALADE DETECTION
             from .services.escalation_service import EscalationService, EscalationReason
             
-            escalation_reason = await EscalationService.detect_escalation_trigger(
+            escalation_reason = EscalationService.detect_escalation_trigger(
                 user_message, 
                 conversation_id, 
                 db
@@ -194,7 +195,7 @@ Ou posez votre question!
             
             if escalation_reason:
                 # Créer le ticket d'escalade
-                await EscalationService.create_escalation_ticket(
+                EscalationService.create_escalation_ticket(
                     conversation_id,
                     escalation_reason,
                     db
@@ -353,14 +354,20 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         logger.info(f"📨 Received message from {message.senderName}: {message.text}")
         
         # Extract phone number (remove country code if needed)
-        phone = message.from_
+        phone = message.from_ or ""
         if phone.startswith('+'):
             phone = phone[1:]
         
-        # Map phone to tenant using WhatsAppMappingService
+        # Resolve tenant context: tenant_id from service is authoritative.
         from .services.whatsapp_mapping_service import WhatsAppMappingService
         from .services.usage_tracking_service import UsageTrackingService
-        tenant_id = WhatsAppMappingService.get_tenant_from_phone(phone, db)
+        tenant_id = message.tenant_id
+
+        if not tenant_id and message.to:
+            tenant_id = WhatsAppMappingService.get_tenant_from_phone(message.to, db)
+
+        if not tenant_id:
+            tenant_id = WhatsAppMappingService.get_tenant_from_phone(phone, db)
         
         if not tenant_id:
             logger.warning(f"⚠️  Phone {phone} not mapped to any tenant. Message ignored.")
@@ -434,6 +441,7 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         # Send response in background
         background_tasks.add_task(
             send_whatsapp_response,
+            tenant_id=tenant_id,
             phone=phone,
             text=response_text
         )
@@ -456,7 +464,7 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
 
 # ===== Background Task =====
 
-async def send_whatsapp_response(phone: str, text: str):
+async def send_whatsapp_response(tenant_id: int, phone: str, text: str):
     """
     Send response via WhatsApp service
     Runs in background (non-blocking)
@@ -467,17 +475,25 @@ async def send_whatsapp_response(phone: str, text: str):
             'http://localhost:3001'
         )
         
-        payload = {
+        tenant_payload = {
             "to": phone,
-            "text": text
+            "message": text,
         }
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{whatsapp_service_url}/send",
-                json=payload,
-                timeout=10
+                f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
+                json=tenant_payload,
+                timeout=10,
             )
+
+            # Backward compatibility with older service contracts.
+            if response.status_code == 404:
+                response = await client.post(
+                    f"{whatsapp_service_url}/send",
+                    json={"to": phone, "text": text},
+                    timeout=10,
+                )
         
         if response.status_code == 200:
             logger.info(f"✅ Message sent to {phone}")

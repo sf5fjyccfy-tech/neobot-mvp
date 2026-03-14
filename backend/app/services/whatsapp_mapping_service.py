@@ -9,6 +9,12 @@ logger = logging.getLogger(__name__)
 
 class WhatsAppMappingService:
     """Service pour mapper les numéros WhatsApp aux tenants"""
+
+    @staticmethod
+    def _normalize_phone(phone: str) -> str:
+        if not phone:
+            return ""
+        return "".join(ch for ch in str(phone) if ch.isdigit())
     
     @staticmethod
     def get_tenant_from_phone(phone: str, db: Session) -> int | None:
@@ -22,9 +28,27 @@ class WhatsAppMappingService:
         Returns:
             tenant_id ou None si pas trouvé
         """
+        normalized_input = WhatsAppMappingService._normalize_phone(phone)
+
+        # Fast exact match first
         session = db.query(WhatsAppSession).filter(
             WhatsAppSession.whatsapp_phone == phone
         ).first()
+
+        if not session and normalized_input:
+            # Fallback resilient match for different persisted formats
+            candidates = db.query(WhatsAppSession).all()
+            for candidate in candidates:
+                normalized_candidate = WhatsAppMappingService._normalize_phone(candidate.whatsapp_phone)
+                if not normalized_candidate:
+                    continue
+                if normalized_candidate == normalized_input:
+                    session = candidate
+                    break
+                # Accept suffix match to tolerate country-prefix storage variance
+                if normalized_candidate.endswith(normalized_input) or normalized_input.endswith(normalized_candidate):
+                    session = candidate
+                    break
         
         if not session:
             logger.warning(f"⚠️  No tenant found for phone: {phone}")
