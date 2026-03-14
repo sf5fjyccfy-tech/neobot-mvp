@@ -5,6 +5,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import makeWASocket, {
   useMultiFileAuthState,
@@ -19,6 +20,10 @@ import pino from 'pino';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load local env first, then fall back to project root env.
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const BACKEND_URL = process.env.WHATSAPP_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8000';
 const WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || process.env.WHATSAPP_SECRET_KEY || '';
@@ -817,6 +822,7 @@ async function start() {
       port: PORT,
       backend: BACKEND_URL,
       defaultTenant: DEFAULT_TENANT_ID,
+      signatureEnabled: Boolean(WEBHOOK_SECRET),
     });
 
     console.log('\nEndpoints:');
