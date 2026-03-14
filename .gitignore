@@ -36,6 +36,13 @@ backup_**/
 node_modules/
 npm-debug.log
 yarn-error.log
+frontend/.next/
+frontend/.eslintrc.json
 
 # Docker
 .dockerignore
+
+# Runtime/session artifacts
+*.pid
+whatsapp.pid
+whatsapp-service/auth_info_baileys/

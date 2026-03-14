@@ -5,7 +5,9 @@ Version: 1.0.0
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import datetime
 import logging
 import os
@@ -18,7 +20,19 @@ from .models import Tenant, Conversation, Message
 from .whatsapp_webhook import router as whatsapp_router
 from .routers.tenant_business import router as tenant_business_router
 from .routers.business import router as business_router
+from .routers.auth import router as auth_router
+from .routers.whatsapp import router as whatsapp_sessions_router
+from .routers.usage import router as usage_router
+from .routers.overage import router as overage_router
+from .routers.analytics import router as analytics_router
+from .routers.subscription import router as subscription_router
+from .routers.setup import router as setup_router
+from .routers.whatsapp_qr import router as whatsapp_qr_router
+from .routers.contacts import router as contacts_router
+from .routers.tenant_settings import router as tenant_settings_router
+from .routers.human_detection import router as human_detection_router
 from .services.business_kb_service import BusinessKBService
+from .http_client import close_http_client
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +49,18 @@ app = FastAPI(
 )
 
 # ========== INCLUDE ROUTERS ==========
+app.include_router(auth_router)
 app.include_router(whatsapp_router)
+app.include_router(whatsapp_sessions_router)
+app.include_router(usage_router)
+app.include_router(overage_router)
+app.include_router(analytics_router)
+app.include_router(subscription_router)
+app.include_router(setup_router)
+app.include_router(whatsapp_qr_router)
+app.include_router(contacts_router)
+app.include_router(tenant_settings_router)
+app.include_router(human_detection_router)
 app.include_router(tenant_business_router)
 app.include_router(business_router)
 
@@ -114,6 +139,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """Cleanup au shutdown"""
+    await close_http_client()
     logger.info("🛑 Application arrêtée")
 
 # ========== HEALTH CHECKS ==========
@@ -130,7 +156,7 @@ async def health():
 async def api_health(db: Session = Depends(get_db)):
     """Health check avec vérification DB"""
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return {
             "status": "healthy",
             "database": "connected",
@@ -138,11 +164,14 @@ async def api_health(db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"DB Health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(e)
-        }, 503
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e)
+            }
+        )
 
 # ========== ROOT ENDPOINT ==========
 @app.get("/")
@@ -154,9 +183,9 @@ async def root():
         "status": "running"
     }
 
-@app.get("/docs")
-async def docs():
-    """Documentation API"""
+@app.get("/api/docs-info")
+async def docs_info():
+    """Informations rapides sur les endpoints API."""
     return {
         "endpoints": {
             "health": "GET /health",
@@ -303,11 +332,14 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Erreur webhook: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "response": "Désolé, une erreur s'est produite."
-        }, 500
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "response": "Désolé, une erreur s'est produite."
+            }
+        )
 
 # ========== CONVERSATION ENDPOINTS ==========
 @app.get("/api/conversations/{tenant_id}")
@@ -422,12 +454,15 @@ def get_fallback_response(message: str, business_name: str = "NéoBot") -> str:
 
 # ========== ERROR HANDLERS ==========
 @app.exception_handler(HTTPException)
+@app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handler personnalisé pour les erreurs HTTP"""
+    detail = getattr(exc, "detail", str(exc))
+    status_code = getattr(exc, "status_code", 500)
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status_code,
         content={
-            "error": exc.detail,
+            "error": detail,
             "status": "error",
             "timestamp": datetime.utcnow().isoformat()
         }

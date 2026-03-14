@@ -21,8 +21,8 @@ DATABASE_URL = os.getenv(
 )
 
 # Pool configuration
-POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 10))
-MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 20))
+POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 20))
+MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 30))
 POOL_TIMEOUT = int(os.getenv("DATABASE_POOL_TIMEOUT", 30))
 
 # ========== ENGINE CREATION ==========
@@ -32,9 +32,9 @@ engine = create_engine(
     pool_size=POOL_SIZE,
     max_overflow=MAX_OVERFLOW,
     pool_timeout=POOL_TIMEOUT,
-    pool_pre_ping=True,  # Vérifier la connexion avant utilisation
+    pool_pre_ping=False,  # Désactiver les pings pour la performance
     pool_recycle=3600,   # Recycler les connexions chaque heure
-    echo=os.getenv("DEBUG_MODE", "false").lower() == "true",  # Afficher les SQL en debug
+    echo=False,  # TOUJOURS désactiver en production (SQLAlchemy logging = lent!)
 )
 
 # ========== SESSION FACTORY ==========

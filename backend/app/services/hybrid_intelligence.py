@@ -108,7 +108,7 @@ Que souhaitez-vous savoir en priorité ?"""
 
     async def get_ai_response(self, message: str) -> Optional[str]:
         """Appelle l'IA externe pour questions complexes"""
-        if not DEEPSEEK_API_KEY or DEEPSEEK_API_KEY == "sk-test":
+        if not DEEPSEEK_API_KEY:
             return None
         
         try:

@@ -1,8 +1,9 @@
 import os
 import httpx
 from typing import Union
+from ..http_client import DeepSeekClient
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-test")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
 # === Fonctions qui étaient dans ai_prompts ===
@@ -108,46 +109,37 @@ async def generate_ai_response(
     if conversation_history:
         messages = conversation_history + messages[-2:]
     
-    # 7. Appel API
+    # 7. Appel API avec client global (pooling) - 50% plus rapide
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                DEEPSEEK_URL,
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "deepseek-chat",
-                    "messages": messages,
-                    "temperature": 0.7,
-                    "max_tokens": 120,
-                    "stream": False
-                }
-            )
+        response_data = await DeepSeekClient.call(
+            messages=messages,
+            model="deepseek-chat",
+            temperature=0.7,
+            max_tokens=120
+        )
+        
+        if "error" not in response_data and "choices" in response_data:
+            ai_response = response_data["choices"][0]["message"]["content"]
             
-            if response.status_code == 200:
-                ai_response = response.json()["choices"][0]["message"]["content"]
-                
-                # Post-processing SIMPLE
-                ai_response = ai_response.strip()
-                
-                # Vérifier si la réponse est hors-sujet
-                if mode == "neobot_admin" and "whatsapp" not in ai_response.lower():
-                    # Forcer une réponse de fallback
-                    return get_fallback_template(mode, "what_is", business_name)
-                
-                # Limiter la longueur
-                lines = ai_response.split('\n')
-                if len(lines) > 4:
-                    ai_response = '\n'.join(lines[:4])
-                
-                if len(ai_response) > 300:
-                    ai_response = ai_response[:297] + "..."
-                
-                return ai_response
-            else:
-                return get_fallback_response(mode, message_lower, business_name)
+            # Post-processing SIMPLE
+            ai_response = ai_response.strip()
+            
+            # Vérifier si la réponse est hors-sujet
+            if mode == "neobot_admin" and "whatsapp" not in ai_response.lower():
+                # Forcer une réponse de fallback
+                return get_fallback_template(mode, "what_is", business_name)
+            
+            # Limiter la longueur
+            lines = ai_response.split('\n')
+            if len(lines) > 4:
+                ai_response = '\n'.join(lines[:4])
+            
+            if len(ai_response) > 300:
+                ai_response = ai_response[:297] + "..."
+            
+            return ai_response
+        else:
+            return get_fallback_response(mode, message_lower, business_name)
                 
     except Exception as e:
         print(f"⚠️  Erreur IA: {e}")

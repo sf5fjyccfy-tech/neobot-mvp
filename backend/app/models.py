@@ -101,6 +101,50 @@ class Tenant(Base):
     
     # Relations (utilisant des strings pour éviter les imports circulaires)
     conversations = relationship("Conversation", back_populates="tenant")
+    users = relationship("User", back_populates="tenant")
+
+class User(Base):
+    """Utilisateurs de la plateforme NéoBot"""
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    role = Column(String(50), default="user")  # "user", "admin", "owner"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+    
+    tenant = relationship("Tenant", back_populates="users")
+
+# ========== CONTACTS ==========
+class Contact(Base):
+    """Contacts gérés par chaque tenant (Phone, name, settings)"""
+    __tablename__ = "contacts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    phone = Column(String(50), nullable=False)
+    name = Column(String(255), nullable=True)
+    
+    # Whitelist/Blacklist
+    is_whitelisted = Column(Boolean, default=False)
+    is_blacklisted = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    
+    # Metadata
+    first_contact_date = Column(DateTime, default=datetime.utcnow)
+    last_contact_date = Column(DateTime, default=datetime.utcnow)
+    message_count = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'phone', name='uq_contact_phone'),
+    )
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -110,16 +154,14 @@ class Conversation(Base):
     customer_phone = Column(String(50), nullable=False)
     customer_name = Column(String(255), nullable=True)
     channel = Column(String(50), default="whatsapp")
-    status = Column(String(50), default="active")
+    status = Column(String(50), default="active")  # active, escalated, closed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
-    last_message_at = Column(DateTime, default=datetime.utcnow)
+    last_message_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relations (en utilisant des strings)
     tenant = relationship("Tenant", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation")
-    
-    # Si ConversationState existe, la relation est optionnelle
-    # state = relationship("ConversationState", back_populates="conversation", uselist=False)
+    escalations = relationship("Escalation", back_populates="conversation")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -191,15 +233,238 @@ class ConversationContext(Base):
     
     config = relationship("TenantBusinessConfig", back_populates="contexts")
 
-# ========== MODÈLES OPTIONNELS ==========
-# Si ConversationState n'est pas essentiel, on peut le commenter
-# class ConversationState(Base):
-#     __tablename__ = "conversation_states"
-#     
-#     id = Column(Integer, primary_key=True, index=True)
-#     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
-#     state_type = Column(String(50), default="initial")
-#     metadata = Column(Text, nullable=True)
-#     created_at = Column(DateTime, default=datetime.utcnow)
-#     
-#     conversation = relationship("Conversation", back_populates="state")
+# ========== WHATSAPP INTEGRATION ==========
+class WhatsAppSession(Base):
+    """Enregistre les sessions WhatsApp par tenant (pour Baileys multi-device)"""
+    __tablename__ = "whatsapp_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, unique=True, index=True)
+    whatsapp_phone = Column(String(50), nullable=False, unique=True, index=True)  # "221780123456"
+    
+    # Baileys session metadata
+    baileys_session_file = Column(Text, nullable=True)  # JSON path or encoded data
+    is_connected = Column(Boolean, default=False)
+    last_connected_at = Column(DateTime, nullable=True)
+    failed_attempts = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+
+# ========== USAGE TRACKING ==========
+class UsageTracking(Base):
+    """Suivi de l'utilisation mensuelle par tenant"""
+    __tablename__ = "usage_tracking"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    month_year = Column(String(7), nullable=False, index=True)  # "2026-02"
+    
+    whatsapp_messages_used = Column(Integer, default=0)
+    other_platform_messages_used = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'month_year', name='uq_tenant_month'),
+    )
+
+# ========== OVERAGE PRICING ==========
+class Overage(Base):
+    """Suivi des dépassements de quota et coûts supplémentaires"""
+    __tablename__ = "overages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    month_year = Column(String(7), nullable=False, index=True)  # "2026-02"
+    
+    messages_over = Column(Integer, default=0)  # Nombre de messages au-delà de la limite
+    cost_fcfa = Column(Integer, default=0)      # Coût en FCFA
+    
+    is_billed = Column(Boolean, default=False)  # Facturé ou pas?
+    billed_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'month_year', name='uq_overage_tenant_month'),
+    )
+
+# ========== SUBSCRIPTION MANAGEMENT ==========
+class Subscription(Base):
+    """Tracks subscription plans, trial periods, and billing information"""
+    __tablename__ = "subscriptions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, unique=True, index=True)
+    
+    # Plan information
+    plan = Column(String(50), nullable=False)  # "basique", "standard", "pro"
+    status = Column(String(50), default="active")  # "active", "paused", "cancelled"
+    
+    # Trial information
+    is_trial = Column(Boolean, default=True)
+    trial_start_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    trial_end_date = Column(DateTime, nullable=False)
+    
+    # Subscription dates
+    subscription_start_date = Column(DateTime, default=datetime.utcnow)
+    subscription_end_date = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    
+    # Billing information
+    next_billing_date = Column(DateTime, nullable=True)
+    last_billing_date = Column(DateTime, nullable=True)
+    auto_renew = Column(Boolean, default=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+
+# ========== ESCALATION MANAGEMENT ==========
+class Escalation(Base):
+    """Tickets d'escalade vers support humain"""
+    __tablename__ = "escalations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, index=True)
+    reason = Column(String(100), nullable=False)  # frustrated, complex, payment, technical, request_human, max_attempts
+    status = Column(String(50), default="pending")  # pending, assigned, resolved, closed
+    assigned_agent = Column(String(100), nullable=True)  # Nom de l'agent
+    
+    priority = Column(String(20), default="normal")  # low, normal, high, urgent
+    notes = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    
+    # Relation
+    conversation = relationship("Conversation", back_populates="escalations")
+
+# ========== PHASE 8M: BAILEYS + FEATURES ==========
+
+# 1. WhatsApp QR Code Sessions
+class WhatsAppSessionQR(Base):
+    """Gestion QR codes Baileys avec expiration"""
+    __tablename__ = "whatsapp_session_qrs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    session_id = Column(String(100), unique=True, nullable=False, index=True)
+    phone_number = Column(String(50), nullable=True)  # NULL avant connexion
+    
+    # QR Code
+    qr_code_data = Column(Text, nullable=True)  # Base64 image
+    status = Column(String(50), default="pending")  # pending, connected, expired, disconnected
+    
+    # Dates
+    qr_generated_at = Column(DateTime, default=datetime.utcnow)
+    qr_expires_at = Column(DateTime, nullable=True)  # 2 min après generation
+    connected_at = Column(DateTime, nullable=True)
+    last_activity = Column(DateTime, default=datetime.utcnow)
+    session_expires_at = Column(DateTime, nullable=True)  # 30 jours après connexion
+    
+    # Session data
+    session_data = Column(Text, nullable=True)  # Données Baileys chiffrées
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# 2. Contact Settings - Whitelist/Blacklist
+class ContactSetting(Base):
+    """Whitelist/Blacklist: contrôle si IA répond à ce contact"""
+    __tablename__ = "contact_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=False)
+    
+    # Contrôle IA
+    ai_enabled = Column(Boolean, default=True)  # True = IA répond, False = ignoré
+    
+    # Metadata
+    contact_name = Column(String(255), nullable=True)
+    message_count = Column(Integer, default=0)
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'phone_number', name='uq_contact_setting'),
+    )
+
+
+# 3. Human Intervention State - Détécte intervention humain
+class ConversationHumanState(Base):
+    """Suivi l'état: humain intervenu, IA pause, etc."""
+    __tablename__ = "conversation_human_states"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, unique=True, index=True)
+    
+    # État IA
+    human_active = Column(Boolean, default=False)  # Humain en train de répondre?
+    ai_paused_at = Column(DateTime, nullable=True)  # Quand IA pausée
+    last_human_message_at = Column(DateTime, nullable=True)  # Dernier message humain
+    
+    # Metadata
+    detection_confidence = Column(Integer, default=0)  # 0-100%
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# 4. Tenant Settings - Configuration délai réponse
+class TenantSettings(Base):
+    """Configuration tenant: délai réponse, etc."""
+    __tablename__ = "tenant_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, unique=True, index=True)
+    
+    # Délai de réponse
+    response_delay_seconds = Column(Integer, default=30)  # 0, 15, 30, 60, 120
+    
+    # Overrides par contact (JSON)
+    contact_delays = Column(JSON, nullable=True)  # {"237666123456": 0, "237777777777": 60}
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# 5. Queued Messages - Messages en attente de délai
+class QueuedMessage(Base):
+    """Messages en queue en attente d'envoi (après délai)"""
+    __tablename__ = "queued_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    
+    # Message
+    response_text = Column(Text, nullable=False)
+    
+    # Envoi
+    send_at = Column(DateTime, nullable=False, index=True)  # Quand envoyer
+    sent = Column(Boolean, default=False)
+    sent_at = Column(DateTime, nullable=True)
+    
+    # Retry
+    retry_count = Column(Integer, default=0)
+    last_retry_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

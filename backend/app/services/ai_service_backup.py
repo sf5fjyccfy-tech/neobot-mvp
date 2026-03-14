@@ -5,7 +5,7 @@ import os
 import httpx
 from app.ai_prompts import build_chat_messages
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-test")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
 async def generate_ai_response(tenant, message: str, conversation_history: list = None) -> str:
