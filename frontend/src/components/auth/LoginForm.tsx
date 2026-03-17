@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiCall, setToken } from '@/lib/api';
+import { setToken } from '@/lib/api';
+import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 
 interface LoginFormData {
   email: string;
@@ -11,19 +12,13 @@ interface LoginFormData {
 
 export default function LoginForm() {
   const router = useRouter();
-  const [formData, setFormData] = useState<LoginFormData>({
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState<LoginFormData>({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -32,78 +27,100 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await apiCall('/api/auth/login', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
       const data = await response.json();
-      
-      // Save token
+
+      if (!response.ok) {
+        setError(data.detail || data.error || 'Email ou mot de passe incorrect.');
+        return;
+      }
+
       setToken(data.access_token);
-      
-      // Redirect to dashboard
       router.push('/dashboard');
-    } catch (err) {
-      setError('Email ou mot de passe incorrect');
-      console.error('Login error:', err);
+    } catch {
+      setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
     } finally {
       setLoading(false);
     }
   };
 
+  const inputClass = "w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all backdrop-blur-sm";
+  const labelClass = "block text-sm font-medium text-white/80 mb-1.5";
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-md mx-auto">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="bg-red-500/20 border border-red-400/30 text-red-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+          <span className="text-red-400 mt-0.5">⚠</span>
           {error}
         </div>
       )}
 
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          value={formData.email}
-          onChange={handleChange}
-          className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="you@example.com"
-        />
+        <label className={labelClass}>Adresse email</label>
+        <div className="relative">
+          <Mail className="absolute left-3 top-3.5 w-4 h-4 text-white/40" />
+          <input
+            name="email" type="email" required autoComplete="email"
+            value={formData.email} onChange={handleChange}
+            className={inputClass} placeholder="vous@entreprise.com"
+          />
+        </div>
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-          Mot de passe
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          value={formData.password}
-          onChange={handleChange}
-          className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="••••••••"
-        />
+        <div className="flex items-center justify-between mb-1.5">
+          <label className={labelClass.replace('mb-1.5', '')}>Mot de passe</label>
+          <a href="#" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+            Mot de passe oublié ?
+          </a>
+        </div>
+        <div className="relative">
+          <Lock className="absolute left-3 top-3.5 w-4 h-4 text-white/40" />
+          <input
+            name="password" type={showPassword ? 'text' : 'password'} required autoComplete="current-password"
+            value={formData.password} onChange={handleChange}
+            className={`${inputClass} pr-11`} placeholder="••••••••"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-3.5 text-white/40 hover:text-white/70 transition-colors"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-md transition"
+        type="submit" disabled={loading}
+        className="w-full bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 mt-2"
       >
-        {loading ? 'Connexion...' : 'Se connecter'}
+        {loading ? (
+          <>
+            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            Connexion...
+          </>
+        ) : (
+          <>
+            Se connecter
+            <ArrowRight className="w-4 h-4" />
+          </>
+        )}
       </button>
 
-      <p className="text-center text-sm text-gray-600">
-        Pas encore de compte?{' '}
-        <a href="/signup" className="text-blue-600 hover:text-blue-700">
-          S'inscrire
+      <p className="text-center text-white/50 text-sm pt-1">
+        Pas encore de compte ?{' '}
+        <a href="/signup" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
+          S'inscrire gratuitement
         </a>
       </p>
     </form>
