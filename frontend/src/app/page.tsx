@@ -1,698 +1,698 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight, CheckCircle, BarChart3,
   Bot, Zap, Shield, Star, ChevronDown,
-  Clock, Globe, Sparkles, Lock,
+  Clock, Globe, Sparkles,
 } from 'lucide-react';
 
-// ─── Données statiques ────────────────────────────────────────────────────
+// ─── Galaxy constants (deterministic — no Math.random) ──────────────────
 
-const STATS = [
-  { value: '2 500+', label: 'Entreprises actives' },
-  { value: '98%',    label: 'Satisfaction client' },
-  { value: '< 2s',   label: 'Temps de réponse' },
-  { value: '+34%',   label: 'CA moyen à 3 mois' },
+const STARS = [
+  { x:4,  y:6,  s:1.2, d:4.2, op:.5 }, { x:11, y:19, s:1.6, d:6.1, op:.4 },
+  { x:17, y:43, s:.9,  d:3.4, op:.6 }, { x:23, y:11, s:1.1, d:5.3, op:.5 },
+  { x:29, y:67, s:1.0, d:7.1, op:.4 }, { x:37, y:28, s:1.9, d:4.0, op:.8 },
+  { x:41, y:84, s:.8,  d:5.5, op:.5 }, { x:47, y:14, s:1.3, d:6.3, op:.6 },
+  { x:54, y:54, s:1.0, d:4.1, op:.4 }, { x:59, y:3,  s:2.1, d:3.2, op:.9 },
+  { x:64, y:71, s:1.1, d:5.2, op:.5 }, { x:69, y:27, s:.9,  d:7.2, op:.4 },
+  { x:74, y:91, s:1.5, d:4.3, op:.7 }, { x:79, y:17, s:1.0, d:6.1, op:.5 },
+  { x:84, y:59, s:1.8, d:3.3, op:.8 }, { x:89, y:39, s:1.2, d:5.4, op:.6 },
+  { x:94, y:77, s:.9,  d:4.2, op:.4 }, { x:7,  y:89, s:1.0, d:6.2, op:.5 },
+  { x:21, y:77, s:1.5, d:5.1, op:.7 }, { x:34, y:49, s:.9,  d:3.3, op:.5 },
+  { x:49, y:37, s:1.3, d:4.4, op:.6 }, { x:62, y:87, s:1.0, d:7.3, op:.4 },
+  { x:76, y:9,  s:1.8, d:5.2, op:.8 }, { x:87, y:81, s:1.3, d:4.1, op:.6 },
+  { x:14, y:59, s:2.0, d:3.1, op:.7 }, { x:44, y:94, s:.9,  d:6.4, op:.5 },
+  { x:56, y:41, s:1.2, d:5.3, op:.4 }, { x:71, y:65, s:1.6, d:4.2, op:.7 },
+  { x:91, y:21, s:1.0, d:6.3, op:.5 }, { x:3,  y:34, s:1.9, d:3.2, op:.9 },
+  { x:27, y:3,  s:1.2, d:5.1, op:.6 }, { x:43, y:71, s:.9,  d:7.1, op:.4 },
+  { x:67, y:47, s:1.0, d:4.3, op:.5 }, { x:82, y:35, s:1.5, d:6.2, op:.7 },
+  { x:96, y:54, s:1.1, d:3.4, op:.4 }, { x:9,  y:14, s:.9,  d:5.2, op:.6 },
+  { x:32, y:87, s:2.1, d:4.1, op:.8 }, { x:51, y:19, s:1.3, d:7.2, op:.5 },
+  { x:78, y:94, s:1.0, d:5.3, op:.4 }, { x:90, y:11, s:1.9, d:3.1, op:.9 },
+  { x:16, y:33, s:1.1, d:4.4, op:.5 }, { x:38, y:62, s:1.7, d:6.1, op:.6 },
+  { x:60, y:78, s:.8,  d:5.4, op:.4 }, { x:73, y:22, s:1.4, d:4.2, op:.7 },
+  { x:85, y:48, s:1.0, d:3.3, op:.5 }, { x:2,  y:75, s:1.8, d:6.3, op:.6 },
+  { x:25, y:52, s:1.0, d:5.2, op:.4 }, { x:46, y:8,  s:1.5, d:4.1, op:.7 },
+  { x:68, y:36, s:.9,  d:7.1, op:.5 }, { x:93, y:63, s:1.2, d:3.4, op:.6 },
 ];
 
-const FEATURES = [
-  {
-    icon: Bot,
-    title: 'IA Contextualisée',
-    desc: 'Réponses personnalisées, gestion des objections, personnalité de vente — votre bot pense comme un vrai commercial.',
-  },
-  {
-    icon: Clock,
-    title: 'Disponible 24h/24',
-    desc: 'Répond à 2h du matin comme à 14h. Zéro client sans réponse, zéro vente manquée.',
-  },
-  {
-    icon: Zap,
-    title: 'Réponse en < 2 secondes',
-    desc: 'Alimenté par DeepSeek AI. Votre client a sa réponse avant même de poser son téléphone.',
-  },
-  {
-    icon: Shield,
-    title: 'Ultra Sécurisé',
-    desc: 'Données isolées par tenant, chiffrement de bout en bout. Votre business reste confidentiel.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Analytics Temps Réel',
-    desc: "Conversations, conversions, revenus — tout visible d'un coup d'œil depuis votre dashboard.",
-  },
-  {
-    icon: Globe,
-    title: 'Multi-Secteurs',
-    desc: "Restaurant, boutique, salon, agence — NéoBot apprend votre vocabulaire et vos produits.",
-  },
+const SHOOTING = [
+  { x:5,  y:5,  dur:3.4, delay:0    },
+  { x:20, y:3,  dur:4.1, delay:3.2  },
+  { x:50, y:1,  dur:3.7, delay:6.8  },
+  { x:70, y:6,  dur:4.6, delay:11.5 },
+  { x:38, y:14, dur:3.2, delay:15.0 },
+  { x:15, y:30, dur:4.3, delay:19.0 },
+  { x:65, y:12, dur:3.9, delay:23.5 },
+  { x:85, y:4,  dur:3.5, delay:27.0 },
+  { x:55, y:22, dur:4.8, delay:31.0 },
 ];
 
-const USE_CASES = [
-  { icon: '🍽️', title: 'Restaurants',       text: 'Menu, réservations, commandes' },
-  { icon: '🛍️', title: 'E-commerce',        text: 'Catalogue, suivi, support' },
-  { icon: '✈️', title: 'Tourisme',           text: 'Voyages, circuits, hôtels' },
-  { icon: '💇', title: 'Beauté & Bien-être', text: 'RDV, tarifs, promos' },
-  { icon: '💪', title: 'Fitness',            text: 'Séances, abonnements, coaching' },
-  { icon: '💼', title: 'Services B2B',       text: 'Devis, RDV, support' },
+const NEBULAS = [
+  { x:15, y:20, sz:500, r:'0,255,178',   op:.045 },
+  { x:80, y:65, sz:600, r:'123,97,255',  op:.035 },
+  { x:50, y:88, sz:400, r:'0,191,255',   op:.03  },
+  { x:25, y:55, sz:350, r:'0,255,178',   op:.025 },
+  { x:90, y:30, sz:300, r:'255,107,53',  op:.02  },
 ];
 
-const PLANS = [
-  {
-    key: 'essential',
-    name: 'Essential',
-    price: '20 000',
-    badge: null,
-    available: true,
-    highlighted: false,
-    desc: 'Idéal pour démarrer',
-    features: [
-      'Bot WhatsApp IA',
-      '2 000 messages / mois',
-      '1 agent IA',
-      '3 sources (texte + PDF)',
-      'Dashboard analytics 30j',
-      'Rappels RDV automatiques',
-      '20 crédits test / session',
-      'Essai 14 jours gratuit',
-    ],
-    cta: 'Commencer gratuitement',
-  },
-  {
-    key: 'business',
-    name: 'Business',
-    price: '50 000',
-    badge: 'Bientôt',
-    available: false,
-    highlighted: true,
-    desc: 'Pour les entreprises en croissance',
-    features: [
-      'Tout Essential inclus',
-      '10 000 messages / mois',
-      '3 agents IA',
-      '10 sources (PDF, URL, YouTube)',
-      'Analytics avancées 30j',
-      'Suivi commandes + promos ciblées',
-      'API access',
-      'Support prioritaire',
-    ],
-    cta: 'Me notifier',
-  },
-  {
-    key: 'enterprise',
-    name: 'Enterprise',
-    price: 'Sur devis',
-    badge: 'Bientôt',
-    available: false,
-    highlighted: false,
-    desc: 'Pour les grandes opérations',
-    features: [
-      'Tout Business inclus',
-      'Messages & agents illimités',
-      'Sources illimitées',
-      'Analytics 90j',
-      'Toutes les automatisations',
-      'Onboarding dédié',
-      'SLA garanti',
-      'Formation équipe',
-    ],
-    cta: "Contacter l'équipe",
-  },
-];
+// ─── Logo SVG NéoBot ─────────────────────────────────────────────────────
 
-const TESTIMONIALS = [
-  {
-    name: 'Rodrigue K.',
-    role: 'Restaurant Chez Mama, Yaoundé',
-    text: 'En 1 semaine, notre bot répond à 200+ messages / jour. Nos commandes ont augmenté de 40%.',
-    rating: 5,
-  },
-  {
-    name: 'Aïcha N.',
-    role: 'Boutique Fashion, Douala',
-    text: 'Les clients commandent directement via WhatsApp. NéoBot envoie les confirmations tout seul.',
-    rating: 5,
-  },
-  {
-    name: 'Patrick D.',
-    role: 'Agence de voyage, Abidjan',
-    text: 'Service client 24h/24 sans recruter. ROI immédiat dès le premier mois.',
-    rating: 5,
-  },
-];
-
-const FAQS = [
-  {
-    q: 'Comment fonctionne NéoBot avec WhatsApp ?',
-    a: "Connectez votre numéro WhatsApp en scannant un QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro habituel — le bot répond automatiquement en votre nom.",
-  },
-  {
-    q: 'Puis-je personnaliser les réponses du bot ?',
-    a: "Absolument. Vous configurez sa personnalité, son style de vente, vos prix, horaires et FAQ. Le bot utilise exactement vos informations, jamais rien d'inventé.",
-  },
-  {
-    q: "Que se passe-t-il après les 14 jours d'essai ?",
-    a: "Vous choisissez un plan payant. Si vous ne faites rien, le bot s'arrête mais vous n'êtes jamais facturé automatiquement. Aucun engagement, aucune surprise.",
-  },
-  {
-    q: 'Mes données sont-elles sécurisées ?',
-    a: "Chaque client dispose d'un espace totalement isolé. Vos données ne sont jamais partagées avec d'autres entreprises. Chiffrement JWT, pratiques RGPD.",
-  },
-  {
-    q: 'La limite de messages est-elle stricte ?',
-    a: 'Non. En cas de dépassement, le service continue et vous êtes simplement notifié. Aucune coupure brutale.',
-  },
-];
-
-// Positions fixes pour éviter les différences SSR/Client (pas de Math.random)
-const PARTICLE_POSITIONS = [
-  { x: 15, y: 22, s: 1.5, d: 6, delay: 0 },
-  { x: 85, y: 8,  s: 2,   d: 8, delay: 0.4 },
-  { x: 42, y: 65, s: 1,   d: 5, delay: 0.8 },
-  { x: 73, y: 40, s: 1.5, d: 7, delay: 1.2 },
-  { x: 28, y: 80, s: 1,   d: 9, delay: 1.6 },
-  { x: 60, y: 18, s: 2,   d: 6, delay: 2.0 },
-  { x: 90, y: 72, s: 1,   d: 8, delay: 2.4 },
-  { x: 5,  y: 55, s: 1.5, d: 5, delay: 2.8 },
-  { x: 50, y: 92, s: 1,   d: 7, delay: 3.2 },
-  { x: 35, y: 35, s: 2,   d: 6, delay: 3.6 },
-];
-
-function Particles() {
+function NeoLogo({ size = 40 }: { size?: number }) {
+  const s = size / 100;
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {PARTICLE_POSITIONS.map((p, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full bg-neon animate-pulse"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            width: `${p.s}px`,
-            height: `${p.s}px`,
-            opacity: 0.35,
-            animationDuration: `${p.d}s`,
-            animationDelay: `${p.delay}s`,
-          }}
-        />
+    <svg
+      width={size * 0.85}
+      height={size}
+      viewBox="0 0 85 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Top of head */}
+      <path
+        d="M42 4 C26 4 13 16 12 32 L10 62 C10 74 20 82 32 84 L32 92 L52 92 L52 84 C64 82 74 74 74 62 L74 30 C74 16 58 4 42 4 Z"
+        stroke="#00FFB2" strokeWidth="4" fill="none" strokeLinejoin="round"
+      />
+      {/* Connector node on left side */}
+      <circle cx="12" cy="42" r="6.5" stroke="#00FFB2" strokeWidth="3" fill="none" />
+      <line x1="18.5" y1="42" x2="24" y2="42" stroke="#00FFB2" strokeWidth="2.5" />
+      {/* Inner circuit / brain loop */}
+      <path
+        d="M32 32 C38 26 56 28 60 40 C64 52 54 62 42 62 C30 62 24 50 28 40"
+        stroke="#00FFB2" strokeWidth="2.8" fill="none"
+      />
+      {/* Horizontal divider (face) */}
+      <path
+        d="M24 72 L60 72"
+        stroke="#00FFB2" strokeWidth="2.5" strokeLinecap="round"
+      />
+      {/* Two vertical bars on base (chin/neck) */}
+      <line x1="34" y1="72" x2="34" y2="84" stroke="#00FFB2" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="50" y1="72" x2="50" y2="84" stroke="#00FFB2" strokeWidth="2.5" strokeLinecap="round" />
+      {/* Eye dot */}
+      <circle cx="46" cy="44" r="3.5" fill="#00FFB2" />
+    </svg>
+  );
+}
+
+// ─── Background galaxy ───────────────────────────────────────────────────
+
+function GalaxyBG() {
+  return (
+    <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
+      {/* Nebula glows */}
+      {NEBULAS.map((n, i) => (
+        <div key={i} style={{
+          position:'absolute', left:`${n.x}%`, top:`${n.y}%`,
+          width:n.sz, height:n.sz,
+          transform:'translate(-50%,-50%)', borderRadius:'50%',
+          background:`radial-gradient(circle, rgba(${n.r},${n.op}) 0%, transparent 70%)`,
+        }}/>
+      ))}
+      {/* Stars */}
+      {STARS.map((s, i) => (
+        <div key={i} className="neo-star" style={{
+          position:'absolute', left:`${s.x}%`, top:`${s.y}%`,
+          width:s.s, height:s.s, borderRadius:'50%',
+          background:'#fff', opacity:s.op,
+          animationDuration:`${s.d}s`,
+          animationDelay:`${(i * 0.27) % 5}s`,
+        }}/>
+      ))}
+      {/* Shooting stars */}
+      {SHOOTING.map((ss, i) => (
+        <div key={i} className="neo-shoot" style={{
+          position:'absolute', left:`${ss.x}%`, top:`${ss.y}%`,
+          animationDuration:`${ss.dur}s`,
+          animationDelay:`${ss.delay}s`,
+          animationIterationCount:'infinite',
+          animationTimingFunction:'linear',
+        }}>
+          <div style={{
+            width:200, height:1.5,
+            background:'linear-gradient(90deg, transparent 0%, rgba(255,255,255,.85) 40%, rgba(0,255,178,.7) 70%, transparent 100%)',
+            borderRadius:2, transform:'rotate(38deg)',
+          }}/>
+        </div>
+      ))}
+      {/* Dust particles */}
+      {STARS.filter((_,i)=>i%4===0).map((s, i) => (
+        <div key={i} className="neo-dust" style={{
+          position:'absolute', left:`${(s.x+s.y)%100}%`, top:`${(s.y*1.3)%100}%`,
+          width:.8, height:.8, borderRadius:'50%',
+          background:'rgba(0,255,178,.6)',
+          animationDuration:`${s.d+2}s`,
+          animationDelay:`${i*0.4}s`,
+        }}/>
       ))}
     </div>
   );
 }
 
-function FaqItem({ q, a }: { q: string; a: string }) {
+// ─── Static data ─────────────────────────────────────────────────────────
+
+const STATS = [
+  { v:'2 500+', l:'Entreprises actives' },
+  { v:'98%',    l:'Satisfaction client' },
+  { v:'< 2s',   l:'Temps de réponse'   },
+  { v:'+34%',   l:'CA moyen à 3 mois'  },
+];
+
+const FEATURES = [
+  { I:Bot,       t:'IA Contextualisée',      d:'Réponses personnalisées, gestion des objections — votre bot pense comme un vrai commercial.' },
+  { I:Clock,     t:'Disponible 24h/24',       d:'Répond à 2h du matin comme à 14h. Zéro client sans réponse, zéro vente manquée.' },
+  { I:Zap,       t:'Réponse en < 2 secondes', d:'Alimenté par DeepSeek AI. Votre client a sa réponse avant même de poser son téléphone.' },
+  { I:Shield,    t:'Ultra Sécurisé',          d:'Données isolées par tenant, chiffrement JWT. Votre business reste entièrement confidentiel.' },
+  { I:BarChart3, t:'Analytics Temps Réel',    d:"Conversations, conversions — tout visible en un coup d'œil depuis votre dashboard." },
+  { I:Globe,     t:'Multi-Secteurs',           d:"Restaurants, boutiques, agences — NéoBot apprend votre vocabulaire et vos produits." },
+];
+
+const USE_CASES = [
+  { ic:'🍽️', t:'Restaurants',       d:'Menu, réservations, commandes' },
+  { ic:'🛍️', t:'E-commerce',        d:'Catalogue, suivi, support' },
+  { ic:'✈️', t:'Tourisme',           d:'Voyages, circuits, hôtels' },
+  { ic:'💇', t:'Beauté & Bien-être', d:'RDV, tarifs, promos' },
+  { ic:'💪', t:'Fitness',            d:'Séances, abonnements, coaching' },
+  { ic:'💼', t:'Services B2B',       d:'Devis, RDV, support client' },
+];
+
+const TESTIMONIALS = [
+  { n:'Rodrigue K.', r:'Restaurant Chez Mama, Yaoundé', q:'En 1 semaine, notre bot répond à 200+ messages/jour. Nos commandes ont augmenté de 40%.',  s:5 },
+  { n:'Aïcha N.',    r:'Boutique Fashion, Douala',      q:'Les clients commandent directement via WhatsApp. NéoBot envoie les confirmations tout seul.', s:5 },
+  { n:'Patrick D.',  r:'Agence de voyage, Abidjan',     q:'Service client 24h/24 sans recruter. ROI immédiat dès le premier mois.',                     s:5 },
+];
+
+const FAQS = [
+  { q:'Comment fonctionne NéoBot avec WhatsApp ?',   a:"Scannez un QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro — le bot répond en votre nom." },
+  { q:'Puis-je personnaliser les réponses du bot ?', a:"Absolument. Vous configurez sa personnalité, vos prix, horaires et FAQ. Il utilise exactement vos informations, jamais rien d'inventé." },
+  { q:'Mes données sont-elles sécurisées ?',         a:"Chaque client dispose d'un espace isolé. Vos données ne sont jamais partagées. Chiffrement JWT, pratiques RGPD." },
+  { q:'La limite de messages est-elle stricte ?',    a:'Non. En cas de dépassement, vous êtes notifié — le service continue sans coupure brutale.' },
+];
+
+const CHAT = [
+  { f:'user', t:"Bonsoir, comment ça marche ? 🤔" },
+  { f:'bot',  t:"Bonsoir ! 👋 Connectez votre WhatsApp en 30s, configurez votre bot, et il répond 24h/24 en votre nom. Vous voulez démarrer ?" },
+  { f:'user', t:"Oui ! C'est quoi le délai ?" },
+  { f:'bot',  t:"⚡ 30 secondes — QR code scanné, bot actif immédiatement. Je vous envoie le lien ?" },
+];
+
+// ─── Sub-components ──────────────────────────────────────────────────────
+
+function FaqItem({ q, a }: { q:string; a:string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div
-      className={`border rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
-        open ? 'border-neon/25 bg-neon/5' : 'border-white/7 bg-white/[0.02]'
-      }`}
-      onClick={() => setOpen(!open)}
-    >
-      <div className="flex items-center justify-between px-6 py-5 gap-4">
-        <span className="text-white font-semibold text-sm font-syne">{q}</span>
-        <ChevronDown
-          className={`flex-shrink-0 text-neon transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
-          style={{ width: 18, height: 18 }}
-        />
+    <div onClick={()=>setOpen(!open)} style={{
+      border:`1px solid ${open?'rgba(0,255,178,.22)':'rgba(255,255,255,.07)'}`,
+      background:open?'rgba(0,255,178,.035)':'rgba(255,255,255,.01)',
+      borderRadius:14, overflow:'hidden', cursor:'pointer',
+      transition:'border-color .2s', marginBottom:10,
+    }}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'17px 22px',gap:16}}>
+        <span style={{color:'#fff',fontWeight:600,fontSize:14,fontFamily:'"Syne",sans-serif'}}>{q}</span>
+        <ChevronDown style={{color:'#00FFB2',width:15,height:15,flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .2s'}}/>
       </div>
-      {open && (
-        <div className="px-6 pb-5 text-sm leading-relaxed text-white/55">{a}</div>
-      )}
+      {open && <div style={{padding:'0 22px 17px',fontSize:13,color:'rgba(255,255,255,.52)',lineHeight:1.7}}>{a}</div>}
     </div>
   );
 }
 
-const CHAT_MESSAGES = [
-  { from: 'user', text: "Bonsoir, c'est combien le Plan Essential ? 🤔" },
-  { from: 'bot',  text: "Bonsoir ! 👋 Le Plan Essential c'est 20 000 FCFA/mois avec 2 000 messages, 1 agent IA et analytics inclus. 14 jours gratuits, sans carte. Vous voulez démarrer ?" },
-  { from: 'user', text: "Oui ! C'est quoi le délai d'installation ?" },
-  { from: 'bot',  text: "⚡ 30 secondes chrono — vous scannez un QR code, votre bot est actif immédiatement. Je vous envoie le lien ?" },
-];
-
-function ChatMockup() {
-  const [visible, setVisible] = useState(0);
-
-  useEffect(() => {
-    if (visible >= CHAT_MESSAGES.length) return;
-    const t = setTimeout(() => setVisible(v => v + 1), 900);
-    return () => clearTimeout(t);
-  }, [visible]);
+function ChatDemo() {
+  const [n, setN] = useState(0);
+  const [typing, setTyping] = useState(false);
+  useEffect(()=>{
+    if(n>=CHAT.length) return;
+    const wait = n===0 ? 600 : 1100;
+    const t = setTimeout(()=>{
+      if(CHAT[n].f==='bot') { setTyping(true); setTimeout(()=>{ setTyping(false); setN(v=>v+1); },700); }
+      else setN(v=>v+1);
+    }, wait);
+    return ()=>clearTimeout(t);
+  },[n]);
 
   return (
-    <div className="rounded-3xl overflow-hidden shadow-2xl border border-neon/15 bg-[#0B0B18]">
-      <div className="px-4 py-3 flex items-center gap-3 bg-neon/10 border-b border-neon/15">
-        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-neon/20">
-          <Bot className="text-neon" style={{ width: 20, height: 20 }} />
+    <div style={{borderRadius:22,overflow:'hidden',border:'1px solid rgba(0,255,178,.14)',background:'#06060F',boxShadow:'0 0 80px rgba(0,255,178,.07)'}}>
+      {/* Header */}
+      <div style={{padding:'13px 18px',display:'flex',alignItems:'center',gap:12,background:'rgba(0,255,178,.07)',borderBottom:'1px solid rgba(0,255,178,.1)'}}>
+        <div style={{width:38,height:38,borderRadius:'50%',background:'rgba(0,255,178,.12)',border:'1px solid rgba(0,255,178,.25)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <NeoLogo size={22}/>
         </div>
         <div>
-          <div className="text-white font-semibold text-sm font-syne">NéoBot Commercial</div>
-          <div className="text-xs flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-neon animate-pulse inline-block" />
-            <span className="text-neon">En ligne</span>
+          <div style={{color:'#fff',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>NéoBot</div>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:'#00FFB2',display:'inline-block',boxShadow:'0 0 5px #00FFB2'}}/>
+            <span style={{color:'#00FFB2',fontSize:11}}>En ligne · DeepSeek AI</span>
           </div>
         </div>
       </div>
-
-      <div className="p-4 space-y-3 min-h-64">
-        {CHAT_MESSAGES.slice(0, visible).map((msg, i) => (
-          <div key={i} className={`flex ${msg.from === 'bot' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`px-4 py-2.5 max-w-xs text-sm leading-relaxed ${
-                msg.from === 'bot'
-                  ? 'bg-neon/15 text-neon border border-neon/25 rounded-[16px_16px_4px_16px]'
-                  : 'bg-white/8 text-white/85 border border-white/10 rounded-[16px_16px_16px_4px]'
-              }`}
-            >
-              {msg.text}
-            </div>
+      {/* Messages */}
+      <div style={{padding:'18px 16px',minHeight:250,display:'flex',flexDirection:'column',gap:10}}>
+        {CHAT.slice(0,n).map((m,i)=>(
+          <div key={i} style={{display:'flex',justifyContent:m.f==='bot'?'flex-end':'flex-start'}}>
+            <div style={{
+              padding:'10px 14px',maxWidth:280,fontSize:13,lineHeight:1.55,
+              background:m.f==='bot'?'rgba(0,255,178,.1)':'rgba(255,255,255,.06)',
+              color:m.f==='bot'?'#00FFB2':'rgba(255,255,255,.85)',
+              border:`1px solid ${m.f==='bot'?'rgba(0,255,178,.2)':'rgba(255,255,255,.09)'}`,
+              borderRadius:m.f==='bot'?'16px 16px 4px 16px':'16px 16px 16px 4px',
+            }}>{m.t}</div>
           </div>
         ))}
-        {visible < CHAT_MESSAGES.length && visible > 0 && (
-          <div className="flex justify-end">
-            <div className="px-4 py-2.5 bg-neon/10 border border-neon/20 rounded-2xl">
-              <span className="flex gap-1">
-                {[0, 1, 2].map(j => (
-                  <span
-                    key={j}
-                    className="w-1.5 h-1.5 rounded-full bg-neon animate-bounce"
-                    style={{ animationDelay: `${j * 0.15}s` }}
-                  />
-                ))}
-              </span>
+        {typing && (
+          <div style={{display:'flex',justifyContent:'flex-end'}}>
+            <div style={{padding:'10px 16px',background:'rgba(0,255,178,.07)',border:'1px solid rgba(0,255,178,.14)',borderRadius:16,display:'flex',gap:5}}>
+              {[0,1,2].map(j=>(
+                <span key={j} className="neo-bounce" style={{width:6,height:6,borderRadius:'50%',background:'#00FFB2',display:'inline-block',animationDelay:`${j*.15}s`}}/>
+              ))}
             </div>
           </div>
         )}
-        <div className="text-center text-xs py-1 text-white/20">Réponse générée en 1.2s</div>
+        <div style={{textAlign:'center',fontSize:11,color:'rgba(255,255,255,.15)',marginTop:4}}>Réponse générée en 1.1s</div>
       </div>
     </div>
   );
 }
 
-// ─── Page principale ──────────────────────────────────────────────────────
+// ─── Shared style helpers ────────────────────────────────────────────────
+
+const PILL = {
+  display:'inline-block' as const,
+  fontSize:11, fontWeight:700, letterSpacing:2, textTransform:'uppercase' as const,
+  fontFamily:'"Syne",sans-serif', color:'#00FFB2',
+  padding:'6px 16px', borderRadius:30,
+  background:'rgba(0,255,178,.06)', border:'1px solid rgba(0,255,178,.2)',
+  marginBottom:18,
+};
+const CARD_BASE = {
+  borderRadius:20, padding:'26px 22px',
+  background:'rgba(255,255,255,.015)',
+  border:'1px solid rgba(255,255,255,.07)',
+  transition:'border-color .3s, transform .3s',
+};
+const hover = (el:HTMLElement, on:boolean)=>{
+  el.style.borderColor = on?'rgba(0,255,178,.28)':'rgba(255,255,255,.07)';
+  el.style.transform = on?'translateY(-4px)':'none';
+};
+
+// ─── Main page ───────────────────────────────────────────────────────────
+
 export default function LandingPage() {
   return (
-    <div className="min-h-screen text-white overflow-x-hidden bg-dark font-dm">
+    <>
+      {/* ── Global CSS animations ─────────────────────────────────────── */}
+      <style>{`
+        @keyframes twinkle{0%,100%{opacity:.15;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
+        @keyframes float-dust{0%{transform:translateY(0);opacity:0}20%{opacity:.5}80%{opacity:.15}100%{transform:translateY(-70px);opacity:0}}
+        @keyframes shoot{0%{transform:translate(0,0);opacity:0}5%{opacity:1}80%{opacity:.7}100%{transform:translate(650px,650px);opacity:0}}
+        @keyframes bounce3{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
+        @keyframes glow-pulse{0%,100%{box-shadow:0 0 18px rgba(0,255,178,.12)}50%{box-shadow:0 0 50px rgba(0,255,178,.35),0 0 90px rgba(0,255,178,.1)}}
+        @keyframes float-logo{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @keyframes fade-in-up{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+        .neo-star{animation:twinkle linear infinite}
+        .neo-shoot{animation:shoot linear}
+        .neo-dust{animation:float-dust ease-in-out infinite}
+        .neo-bounce{animation:bounce3 1.2s ease infinite}
+        .neo-glow{animation:glow-pulse 3s ease-in-out infinite}
+        .neo-float{animation:float-logo 5s ease-in-out infinite}
+        .neo-fade{animation:fade-in-up .7s ease both}
+        .neo-link{text-decoration:none}
+        .neo-nav-link{transition:color .2s}
+        .neo-nav-link:hover{color:#fff!important}
+      `}</style>
 
-      {/* Grille de fond fixe */}
-      <div className="fixed inset-0 pointer-events-none bg-grid-neon bg-grid opacity-100" />
+      <div style={{minHeight:'100vh',color:'#E0E0FF',overflow:'hidden',background:'#05050F',fontFamily:'"DM Sans",sans-serif',position:'relative'}}>
 
-      {/* ── NAVBAR ─────────────────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-neon/10 backdrop-blur-xl bg-dark/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-neon/15 border border-neon/35 transition-all group-hover:bg-neon/25">
-              <Bot className="text-neon" style={{ width: 18, height: 18 }} />
-            </div>
-            <span className="font-bold text-lg tracking-tight text-white font-syne">NéoBot</span>
+        <GalaxyBG/>
+
+        {/* ═══════════════════════════════════════════════════════ NAV ══ */}
+        <nav style={{
+          position:'fixed',top:0,left:0,right:0,zIndex:50,
+          borderBottom:'1px solid rgba(0,255,178,.08)',
+          backdropFilter:'blur(22px)',
+          background:'rgba(5,5,15,.78)',
+          padding:'13px 40px',
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+        }}>
+          <Link href="/" className="neo-link" style={{display:'flex',alignItems:'center',gap:10}}>
+            <NeoLogo size={32}/>
+            <span style={{fontFamily:'"Syne",sans-serif',fontWeight:900,fontSize:19,color:'#fff',letterSpacing:3,textTransform:'uppercase'}}>
+              NEOBOT
+            </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8">
-            {([
-              ['#features', 'Fonctionnalités'],
-              ['#pricing', 'Tarifs'],
-              ['#use-cases', 'Secteurs'],
-              ['#faq', 'FAQ'],
-            ] as [string, string][]).map(([href, label]) => (
-              <a key={href} href={href} className="text-sm text-white/50 hover:text-white transition-colors">
-                {label}
+          <div style={{display:'flex',alignItems:'center',gap:36}}>
+            {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
+              <a key={h} href={h} className="neo-link neo-nav-link" style={{fontSize:13,color:'rgba(255,255,255,.42)'}}>
+                {l}
               </a>
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="hidden sm:block text-sm font-medium text-white/60 hover:text-white transition-colors">
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <Link href="/login" className="neo-link" style={{fontSize:13,color:'rgba(255,255,255,.45)'}}>
               Connexion
             </Link>
-            <Link
-              href="/signup"
-              className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-neon text-dark font-syne shadow-neon-sm hover:shadow-neon transition-all hover:-translate-y-0.5"
-            >
-              Essai gratuit
-              <ArrowRight style={{ width: 14, height: 14 }} />
+            <Link href="/signup" className="neo-link neo-glow" style={{
+              display:'flex',alignItems:'center',gap:7,
+              fontSize:13,fontWeight:800,fontFamily:'"Syne",sans-serif',
+              padding:'9px 22px',borderRadius:10,
+              background:'#00FFB2',color:'#05050F', letterSpacing:.4,
+            }}>
+              Essai gratuit <ArrowRight style={{width:13,height:13}}/>
             </Link>
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="relative pt-36 pb-28 overflow-hidden">
-        <Particles />
-        <div className="absolute left-1/2 top-0 -translate-x-1/2 w-[800px] h-[400px] pointer-events-none bg-gradient-radial from-neon/8 to-transparent" />
+        {/* ═══════════════════════════════════════════════════════ HERO ═ */}
+        <section style={{
+          position:'relative',zIndex:1,
+          minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
+          paddingTop:80,
+        }}>
+          {/* Radial hero glow */}
+          <div style={{position:'absolute',inset:0,pointerEvents:'none',
+            background:'radial-gradient(ellipse 90% 65% at 50% 38%, rgba(0,255,178,.055) 0%, rgba(123,97,255,.02) 50%, transparent 75%)',
+          }}/>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 text-center">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-full mb-8 border bg-neon/8 border-neon/25 text-neon font-syne">
-            <Sparkles style={{ width: 13, height: 13 }} />
-            Propulsé par DeepSeek AI · Conçu pour l&apos;Afrique
-          </div>
-
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.05] mb-6 tracking-tight font-syne">
-            Transformez WhatsApp en{' '}
-            <br className="hidden sm:block" />
-            <span className="text-neon">machine de vente</span>
-          </h1>
-
-          <p className="text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed mb-10 text-white/55">
-            Un assistant IA qui répond à vos clients 24h/24 sur WhatsApp —
-            avec vos prix, votre personnalité, votre secteur.
-            <br />
-            14 jours gratuits, aucune carte requise.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-            <Link
-              href="/signup"
-              className="flex items-center justify-center gap-2 font-semibold px-8 py-4 rounded-2xl text-base bg-neon text-dark font-syne shadow-neon hover:shadow-neon-lg transition-all duration-200 hover:-translate-y-0.5"
-            >
-              Démarrer gratuitement
-              <ArrowRight style={{ width: 16, height: 16 }} />
-            </Link>
-            <a
-              href="#demo"
-              className="font-medium px-8 py-4 rounded-2xl text-base text-white/75 hover:text-white border border-white/10 hover:border-white/20 backdrop-blur-sm transition-all hover:-translate-y-0.5"
-            >
-              Voir une démo
-            </a>
-          </div>
-
-          <p className="text-xs text-white/25">
-            ✓ Sans carte bancaire &nbsp;·&nbsp; ✓ Installation 30 secondes &nbsp;·&nbsp; ✓ Annulation à tout moment
-          </p>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto mt-16">
-            {STATS.map(({ value, label }) => (
-              <div key={label} className="rounded-2xl p-4 backdrop-blur-sm border bg-neon/5 border-neon/15">
-                <div className="text-2xl font-bold mb-1 text-neon font-syne">{value}</div>
-                <div className="text-xs text-white/45">{label}</div>
+          <div style={{textAlign:'center',maxWidth:820,padding:'0 24px',position:'relative',zIndex:1}}>
+            {/* Logo centrepiece */}
+            <div className="neo-float neo-fade" style={{display:'flex',justifyContent:'center',marginBottom:32,animationDelay:'.1s'}}>
+              <div className="neo-glow" style={{
+                padding:'22px 24px',borderRadius:'50%',
+                background:'rgba(0,255,178,.04)',
+                border:'1px solid rgba(0,255,178,.16)',
+                display:'inline-flex',alignItems:'center',justifyContent:'center',
+              }}>
+                <NeoLogo size={110}/>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FEATURES ───────────────────────────────────────────────────── */}
-      <section id="features" className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <div className="inline-block text-xs font-semibold px-4 py-2 rounded-full mb-4 border bg-neon/8 border-neon/20 text-neon font-syne uppercase tracking-widest">
-              Fonctionnalités
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Pourquoi NéoBot ?</h2>
-            <p className="text-lg max-w-xl mx-auto text-white/45">
-              Tout ce dont vous avez besoin pour vendre plus, dormir mieux et ravir vos clients.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map(({ icon: Icon, title, desc }) => (
-              <div
-                key={title}
-                className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 border bg-neon/[0.03] border-white/7 hover:border-neon/30 hover:bg-neon/[0.06] group"
-              >
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 border bg-neon/12 border-neon/25">
-                  <Icon className="text-neon" style={{ width: 18, height: 18 }} />
-                </div>
-                <h3 className="font-semibold text-lg mb-2 text-white font-syne">{title}</h3>
-                <p className="text-sm leading-relaxed text-white/50">{desc}</p>
+            {/* Badge */}
+            <div className="neo-fade" style={{animationDelay:'.2s'}}>
+              <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'6px 18px',borderRadius:30,background:'rgba(0,255,178,.07)',border:'1px solid rgba(0,255,178,.2)',marginBottom:24}}>
+                <Sparkles style={{width:12,height:12,color:'#00FFB2'}}/>
+                <span style={{fontSize:11,color:'#00FFB2',fontWeight:700,letterSpacing:2,textTransform:'uppercase',fontFamily:'"Syne",sans-serif'}}>
+                  Propulsé par DeepSeek AI · Conçu pour l&apos;Afrique
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            </div>
 
-      {/* ── DEMO ───────────────────────────────────────────────────────── */}
-      <section id="demo" className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none bg-gradient-radial from-neon/5 to-transparent" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-block text-xs font-semibold px-4 py-2 rounded-full mb-6 border bg-neon/8 border-neon/20 text-neon font-syne uppercase tracking-widest">
-                Démo en direct
-              </div>
-              <h2 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight font-syne">
-                Votre bot, votre{' '}
-                <span className="text-neon">style de vente</span>
-              </h2>
-              <p className="text-lg leading-relaxed mb-8 text-white/55">
-                NéoBot s&apos;adapte à votre secteur. Donnez-lui vos informations,
-                et il parle exactement comme vous le feriez — en mieux.
+            {/* Headline */}
+            <div className="neo-fade" style={{animationDelay:'.3s'}}>
+              <h1 style={{
+                fontFamily:'"Syne",sans-serif',
+                fontSize:'clamp(38px,7.5vw,82px)',
+                fontWeight:900,lineHeight:1.04,letterSpacing:-1,
+                color:'#fff',marginBottom:20,
+              }}>
+                L&apos;IA qui vend<br/>
+                <span style={{color:'#00FFB2',textShadow:'0 0 40px rgba(0,255,178,.35)'}}>
+                  pendant que vous dormez
+                </span>
+              </h1>
+            </div>
+
+            {/* Sub */}
+            <div className="neo-fade" style={{animationDelay:'.4s'}}>
+              <p style={{fontSize:18,color:'rgba(255,255,255,.48)',maxWidth:560,margin:'0 auto 36px',lineHeight:1.75}}>
+                Votre assistant WhatsApp IA répond, relance et convertit vos clients
+                — 24h/24, avec votre voix, vos prix, votre secteur.
               </p>
-              <div className="space-y-4">
+            </div>
+
+            {/* CTAs */}
+            <div className="neo-fade" style={{animationDelay:'.5s',display:'flex',gap:14,justifyContent:'center',flexWrap:'wrap',marginBottom:18}}>
+              <Link href="/signup" className="neo-link neo-glow" style={{
+                display:'inline-flex',alignItems:'center',gap:9,
+                padding:'15px 34px',borderRadius:14,
+                background:'#00FFB2',color:'#05050F',
+                fontWeight:900,fontSize:15,fontFamily:'"Syne",sans-serif',
+                letterSpacing:.4,
+              }}>
+                Démarrer gratuitement <ArrowRight style={{width:16,height:16}}/>
+              </Link>
+              <a href="#demo" className="neo-link" style={{
+                display:'inline-flex',alignItems:'center',
+                padding:'15px 28px',borderRadius:14,
+                border:'1px solid rgba(255,255,255,.11)',
+                color:'rgba(255,255,255,.62)',fontSize:15,
+                backdropFilter:'blur(8px)',
+              }}>
+                Voir la démo
+              </a>
+            </div>
+            <p className="neo-fade" style={{fontSize:12,color:'rgba(255,255,255,.2)',animationDelay:'.6s'}}>
+              ✓ 14 jours gratuits &nbsp;·&nbsp; ✓ Sans carte bancaire &nbsp;·&nbsp; ✓ Installation 30 secondes
+            </p>
+
+            {/* Stats */}
+            <div className="neo-fade" style={{
+              display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,
+              maxWidth:700,margin:'52px auto 0',animationDelay:'.7s',
+            }}>
+              {STATS.map(({v,l})=>(
+                <div key={l} style={{
+                  borderRadius:14,padding:'17px 10px',
+                  background:'rgba(0,255,178,.04)',
+                  border:'1px solid rgba(0,255,178,.11)',
+                  backdropFilter:'blur(10px)',
+                }}>
+                  <div style={{fontSize:23,fontWeight:800,color:'#00FFB2',fontFamily:'"Syne",sans-serif',marginBottom:5}}>{v}</div>
+                  <div style={{fontSize:11,color:'rgba(255,255,255,.38)'}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Scroll chevron */}
+          <div style={{position:'absolute',bottom:28,left:'50%',transform:'translateX(-50%)',opacity:.25}}>
+            <ChevronDown className="neo-bounce" style={{width:20,height:20,color:'#fff'}}/>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════════════ FEATURES ══ */}
+        <section id="features" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+          <div style={{maxWidth:1100,margin:'0 auto'}}>
+            <div style={{textAlign:'center',marginBottom:66}}>
+              <div style={PILL}>Fonctionnalités</div>
+              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#fff',marginBottom:12}}>
+                Pourquoi NéoBot ?
+              </h2>
+              <p style={{fontSize:16,color:'rgba(255,255,255,.38)',maxWidth:500,margin:'0 auto'}}>
+                Tout ce dont vous avez besoin pour vendre plus, dormir mieux et ravir vos clients.
+              </p>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
+              {FEATURES.map(({I,t,d})=>(
+                <div key={t} style={{...CARD_BASE}}
+                  onMouseEnter={e=>hover(e.currentTarget as HTMLElement,true)}
+                  onMouseLeave={e=>hover(e.currentTarget as HTMLElement,false)}>
+                  <div style={{width:42,height:42,borderRadius:12,background:'rgba(0,255,178,.09)',border:'1px solid rgba(0,255,178,.2)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:18}}>
+                    <I style={{width:18,height:18,color:'#00FFB2'}}/>
+                  </div>
+                  <h3 style={{fontFamily:'"Syne",sans-serif',fontWeight:700,fontSize:17,color:'#fff',marginBottom:8}}>{t}</h3>
+                  <p style={{fontSize:13,color:'rgba(255,255,255,.44)',lineHeight:1.65,margin:0}}>{d}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════ DEMO ═ */}
+        <section id="demo" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+          <div style={{
+            position:'absolute',inset:0,pointerEvents:'none',
+            background:'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(0,255,178,.04) 0%, transparent 70%)',
+          }}/>
+          <div style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'1fr 1fr',gap:64,alignItems:'center',position:'relative',zIndex:1}}>
+            <div>
+              <div style={PILL}>Démo en direct</div>
+              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:42,fontWeight:900,color:'#fff',marginBottom:20,lineHeight:1.1}}>
+                Votre bot,<br/>
+                <span style={{color:'#00FFB2'}}>votre style de vente</span>
+              </h2>
+              <p style={{fontSize:16,color:'rgba(255,255,255,.48)',marginBottom:28,lineHeight:1.72}}>
+                NéoBot s&apos;adapte à votre secteur. Donnez-lui vos informations et il parle
+                exactement comme vous le feriez — en mieux.
+              </p>
+              <div style={{display:'flex',flexDirection:'column',gap:14}}>
                 {[
                   'Répond avec vos prix et menus exacts',
                   'Gère les objections et relance automatiquement',
                   "Escalade vers vous si le client est urgent",
                   'Français, anglais, dialectes locaux',
-                ].map(text => (
-                  <div key={text} className="flex items-center gap-3">
-                    <CheckCircle className="text-neon flex-shrink-0" style={{ width: 18, height: 18 }} />
-                    <span className="text-sm text-white/75">{text}</span>
+                ].map(t=>(
+                  <div key={t} style={{display:'flex',alignItems:'center',gap:12}}>
+                    <CheckCircle style={{width:17,height:17,color:'#00FFB2',flexShrink:0}}/>
+                    <span style={{fontSize:14,color:'rgba(255,255,255,.68)'}}>{t}</span>
                   </div>
                 ))}
               </div>
             </div>
-            <ChatMockup />
+            <ChatDemo/>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── USE CASES ──────────────────────────────────────────────────── */}
-      <section id="use-cases" className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Pour tous les secteurs</h2>
-            <p className="text-lg text-white/45">
-              NéoBot s&apos;installe en moins de 5 minutes dans votre activité.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {USE_CASES.map(({ icon, title, text }) => (
-              <div
-                key={title}
-                className="rounded-2xl p-5 text-center cursor-default border bg-neon/[0.03] border-white/7 hover:border-neon/30 transition-all duration-200 hover:-translate-y-1"
-              >
-                <div className="text-3xl mb-3">{icon}</div>
-                <div className="text-white font-semibold text-sm mb-1 font-syne">{title}</div>
-                <div className="text-xs leading-relaxed text-white/38">{text}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRICING ────────────────────────────────────────────────────── */}
-      <section id="pricing" className="py-24 relative">
-        <div className="absolute inset-0 pointer-events-none bg-gradient-radial from-neon/4 to-transparent" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <div className="inline-block text-xs font-semibold px-4 py-2 rounded-full mb-4 border bg-neon/8 border-neon/20 text-neon font-syne uppercase tracking-widest">
-              Tarifs
-            </div>
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Pricing transparent</h2>
-            <p className="text-lg max-w-xl mx-auto text-white/45">
-              14 jours gratuits sur le plan Essential. Aucune carte requise.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.key}
-                className={`relative rounded-3xl border p-8 transition-all duration-300 ${
-                  plan.highlighted
-                    ? 'bg-neon/[0.06] border-neon/40 shadow-neon'
-                    : 'bg-neon/[0.02] border-white/9'
-                }`}
-              >
-                {plan.badge && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap flex items-center gap-1.5 bg-white/10 text-white/45 border border-white/15">
-                    <Lock style={{ width: 10, height: 10 }} />
-                    {plan.badge}
-                  </div>
-                )}
-                {!plan.badge && plan.highlighted && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap bg-neon text-dark font-syne">
-                    LE PLUS POPULAIRE
-                  </div>
-                )}
-
-                <div className="mb-6">
-                  <h3 className={`text-xl font-bold mb-1 font-syne ${plan.available ? 'text-white' : 'text-white/40'}`}>
-                    {plan.name}
-                  </h3>
-                  <p className="text-sm text-white/35">{plan.desc}</p>
-                </div>
-
-                <div className="mb-6">
-                  <div className="flex items-end gap-1 mb-1">
-                    <span className={`text-4xl font-bold font-syne ${plan.available ? 'text-neon' : 'text-white/35'}`}>
-                      {plan.price}
-                    </span>
-                    {plan.available && (
-                      <span className="mb-1 text-sm text-white/35">FCFA/mois</span>
-                    )}
-                  </div>
-                </div>
-
-                {plan.available ? (
-                  <Link
-                    href="/signup"
-                    className={`w-full py-3 rounded-xl font-semibold text-sm text-center block mb-6 font-syne transition-all ${
-                      plan.highlighted
-                        ? 'bg-neon text-dark shadow-neon-sm hover:shadow-neon'
-                        : 'bg-transparent text-neon border border-neon/45 hover:border-neon/70'
-                    }`}
-                  >
-                    {plan.cta}
-                  </Link>
-                ) : (
-                  <div className="w-full py-3 rounded-xl font-semibold text-sm text-center block mb-6 font-syne bg-white/5 text-white/25 border border-white/8 cursor-not-allowed">
-                    {plan.cta}
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  {plan.features.map(f => (
-                    <div key={f} className="flex items-center gap-2.5">
-                      <CheckCircle
-                        className={plan.available ? 'text-neon' : 'text-white/20'}
-                        style={{ width: 15, height: 15, flexShrink: 0 }}
-                      />
-                      <span className={`text-sm ${plan.available ? 'text-white/65' : 'text-white/25'}`}>{f}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-10 text-center text-sm text-white/25">
-            Dépassement sur Essential : service maintenu avec notification. Annulation à tout moment.
-          </div>
-        </div>
-      </section>
-
-      {/* ── TESTIMONIALS ───────────────────────────────────────────────── */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Ce qu&apos;ils en disent</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map(({ name, role, text, rating }) => (
-              <div
-                key={name}
-                className="rounded-2xl p-6 border bg-neon/[0.03] border-white/8 hover:border-neon/25 hover:-translate-y-1 transition-all duration-300"
-              >
-                <div className="flex gap-0.5 mb-4">
-                  {Array.from({ length: rating }).map((_, i) => (
-                    <Star key={i} className="fill-yellow-400 text-yellow-400" style={{ width: 14, height: 14 }} />
-                  ))}
-                </div>
-                <p className="text-sm leading-relaxed mb-5 text-white/65">&ldquo;{text}&rdquo;</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold bg-neon/20 text-neon font-syne">
-                    {name[0]}
-                  </div>
-                  <div>
-                    <div className="text-white font-semibold text-sm font-syne">{name}</div>
-                    <div className="text-xs text-white/35">{role}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ────────────────────────────────────────────────────────── */}
-      <section id="faq" className="py-24">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Questions fréquentes</h2>
-          </div>
-          <div className="space-y-4">
-            {FAQS.map(({ q, a }) => (
-              <FaqItem key={q} q={q} a={a} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA FINAL ──────────────────────────────────────────────────── */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none bg-gradient-radial from-neon/8 to-transparent" />
-        <Particles />
-        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-8 bg-neon/15 border border-neon/35">
-            <Bot className="text-neon" style={{ width: 32, height: 32 }} />
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-bold mb-6 font-syne">
-            Prêt à transformer<br />votre WhatsApp ?
-          </h2>
-          <p className="text-lg mb-10 text-white/55">
-            Rejoignez des milliers d&apos;entreprises africaines qui font déjà confiance à NéoBot.
-            <br />14 jours gratuits, sans carte bancaire.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 font-semibold px-10 py-4 rounded-2xl text-lg bg-neon text-dark font-syne shadow-neon-lg hover:shadow-neon transition-all duration-200 hover:-translate-y-0.5"
-          >
-            Démarrer gratuitement
-            <ArrowRight style={{ width: 20, height: 20 }} />
-          </Link>
-          <p className="text-sm mt-5 text-white/25">
-            ✓ Sans carte &nbsp;·&nbsp; ✓ 14 jours gratuits &nbsp;·&nbsp; ✓ Annulation immédiate
-          </p>
-        </div>
-      </section>
-
-      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
-      <footer className="border-t border-neon/10 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12">
-            <div className="col-span-2 sm:col-span-1">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-neon/12 border border-neon/30">
-                  <Bot className="text-neon" style={{ width: 16, height: 16 }} />
-                </div>
-                <span className="font-bold text-lg text-white font-syne">NéoBot</span>
-              </div>
-              <p className="text-sm leading-relaxed text-white/35">
-                L&apos;assistant IA WhatsApp conçu pour les entreprises africaines.
+        {/* ══════════════════════════════════════════════════ USE CASES ═ */}
+        <section id="use-cases" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+          <div style={{maxWidth:1100,margin:'0 auto'}}>
+            <div style={{textAlign:'center',marginBottom:58}}>
+              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#fff',marginBottom:12}}>
+                Pour tous les secteurs
+              </h2>
+              <p style={{fontSize:16,color:'rgba(255,255,255,.38)'}}>
+                NéoBot s&apos;installe en moins de 5 minutes dans votre activité.
               </p>
             </div>
-
-            {([
-              ['Produit', ['Fonctionnalités', 'Tarifs', 'Roadmap', 'API']],
-              ['Support', ['Documentation', 'Contact', 'WhatsApp: +237 6XX XXX XXX']],
-              ['Entreprise', ["À propos", 'Blog', 'Mentions légales', 'Confidentialité']],
-            ] as [string, string[]][]).map(([title, links]) => (
-              <div key={title}>
-                <h4 className="font-semibold text-sm mb-4 text-white font-syne">{title}</h4>
-                <ul className="space-y-2.5">
-                  {links.map(link => (
-                    <li key={link}>
-                      <a href="#" className="text-sm text-white/35 hover:text-white transition-colors">
-                        {link}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:14}}>
+              {USE_CASES.map(({ic,t,d})=>(
+                <div key={t} style={{
+                  borderRadius:18,padding:'22px 14px',textAlign:'center',
+                  background:'rgba(255,255,255,.02)',
+                  border:'1px solid rgba(255,255,255,.07)',
+                  transition:'border-color .2s, transform .2s',
+                }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor='rgba(0,255,178,.28)';(e.currentTarget as HTMLElement).style.transform='translateY(-4px)'}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,.07)';(e.currentTarget as HTMLElement).style.transform='none'}}>
+                  <div style={{fontSize:30,marginBottom:12}}>{ic}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:'#fff',fontFamily:'"Syne",sans-serif',marginBottom:6}}>{t}</div>
+                  <div style={{fontSize:11,color:'rgba(255,255,255,.34)',lineHeight:1.55}}>{d}</div>
+                </div>
+              ))}
+            </div>
           </div>
+        </section>
 
-          <div className="border-t border-white/6 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-white/25">© 2026 NéoBot. Tous droits réservés.</p>
-            <p className="text-sm text-white/20">
-              Conçu pour les PME africaines · Propulsé par DeepSeek AI
+        {/* ═══════════════════════════════════════════════ TESTIMONIALS ═ */}
+        <section style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+          <div style={{maxWidth:1100,margin:'0 auto'}}>
+            <div style={{textAlign:'center',marginBottom:58}}>
+              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#fff'}}>
+                Ce qu&apos;ils en disent
+              </h2>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
+              {TESTIMONIALS.map(({n,r,q,s})=>(
+                <div key={n} style={{...CARD_BASE}}
+                  onMouseEnter={e=>hover(e.currentTarget as HTMLElement,true)}
+                  onMouseLeave={e=>hover(e.currentTarget as HTMLElement,false)}>
+                  <div style={{display:'flex',gap:3,marginBottom:16}}>
+                    {Array.from({length:s}).map((_,i)=>(
+                      <Star key={i} style={{width:13,height:13,fill:'#FBBF24',color:'#FBBF24'}}/>
+                    ))}
+                  </div>
+                  <p style={{fontSize:14,color:'rgba(255,255,255,.58)',lineHeight:1.72,marginBottom:20}}>&ldquo;{q}&rdquo;</p>
+                  <div style={{display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:36,height:36,borderRadius:'50%',background:'rgba(0,255,178,.12)',border:'1px solid rgba(0,255,178,.28)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800,color:'#00FFB2',fontFamily:'"Syne",sans-serif'}}>
+                      {n[0]}
+                    </div>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#fff',fontFamily:'"Syne",sans-serif'}}>{n}</div>
+                      <div style={{fontSize:12,color:'rgba(255,255,255,.32)'}}>{r}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════ FAQ ══ */}
+        <section id="faq" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+          <div style={{maxWidth:680,margin:'0 auto'}}>
+            <div style={{textAlign:'center',marginBottom:52}}>
+              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#fff'}}>
+                Questions fréquentes
+              </h2>
+            </div>
+            {FAQS.map(({q,a})=><FaqItem key={q} q={q} a={a}/>)}
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════════════ CTA FINAL ═ */}
+        <section style={{position:'relative',zIndex:1,padding:'130px 24px'}}>
+          <div style={{position:'absolute',inset:0,pointerEvents:'none',
+            background:'radial-gradient(ellipse 55% 55% at 50% 50%, rgba(0,255,178,.07) 0%, transparent 70%)',
+          }}/>
+          <div style={{maxWidth:640,margin:'0 auto',textAlign:'center',position:'relative',zIndex:1}}>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:28}}>
+              <div className="neo-glow neo-float" style={{
+                padding:'22px 24px',borderRadius:'50%',
+                background:'rgba(0,255,178,.05)',
+                border:'1px solid rgba(0,255,178,.14)',
+                display:'inline-flex',alignItems:'center',justifyContent:'center',
+              }}>
+                <NeoLogo size={60}/>
+              </div>
+            </div>
+            <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:46,fontWeight:900,color:'#fff',marginBottom:18,lineHeight:1.08}}>
+              Prêt à transformer<br/>votre WhatsApp ?
+            </h2>
+            <p style={{fontSize:17,color:'rgba(255,255,255,.48)',marginBottom:36,lineHeight:1.75}}>
+              Rejoignez des milliers d&apos;entreprises africaines<br/>qui font déjà confiance à NéoBot.
+            </p>
+            <Link href="/signup" className="neo-link neo-glow" style={{
+              display:'inline-flex',alignItems:'center',gap:10,
+              padding:'17px 42px',borderRadius:14,
+              background:'#00FFB2',color:'#05050F',
+              fontWeight:900,fontSize:16,fontFamily:'"Syne",sans-serif',
+              letterSpacing:.4,
+            }}>
+              Démarrer gratuitement <ArrowRight style={{width:18,height:18}}/>
+            </Link>
+            <p style={{fontSize:12,color:'rgba(255,255,255,.18)',marginTop:18}}>
+              ✓ Sans carte &nbsp;·&nbsp; ✓ 14 jours gratuits &nbsp;·&nbsp; ✓ Annulation immédiate
             </p>
           </div>
-        </div>
-      </footer>
-    </div>
+        </section>
+
+        {/* ══════════════════════════════════════════════════════ FOOTER = */}
+        <footer style={{borderTop:'1px solid rgba(0,255,178,.08)',padding:'60px 24px',position:'relative',zIndex:1}}>
+          <div style={{maxWidth:1100,margin:'0 auto'}}>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr',gap:44,marginBottom:48}}>
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+                  <NeoLogo size={28}/>
+                  <span style={{fontFamily:'"Syne",sans-serif',fontWeight:900,fontSize:17,color:'#fff',letterSpacing:3,textTransform:'uppercase'}}>
+                    NEOBOT
+                  </span>
+                </div>
+                <p style={{fontSize:13,color:'rgba(255,255,255,.29)',lineHeight:1.7,margin:0}}>
+                  L&apos;assistant IA WhatsApp conçu pour les entreprises africaines.
+                </p>
+                <p style={{fontSize:12,color:'rgba(0,255,178,.4)',marginTop:10,fontStyle:'italic'}}>
+                  L&apos;AI à votre service
+                </p>
+              </div>
+              {([
+                ['Produit',['Fonctionnalités','Roadmap','API']],
+                ['Support',['Documentation','Contact','WhatsApp']],
+                ['Entreprise',['À propos','CGU','Confidentialité']],
+              ] as [string,string[]][]).map(([title,links])=>(
+                <div key={title}>
+                  <h4 style={{fontFamily:'"Syne",sans-serif',fontWeight:700,fontSize:13,color:'#fff',marginBottom:16}}>{title}</h4>
+                  <ul style={{listStyle:'none',margin:0,padding:0,display:'flex',flexDirection:'column',gap:10}}>
+                    {links.map(l=>(
+                      <li key={l}>
+                        <a href="#" className="neo-link" style={{fontSize:13,color:'rgba(255,255,255,.3)',transition:'color .2s'}}
+                          onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='rgba(0,255,178,.8)'}
+                          onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='rgba(255,255,255,.3)'}>
+                          {l}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div style={{borderTop:'1px solid rgba(255,255,255,.05)',paddingTop:24,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <p style={{fontSize:13,color:'rgba(255,255,255,.2)',margin:0}}>© 2026 NéoBot. Tous droits réservés.</p>
+              <p style={{fontSize:13,color:'rgba(255,255,255,.14)',margin:0}}>Propulsé par DeepSeek AI · Conçu pour les PME africaines</p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </>
   );
 }
