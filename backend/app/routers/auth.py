@@ -100,7 +100,7 @@ async def register(
         email=request.email,
         phone=_derive_tenant_phone(request.email),
         business_type=request.business_type or "autre",
-        plan=PlanType.BASIQUE,
+        plan=PlanType.BASIC,
         messages_used=0,
         messages_limit=2000,  # BASIQUE = 2000 messages
     )

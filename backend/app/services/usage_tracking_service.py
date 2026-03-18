@@ -89,7 +89,7 @@ class UsageTrackingService:
         tracking = UsageTrackingService.get_or_create_monthly_tracking(tenant_id, db)
         
         # Récupérer la limite du plan
-        plan_config = PLAN_LIMITS.get(tenant.plan, PLAN_LIMITS[PlanType.BASIQUE])
+        plan_config = PLAN_LIMITS.get(tenant.plan, PLAN_LIMITS[PlanType.BASIC])
         plan_limit = plan_config["whatsapp_messages"]
         
         # Calculer le résumé

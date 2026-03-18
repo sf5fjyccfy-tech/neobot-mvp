@@ -32,6 +32,7 @@ from .routers.whatsapp_qr import router as whatsapp_qr_router
 from .routers.contacts import router as contacts_router
 from .routers.tenant_settings import router as tenant_settings_router
 from .routers.human_detection import router as human_detection_router
+from .routers.agents import router as agents_router
 from .services.business_kb_service import BusinessKBService
 from .http_client import close_http_client
 
@@ -138,6 +139,7 @@ app.include_router(tenant_settings_router)
 app.include_router(human_detection_router)
 app.include_router(tenant_business_router)
 app.include_router(business_router)
+app.include_router(agents_router)
 
 # ========== CORS MIDDLEWARE ==========
 app.add_middleware(

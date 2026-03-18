@@ -77,6 +77,8 @@ class TenantSession {
   constructor(tenantId) {
     this.tenantId = tenantId;
     this.socket = null;
+    this.messageStore = new Map(); // cache pour résoudre les retries Signal (fix "en attente")
+    this.processedMsgIds = new Set(); // déduplication des messages entrants
     this.state = 'idle';
     this.connected = false;
     this.initializing = false;
@@ -167,7 +169,7 @@ function reconnectDelayMs(retryCount) {
 }
 
 function shouldResetAuthFromCode(code) {
-  if (code === 401 || code === 403) {
+  if (code === 401 || code === 403 || code === 405) {
     return true;
   }
 
@@ -274,6 +276,7 @@ async function forwardIncomingMessage(tenantId, msg) {
   const payloadV1 = {
     tenant_id: tenantId,
     from_: phone,
+    reply_jid: rawFrom,   // JID exact pour répondre (peut être @lid, @s.whatsapp.net, etc.)
     text,
     senderName: msg?.pushName || 'Client',
     messageKey: msg?.key || {},
@@ -457,6 +460,9 @@ async function connectTenant(tenantId, options = {}) {
     const { state: authState, saveCreds } = await useMultiFileAuthState(authDir);
     const version = await getBaileysVersion();
 
+    // Cache compteur de retry par message (évite boucles infinies)
+    const retryCache = new Map();
+
     const socket = makeWASocket({
       version,
       auth: {
@@ -475,6 +481,18 @@ async function connectTenant(tenantId, options = {}) {
       shouldSyncHistoryMessage: () => false,
       generateHighQualityLinkPreview: false,
       logger: bailLogger,
+      // Fix "message en attente" : fournir getMessage et msgRetryCounterCache
+      msgRetryCounterCache: {
+        get: (id) => retryCache.get(id) || 0,
+        set: (id, val) => retryCache.set(id, val),
+        del: (id) => retryCache.delete(id),
+        flushAll: () => retryCache.clear(),
+      },
+      getMessage: async (key) => {
+        const stored = session.messageStore?.get(key.id);
+        if (stored) return stored;
+        return { conversation: '' };
+      },
     });
 
     session.socket = socket;
@@ -494,11 +512,31 @@ async function connectTenant(tenantId, options = {}) {
     });
 
     socket.ev.on('messages.upsert', async (event) => {
-      const msg = event?.messages?.[0];
-      if (!msg?.message || msg?.key?.fromMe) {
-        return;
+      // Ignorer les messages historiques chargés au reconnect (type='append')
+      if (event?.type !== 'notify') return;
+
+      for (const msg of event?.messages || []) {
+        if (!msg?.message || msg?.key?.fromMe) {
+          continue;
+        }
+
+        // Déduplication : ignorer si déjà traité (même messageId)
+        const msgId = msg?.key?.id;
+        if (msgId) {
+          if (session.processedMsgIds.has(msgId)) {
+            logger.warn('Duplicate message ignored', { tenantId: session.tenantId, msgId });
+            continue;
+          }
+          session.processedMsgIds.add(msgId);
+          // Garder max 500 IDs en mémoire
+          if (session.processedMsgIds.size > 500) {
+            const first = session.processedMsgIds.values().next().value;
+            session.processedMsgIds.delete(first);
+          }
+        }
+
+        await forwardIncomingMessage(session.tenantId, msg);
       }
-      await forwardIncomingMessage(session.tenantId, msg);
     });
 
     logger.info('Socket initialized', { tenantId, reason, version: version.join('.') });
@@ -558,6 +596,18 @@ async function sendMessageForTenant(tenantId, to, message) {
 
   const jid = normalizeJid(to);
   const result = await session.socket.sendMessage(jid, { text: message });
+
+  // Stocker le message envoyé pour permettre les retries Signal (fix "en attente")
+  if (result?.key?.id && result?.message) {
+    if (!session.messageStore) session.messageStore = new Map();
+    session.messageStore.set(result.key.id, result.message);
+    // Garder max 200 messages en cache
+    if (session.messageStore.size > 200) {
+      const firstKey = session.messageStore.keys().next().value;
+      session.messageStore.delete(firstKey);
+    }
+  }
+
   return result;
 }
 
@@ -762,13 +812,24 @@ app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
   }
 
   if (!to || !message) {
+    logger.warn('send-message: missing fields', { tenantId, to: !!to, message: !!message });
     return res.status(400).json({ error: 'Missing required fields: to, message' });
   }
 
+  const session = getTenantSession(tenantId);
+  if (!session.connected || !session.socket) {
+    logger.error('send-message: WhatsApp not connected', { tenantId, state: session.state });
+    return res.status(503).json({ error: 'WhatsApp not connected for this tenant' });
+  }
+
+  logger.info('Sending outgoing message', { tenantId, to, preview: message.slice(0, 80) });
+
   try {
     const result = await sendMessageForTenant(tenantId, to, message);
+    logger.info('Outgoing message sent', { tenantId, to, msgId: result?.key?.id || null });
     res.json({ status: 'sent', tenantId, id: result?.key?.id || null });
   } catch (error) {
+    logger.error('Failed to send message', { tenantId, to, error: error.message });
     res.status(503).json({ error: error.message });
   }
 });

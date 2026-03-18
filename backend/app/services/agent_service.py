@@ -10,7 +10,7 @@ from typing import Optional, Dict, List
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from app.models import AgentTemplate, AgentType, KnowledgeSource, PromptVariable
+from app.models import AgentTemplate, AgentType, KnowledgeSource, PromptVariable, OutboundTracking, PLAN_LIMITS, PlanType
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,11 @@ Ton rôle :
 4. Envoyer un résumé de confirmation : date, heure, adresse, préparation éventuelle
 5. Gérer les modifications et annulations avec souplesse
 
+📣 RAPPELS AUTOMATIQUES (RDV confirmé uniquement) :
+- 24h avant le RDV → "Rappel : votre RDV [service] est prévu demain à [heure] chez {{nom_entreprise}}. Adresse : {{adresse}}. Confirmer ? OUI / Annuler"
+- Maximum 2 messages sortants par contact — jamais de relance non sollicitée
+- Si le client répond "STOP" ou "Annuler" → enregistrer la préférence, cesser tout contact proactif
+
 À chaque RDV confirmé, inclure : "Un rappel vous sera envoyé 24h avant. Besoin d'autre chose ?"
 
 Style : chaleureux, organisé, rassurant. Jamais de pression.""",
@@ -61,6 +66,11 @@ Protocole de traitement :
 3. SOLUTION : Propose une solution claire et actionnable en moins de 3 étapes
 4. ESCALADE : Si le problème dépasse tes capacités → "Je transmets votre dossier à notre équipe sous {{delai_resolution}}"
 5. CLÔTURE : Toujours demander "Votre problème est-il résolu ? Y a-t-il autre chose ?"
+
+📣 EXPIRATION ABONNEMENT (services d'abonnement uniquement) :
+- Avant expiration → "Votre abonnement {{nom_entreprise}} expire le [date]. Renouvelez maintenant pour [avantage]. Lien : {{lien_renouvellement}}"
+- Maximum 2 messages sortants par contact sur ce sujet
+- Jamais envoyé à un contact sans historique d'échange
 
 Principes absolus :
 - Ne jamais laisser un client sans réponse ni délai
@@ -88,7 +98,7 @@ Format des réponses :
 
 Style : informatif, précis, accessible. Évite le jargon technique sauf si le contexte l'exige.""",
 
-    AgentType.VENTE: """Tu es {{nom_agent}}, le conseiller commercial de {{nom_entreprise}}.
+    AgentType.VENTE: """Tu es {{nom_agent}}, le closeur commercial de {{nom_entreprise}}.
 
 Offre principale : {{produit_phare}}
 Catalogue complet : {{catalogue_produits}}
@@ -104,14 +114,19 @@ Processus de vente (AIDA) :
 4. ACTION : Propose un passage à l'acte simple et sans friction ("Voulez-vous que je vous envoie le lien de commande ?")
 
 Gestion des objections courantes :
-- "C'est trop cher" → Ramener à la valeur : "Pour le prix d'un [comparaison], vous obtenez [bénéfice clé]…"
-- "Je vais réfléchir" → Créer l'urgence douce : "Sachez que {{offre_speciale}} est valable jusqu'au [date]"
-- "Je ne suis pas sûr" → Rassurer : "Nous offrons {{garantie}}, donc aucun risque pour vous"
+- "C'est trop cher" → "Pour le prix d'un [comparaison], vous obtenez [bénéfice clé]…"
+- "Je vais réfléchir" → "Sachez que {{offre_speciale}} est valable jusqu'au [date]"
+- "Je ne suis pas sûr" → "Nous offrons {{garantie}}, donc aucun risque pour vous"
+
+📣 MESSAGES SORTANTS (contacts avec historique uniquement) :
+- Panier abandonné → "Vous avez laissé {{produit_phare}} dans votre panier. {{offre_speciale}} — finalisez : {{lien_commande}}"
+- Promo ciblée → "Offre réservée à nos clients : {{description_promo}}. Valable jusqu'au [date] : {{lien_commande}}"
+- Maximum 2 messages sortants par contact — uniquement vers des contacts ayant déjà échangé
+- Jamais de cold outreach (numéro sans historique) — interdit et bloqué système
 
 Règles :
 - UNE seule question par message pour ne pas submerger
 - Jamais de pression agressive — si pas prêt, proposer un suivi dans 48h
-- Toujours mentionner {{delai_demarrage}} pour lever les freins liés au "plus tard"
 
 Style : confiant, chaleureux, solution-focused. L'objectif est un client satisfait, pas une vente forcée.""",
 
@@ -141,27 +156,6 @@ Protocole de transmission :
 - Prospect indécis → Proposer un contenu éducatif et relancer dans 7 jours
 
 Style : curieux, professionnel, non-intrusif. Conversationnel, pas un interrogatoire.""",
-
-    AgentType.NOTIFICATION: """Tu es {{nom_agent}}, l'assistant notifications de {{nom_entreprise}}.
-
-Fréquence maximale : {{frequence_max}} message(s) proactif(s) par client
-Avantage fidélité / renouvellement : {{avantage_renouvellement}}
-Description promo en cours : {{description_promo}}
-Lien d'action : {{lien_commande}}
-
-Types de notifications gérés :
-1. RAPPEL RDV → "Rappel : votre RDV [service] est prévu le [date] à [heure] chez {{nom_entreprise}}. Adresse : [adresse]. Confirmer ? (OUI / Annuler)"
-2. SUIVI COMMANDE → "Votre commande #[ref] est [statut]. Livraison estimée : [date]. Des questions ?"
-3. EXPIRATION / RENOUVELLEMENT → "Votre abonnement expire le [date]. {{avantage_renouvellement}}. Renouveler : {{lien_commande}}"
-4. PROMO CIBLÉE → "{{description_promo}} — Valable jusqu'au [date]. Commander : {{lien_commande}}"
-
-Règles strictes :
-- TOUJOURS inclure une option de réponse claire (OUI/NON, lien d'action)
-- TOUJOURS mentionner la date/heure précise dans les rappels
-- Ne JAMAIS envoyer plus de {{frequence_max}} message(s) proactif(s) par client sans réponse de sa part
-- Respecter les préférences de notification : si le client répond "STOP", enregistrer et ne plus contacter
-
-Style : clair, bref, actionnable. Chaque message doit avoir un but unique et une action attendue.""",
 }
 
 
@@ -485,8 +479,137 @@ class AgentService:
                     "faq": "Agent FAQ",
                     "vente": "Agent Vente",
                     "qualification": "Agent Qualification",
-                    "notification": "Agent Notification",
                 }.get(agent_type.value, agent_type.value),
             }
             for agent_type, prompt in AGENT_SYSTEM_PROMPTS.items()
         }
+
+
+class OutboundService:
+    """Gestion des messages sortants proactifs avec enforcement max 2/contact."""
+
+    MAX_OUTBOUND_PER_CONTACT = 2
+
+    @staticmethod
+    def check_can_send(
+        tenant_id: str,
+        phone_number: str,
+        trigger_type: str,
+        db,
+        plan_type: str = None,
+    ) -> tuple[bool, str]:
+        """
+        Vérifie si un message sortant peut être envoyé.
+        Retourne (can_send: bool, reason: str).
+        """
+        from app.models import Conversation, Message
+
+        # 1. Vérifier que le contact a un historique (anti cold outreach)
+        has_history = (
+            db.query(Message)
+            .join(Conversation)
+            .filter(
+                Conversation.tenant_id == tenant_id,
+                Conversation.phone_number == phone_number,
+            )
+            .first()
+        )
+        if not has_history:
+            return False, "Aucun historique — cold outreach interdit"
+
+        # 2. Vérifier les limites plan
+        if plan_type:
+            limits = PLAN_LIMITS.get(plan_type, {})
+            allowed_triggers = limits.get("outbound_triggers", [])
+            if allowed_triggers != ["all"] and trigger_type not in allowed_triggers:
+                return False, f"Trigger '{trigger_type}' non autorisé sur ce plan"
+
+        # 3. Vérifier le compteur OutboundTracking
+        record = (
+            db.query(OutboundTracking)
+            .filter(
+                OutboundTracking.tenant_id == tenant_id,
+                OutboundTracking.phone_number == phone_number,
+            )
+            .first()
+        )
+
+        if record:
+            if record.opted_out:
+                return False, "Contact a demandé STOP"
+            if record.total_outbound_count >= OutboundService.MAX_OUTBOUND_PER_CONTACT:
+                return False, f"Limite {OutboundService.MAX_OUTBOUND_PER_CONTACT} messages sortants atteinte"
+
+        return True, "OK"
+
+    @staticmethod
+    def record_outbound(
+        tenant_id: str,
+        phone_number: str,
+        trigger_type: str,
+        db,
+    ) -> None:
+        """Incrémente les compteurs après envoi d'un message sortant."""
+        from datetime import datetime
+
+        record = (
+            db.query(OutboundTracking)
+            .filter(
+                OutboundTracking.tenant_id == tenant_id,
+                OutboundTracking.phone_number == phone_number,
+            )
+            .first()
+        )
+
+        if not record:
+            record = OutboundTracking(
+                tenant_id=tenant_id,
+                phone_number=phone_number,
+                total_outbound_count=0,
+                rdv_outbound_count=0,
+                order_outbound_count=0,
+                subscription_outbound_count=0,
+                promo_outbound_count=0,
+            )
+            db.add(record)
+
+        record.total_outbound_count += 1
+        record.last_outbound_at = datetime.utcnow()
+        record.last_trigger_type = trigger_type
+
+        if trigger_type == "rdv_reminder":
+            record.rdv_outbound_count = (record.rdv_outbound_count or 0) + 1
+        elif trigger_type == "order_followup":
+            record.order_outbound_count = (record.order_outbound_count or 0) + 1
+        elif trigger_type == "subscription_expiry":
+            record.subscription_outbound_count = (record.subscription_outbound_count or 0) + 1
+        elif trigger_type == "promo":
+            record.promo_outbound_count = (record.promo_outbound_count or 0) + 1
+
+        db.commit()
+
+    @staticmethod
+    def handle_stop(tenant_id: str, phone_number: str, db) -> None:
+        """Enregistre le opt-out d'un contact (réponse STOP)."""
+        from datetime import datetime
+
+        record = (
+            db.query(OutboundTracking)
+            .filter(
+                OutboundTracking.tenant_id == tenant_id,
+                OutboundTracking.phone_number == phone_number,
+            )
+            .first()
+        )
+
+        if not record:
+            record = OutboundTracking(
+                tenant_id=tenant_id,
+                phone_number=phone_number,
+                total_outbound_count=0,
+            )
+            db.add(record)
+
+        record.opted_out = True
+        record.opted_out_at = datetime.utcnow()
+        db.commit()

@@ -242,7 +242,6 @@ async def generate_prompt_with_ai(
         "faq": "assistant FAQ",
         "vente": "conseiller commercial",
         "qualification": "agent de qualification de prospects",
-        "notification": "agent de notifications et rappels",
     }.get(str(agent.agent_type).lower(), str(agent.agent_type))
 
     meta_prompt = f"""Tu es un expert en prompt engineering pour chatbots WhatsApp professionnels.

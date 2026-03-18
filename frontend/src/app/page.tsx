@@ -1,250 +1,441 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowRight, CheckCircle, MessageSquare, BarChart3,
-  Bot, Zap, Shield, Users, Star, ChevronDown,
-  TrendingUp, Clock, Globe, Sparkles
+  ArrowRight, CheckCircle, BarChart3,
+  Bot, Zap, Shield, Star, ChevronDown,
+  Clock, Globe, Sparkles, Lock,
 } from 'lucide-react';
+
+// ─── Données statiques ────────────────────────────────────────────────────
+
+const STATS = [
+  { value: '2 500+', label: 'Entreprises actives' },
+  { value: '98%',    label: 'Satisfaction client' },
+  { value: '< 2s',   label: 'Temps de réponse' },
+  { value: '+34%',   label: 'CA moyen à 3 mois' },
+];
 
 const FEATURES = [
   {
     icon: Bot,
-    title: 'IA Intelligente',
-    description: 'Réponses contextuelles, personnalité de vente, gestion des objections — votre bot pense comme un vrai commercial.',
-    color: 'from-emerald-500/20 to-green-500/10',
-    accent: 'text-emerald-400',
+    title: 'IA Contextualisée',
+    desc: 'Réponses personnalisées, gestion des objections, personnalité de vente — votre bot pense comme un vrai commercial.',
   },
   {
     icon: Clock,
     title: 'Disponible 24h/24',
-    description: 'Votre bot répond à 2h du matin comme à 14h. Zéro client sans réponse, zéro vente manquée.',
-    color: 'from-blue-500/20 to-cyan-500/10',
-    accent: 'text-blue-400',
+    desc: 'Répond à 2h du matin comme à 14h. Zéro client sans réponse, zéro vente manquée.',
   },
   {
     icon: Zap,
     title: 'Réponse en < 2 secondes',
-    description: 'Alimenté par DeepSeek AI. Vos clients obtiennent une réponse avant même de poser leur téléphone.',
-    color: 'from-yellow-500/20 to-orange-500/10',
-    accent: 'text-yellow-400',
+    desc: 'Alimenté par DeepSeek AI. Votre client a sa réponse avant même de poser son téléphone.',
   },
   {
     icon: Shield,
     title: 'Ultra Sécurisé',
-    description: 'Données isolées par client, chiffrement de bout en bout. Votre business reste confidentiel.',
-    color: 'from-purple-500/20 to-violet-500/10',
-    accent: 'text-purple-400',
+    desc: 'Données isolées par tenant, chiffrement de bout en bout. Votre business reste confidentiel.',
   },
   {
     icon: BarChart3,
     title: 'Analytics Temps Réel',
-    description: "Conversations, taux de conversion, revenus — tout en un coup d'œil depuis votre dashboard.",
-    color: 'from-pink-500/20 to-rose-500/10',
-    accent: 'text-pink-400',
+    desc: "Conversations, conversions, revenus — tout visible d'un coup d'œil depuis votre dashboard.",
   },
   {
     icon: Globe,
     title: 'Multi-Secteurs',
-    description: "Restaurant, boutique, salon, agence — NéoBot s'adapte à votre vocabulaire et vos produits.",
-    color: 'from-teal-500/20 to-cyan-500/10',
-    accent: 'text-teal-400',
-  },
-];
-
-const PLANS = [
-  {
-    name: 'Starter',
-    price: '20 000',
-    messages: '500 msg/mois',
-    description: 'Parfait pour démarrer',
-    features: ['Bot WhatsApp IA', '500 messages/mois', 'Dashboard analytics', 'Support email', 'Essai 7j gratuit'],
-    cta: 'Commencer gratuitement',
-    highlighted: false,
-  },
-  {
-    name: 'Pro',
-    price: '50 000',
-    messages: 'Messages illimités',
-    description: 'Pour les entreprises en croissance',
-    features: ['Tout Starter inclus', 'Messages illimités', 'Analytics avancées', 'API access', 'Agents IA personnalisés', 'Support prioritaire'],
-    cta: 'Essayer Pro',
-    highlighted: true,
-  },
-  {
-    name: 'Enterprise',
-    price: '100 000',
-    messages: 'Tout illimité',
-    description: 'Pour les grandes opérations',
-    features: ['Tout Pro inclus', 'Support 24/7 dédié', 'Onboarding personnalisé', 'Intégrations custom', 'SLA garanti', 'Formation équipe'],
-    cta: "Contacter l'équipe",
-    highlighted: false,
+    desc: "Restaurant, boutique, salon, agence — NéoBot apprend votre vocabulaire et vos produits.",
   },
 ];
 
 const USE_CASES = [
-  { icon: '🍽️', title: 'Restaurants', text: 'Menu interactif, réservations, commandes' },
-  { icon: '🛍️', title: 'E-commerce', text: 'Catalogue, suivi commandes, support' },
-  { icon: '✈️', title: 'Tourisme', text: 'Voyages, circuits, réservations hôtels' },
-  { icon: '💇', title: 'Beauté & Bien-être', text: 'Rendez-vous, tarifs, promotions' },
-  { icon: '💪', title: 'Fitness', text: 'Séances, abonnements, coaching' },
-  { icon: '💼', title: 'Services B2B', text: 'Devis, RDV, support clients' },
+  { icon: '🍽️', title: 'Restaurants',       text: 'Menu, réservations, commandes' },
+  { icon: '🛍️', title: 'E-commerce',        text: 'Catalogue, suivi, support' },
+  { icon: '✈️', title: 'Tourisme',           text: 'Voyages, circuits, hôtels' },
+  { icon: '💇', title: 'Beauté & Bien-être', text: 'RDV, tarifs, promos' },
+  { icon: '💪', title: 'Fitness',            text: 'Séances, abonnements, coaching' },
+  { icon: '💼', title: 'Services B2B',       text: 'Devis, RDV, support' },
+];
+
+const PLANS = [
+  {
+    key: 'essential',
+    name: 'Essential',
+    price: '20 000',
+    badge: null,
+    available: true,
+    highlighted: false,
+    desc: 'Idéal pour démarrer',
+    features: [
+      'Bot WhatsApp IA',
+      '2 000 messages / mois',
+      '1 agent IA',
+      '3 sources (texte + PDF)',
+      'Dashboard analytics 30j',
+      'Rappels RDV automatiques',
+      '20 crédits test / session',
+      'Essai 14 jours gratuit',
+    ],
+    cta: 'Commencer gratuitement',
+  },
+  {
+    key: 'business',
+    name: 'Business',
+    price: '50 000',
+    badge: 'Bientôt',
+    available: false,
+    highlighted: true,
+    desc: 'Pour les entreprises en croissance',
+    features: [
+      'Tout Essential inclus',
+      '10 000 messages / mois',
+      '3 agents IA',
+      '10 sources (PDF, URL, YouTube)',
+      'Analytics avancées 30j',
+      'Suivi commandes + promos ciblées',
+      'API access',
+      'Support prioritaire',
+    ],
+    cta: 'Me notifier',
+  },
+  {
+    key: 'enterprise',
+    name: 'Enterprise',
+    price: 'Sur devis',
+    badge: 'Bientôt',
+    available: false,
+    highlighted: false,
+    desc: 'Pour les grandes opérations',
+    features: [
+      'Tout Business inclus',
+      'Messages & agents illimités',
+      'Sources illimitées',
+      'Analytics 90j',
+      'Toutes les automatisations',
+      'Onboarding dédié',
+      'SLA garanti',
+      'Formation équipe',
+    ],
+    cta: "Contacter l'équipe",
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    name: 'Rodrigue K.',
+    role: 'Restaurant Chez Mama, Yaoundé',
+    text: 'En 1 semaine, notre bot répond à 200+ messages / jour. Nos commandes ont augmenté de 40%.',
+    rating: 5,
+  },
+  {
+    name: 'Aïcha N.',
+    role: 'Boutique Fashion, Douala',
+    text: 'Les clients commandent directement via WhatsApp. NéoBot envoie les confirmations tout seul.',
+    rating: 5,
+  },
+  {
+    name: 'Patrick D.',
+    role: 'Agence de voyage, Abidjan',
+    text: 'Service client 24h/24 sans recruter. ROI immédiat dès le premier mois.',
+    rating: 5,
+  },
 ];
 
 const FAQS = [
   {
     q: 'Comment fonctionne NéoBot avec WhatsApp ?',
-    a: 'Connectez votre numéro WhatsApp en scannant un simple QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro habituel — le bot répond automatiquement en votre nom.',
+    a: "Connectez votre numéro WhatsApp en scannant un QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro habituel — le bot répond automatiquement en votre nom.",
   },
   {
     q: 'Puis-je personnaliser les réponses du bot ?',
-    a: 'Absolument. Vous configurez sa personnalité, son style de vente, vos prix, vos horaires, et votre FAQ. Le bot utilise exactement vos informations, jamais des données inventées.',
+    a: "Absolument. Vous configurez sa personnalité, son style de vente, vos prix, horaires et FAQ. Le bot utilise exactement vos informations, jamais rien d'inventé.",
   },
   {
-    q: "Que se passe-t-il après les 7 jours d'essai ?",
+    q: "Que se passe-t-il après les 14 jours d'essai ?",
     a: "Vous choisissez un plan payant. Si vous ne faites rien, le bot s'arrête mais vous n'êtes jamais facturé automatiquement. Aucun engagement, aucune surprise.",
   },
   {
     q: 'Mes données sont-elles sécurisées ?',
-    a: 'Oui. Chaque client dispose d\'un espace totalement isolé. Vos données ne sont jamais partagées. Nous utilisons le chiffrement JWT et les pratiques RGPD.',
+    a: "Chaque client dispose d'un espace totalement isolé. Vos données ne sont jamais partagées avec d'autres entreprises. Chiffrement JWT, pratiques RGPD.",
+  },
+  {
+    q: 'La limite de messages est-elle stricte ?',
+    a: 'Non. En cas de dépassement, le service continue et vous êtes simplement notifié. Aucune coupure brutale.',
   },
 ];
 
+// Positions fixes pour éviter les différences SSR/Client (pas de Math.random)
+const PARTICLE_POSITIONS = [
+  { x: 15, y: 22, s: 1.5, d: 6, delay: 0 },
+  { x: 85, y: 8,  s: 2,   d: 8, delay: 0.4 },
+  { x: 42, y: 65, s: 1,   d: 5, delay: 0.8 },
+  { x: 73, y: 40, s: 1.5, d: 7, delay: 1.2 },
+  { x: 28, y: 80, s: 1,   d: 9, delay: 1.6 },
+  { x: 60, y: 18, s: 2,   d: 6, delay: 2.0 },
+  { x: 90, y: 72, s: 1,   d: 8, delay: 2.4 },
+  { x: 5,  y: 55, s: 1.5, d: 5, delay: 2.8 },
+  { x: 50, y: 92, s: 1,   d: 7, delay: 3.2 },
+  { x: 35, y: 35, s: 2,   d: 6, delay: 3.6 },
+];
+
+function Particles() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {PARTICLE_POSITIONS.map((p, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full bg-neon animate-pulse"
+          style={{
+            left: `${p.x}%`,
+            top: `${p.y}%`,
+            width: `${p.s}px`,
+            height: `${p.s}px`,
+            opacity: 0.35,
+            animationDuration: `${p.d}s`,
+            animationDelay: `${p.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className={`border rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
+        open ? 'border-neon/25 bg-neon/5' : 'border-white/7 bg-white/[0.02]'
+      }`}
+      onClick={() => setOpen(!open)}
+    >
+      <div className="flex items-center justify-between px-6 py-5 gap-4">
+        <span className="text-white font-semibold text-sm font-syne">{q}</span>
+        <ChevronDown
+          className={`flex-shrink-0 text-neon transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+          style={{ width: 18, height: 18 }}
+        />
+      </div>
+      {open && (
+        <div className="px-6 pb-5 text-sm leading-relaxed text-white/55">{a}</div>
+      )}
+    </div>
+  );
+}
+
+const CHAT_MESSAGES = [
+  { from: 'user', text: "Bonsoir, c'est combien le Plan Essential ? 🤔" },
+  { from: 'bot',  text: "Bonsoir ! 👋 Le Plan Essential c'est 20 000 FCFA/mois avec 2 000 messages, 1 agent IA et analytics inclus. 14 jours gratuits, sans carte. Vous voulez démarrer ?" },
+  { from: 'user', text: "Oui ! C'est quoi le délai d'installation ?" },
+  { from: 'bot',  text: "⚡ 30 secondes chrono — vous scannez un QR code, votre bot est actif immédiatement. Je vous envoie le lien ?" },
+];
+
+function ChatMockup() {
+  const [visible, setVisible] = useState(0);
+
+  useEffect(() => {
+    if (visible >= CHAT_MESSAGES.length) return;
+    const t = setTimeout(() => setVisible(v => v + 1), 900);
+    return () => clearTimeout(t);
+  }, [visible]);
+
+  return (
+    <div className="rounded-3xl overflow-hidden shadow-2xl border border-neon/15 bg-[#0B0B18]">
+      <div className="px-4 py-3 flex items-center gap-3 bg-neon/10 border-b border-neon/15">
+        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-neon/20">
+          <Bot className="text-neon" style={{ width: 20, height: 20 }} />
+        </div>
+        <div>
+          <div className="text-white font-semibold text-sm font-syne">NéoBot Commercial</div>
+          <div className="text-xs flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-neon animate-pulse inline-block" />
+            <span className="text-neon">En ligne</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-3 min-h-64">
+        {CHAT_MESSAGES.slice(0, visible).map((msg, i) => (
+          <div key={i} className={`flex ${msg.from === 'bot' ? 'justify-end' : 'justify-start'}`}>
+            <div
+              className={`px-4 py-2.5 max-w-xs text-sm leading-relaxed ${
+                msg.from === 'bot'
+                  ? 'bg-neon/15 text-neon border border-neon/25 rounded-[16px_16px_4px_16px]'
+                  : 'bg-white/8 text-white/85 border border-white/10 rounded-[16px_16px_16px_4px]'
+              }`}
+            >
+              {msg.text}
+            </div>
+          </div>
+        ))}
+        {visible < CHAT_MESSAGES.length && visible > 0 && (
+          <div className="flex justify-end">
+            <div className="px-4 py-2.5 bg-neon/10 border border-neon/20 rounded-2xl">
+              <span className="flex gap-1">
+                {[0, 1, 2].map(j => (
+                  <span
+                    key={j}
+                    className="w-1.5 h-1.5 rounded-full bg-neon animate-bounce"
+                    style={{ animationDelay: `${j * 0.15}s` }}
+                  />
+                ))}
+              </span>
+            </div>
+          </div>
+        )}
+        <div className="text-center text-xs py-1 text-white/20">Réponse générée en 1.2s</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page principale ──────────────────────────────────────────────────────
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen text-white overflow-x-hidden bg-dark font-dm">
 
-      {/* ===== NAVBAR ===== */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 backdrop-blur-xl bg-gray-950/80">
+      {/* Grille de fond fixe */}
+      <div className="fixed inset-0 pointer-events-none bg-grid-neon bg-grid opacity-100" />
+
+      {/* ── NAVBAR ─────────────────────────────────────────────────────── */}
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-neon/10 backdrop-blur-xl bg-dark/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 bg-emerald-400 rounded-xl flex items-center justify-center group-hover:bg-emerald-300 transition-colors">
-              <Bot className="w-5 h-5 text-gray-900" />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-neon/15 border border-neon/35 transition-all group-hover:bg-neon/25">
+              <Bot className="text-neon" style={{ width: 18, height: 18 }} />
             </div>
-            <span className="text-white font-bold text-lg tracking-tight">NéoBot</span>
+            <span className="font-bold text-lg tracking-tight text-white font-syne">NéoBot</span>
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            {([['#features', 'Fonctionnalités'], ['#pricing', 'Tarifs'], ['#use-cases', 'Secteurs'], ['#faq', 'FAQ']] as [string, string][]).map(([href, label]) => (
-              <a key={href} href={href} className="text-white/60 hover:text-white text-sm transition-colors">{label}</a>
+            {([
+              ['#features', 'Fonctionnalités'],
+              ['#pricing', 'Tarifs'],
+              ['#use-cases', 'Secteurs'],
+              ['#faq', 'FAQ'],
+            ] as [string, string][]).map(([href, label]) => (
+              <a key={href} href={href} className="text-sm text-white/50 hover:text-white transition-colors">
+                {label}
+              </a>
             ))}
           </div>
 
           <div className="flex items-center gap-3">
-            <Link href="/login" className="text-white/70 hover:text-white text-sm font-medium transition-colors hidden sm:block">
+            <Link href="/login" className="hidden sm:block text-sm font-medium text-white/60 hover:text-white transition-colors">
               Connexion
             </Link>
             <Link
               href="/signup"
-              className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+              className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-neon text-dark font-syne shadow-neon-sm hover:shadow-neon transition-all hover:-translate-y-0.5"
             >
               Essai gratuit
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight style={{ width: 14, height: 14 }} />
             </Link>
           </div>
         </div>
       </nav>
 
-      {/* ===== HERO ===== */}
-      <section className="relative pt-32 pb-24 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(52,211,153,0.12),transparent)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
+      {/* ── HERO ───────────────────────────────────────────────────────── */}
+      <section className="relative pt-36 pb-28 overflow-hidden">
+        <Particles />
+        <div className="absolute left-1/2 top-0 -translate-x-1/2 w-[800px] h-[400px] pointer-events-none bg-gradient-radial from-neon/8 to-transparent" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 text-center">
-          <div className="inline-flex items-center gap-2 bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 text-xs font-semibold px-4 py-2 rounded-full mb-8">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-full mb-8 border bg-neon/8 border-neon/25 text-neon font-syne">
+            <Sparkles style={{ width: 13, height: 13 }} />
             Propulsé par DeepSeek AI · Conçu pour l&apos;Afrique
           </div>
 
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.05] mb-6 tracking-tight">
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.05] mb-6 tracking-tight font-syne">
             Transformez WhatsApp en{' '}
-            <span className="bg-gradient-to-r from-emerald-400 to-green-300 bg-clip-text text-transparent">
-              machine de vente
-            </span>
+            <br className="hidden sm:block" />
+            <span className="text-neon">machine de vente</span>
           </h1>
 
-          <p className="text-white/60 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed mb-10">
+          <p className="text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed mb-10 text-white/55">
             Un assistant IA qui répond à vos clients 24h/24 sur WhatsApp —
-            avec vos menus, vos prix, votre personnalité.
-            7 jours gratuits, aucune carte requise.
+            avec vos prix, votre personnalité, votre secteur.
+            <br />
+            14 jours gratuits, aucune carte requise.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <Link
               href="/signup"
-              className="bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-8 py-4 rounded-2xl text-base transition-all duration-200 flex items-center justify-center gap-2 shadow-2xl shadow-emerald-500/20 hover:shadow-emerald-400/30 hover:-translate-y-0.5"
+              className="flex items-center justify-center gap-2 font-semibold px-8 py-4 rounded-2xl text-base bg-neon text-dark font-syne shadow-neon hover:shadow-neon-lg transition-all duration-200 hover:-translate-y-0.5"
             >
               Démarrer gratuitement
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight style={{ width: 16, height: 16 }} />
             </Link>
             <a
               href="#demo"
-              className="border border-white/10 hover:border-white/20 text-white/80 hover:text-white font-medium px-8 py-4 rounded-2xl text-base transition-all backdrop-blur-sm hover:-translate-y-0.5"
+              className="font-medium px-8 py-4 rounded-2xl text-base text-white/75 hover:text-white border border-white/10 hover:border-white/20 backdrop-blur-sm transition-all hover:-translate-y-0.5"
             >
               Voir une démo
             </a>
           </div>
 
-          <p className="text-white/30 text-sm">
+          <p className="text-xs text-white/25">
             ✓ Sans carte bancaire &nbsp;·&nbsp; ✓ Installation 30 secondes &nbsp;·&nbsp; ✓ Annulation à tout moment
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto mt-16">
-            {([
-              { value: '2 500+', label: 'Entreprises actives' },
-              { value: '98%', label: 'Satisfaction client' },
-              { value: '< 2s', label: 'Temps de réponse moyen' },
-              { value: '+30%', label: 'CA moyen en 3 mois' },
-            ] as { value: string; label: string }[]).map(({ value, label }) => (
-              <div key={label} className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-sm">
-                <div className="text-2xl font-bold text-emerald-400 mb-1">{value}</div>
-                <div className="text-white/50 text-xs">{label}</div>
+            {STATS.map(({ value, label }) => (
+              <div key={label} className="rounded-2xl p-4 backdrop-blur-sm border bg-neon/5 border-neon/15">
+                <div className="text-2xl font-bold mb-1 text-neon font-syne">{value}</div>
+                <div className="text-xs text-white/45">{label}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== FEATURES ===== */}
+      {/* ── FEATURES ───────────────────────────────────────────────────── */}
       <section id="features" className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
-            <div className="inline-block bg-white/5 border border-white/10 text-white/60 text-xs font-semibold px-4 py-2 rounded-full mb-4 uppercase tracking-widest">
+            <div className="inline-block text-xs font-semibold px-4 py-2 rounded-full mb-4 border bg-neon/8 border-neon/20 text-neon font-syne uppercase tracking-widest">
               Fonctionnalités
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4">Pourquoi NéoBot ?</h2>
-            <p className="text-white/50 text-lg max-w-xl mx-auto">
-              Tout ce dont vous avez besoin pour vendre plus, dormir mieux, et ravir vos clients.
+            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Pourquoi NéoBot ?</h2>
+            <p className="text-lg max-w-xl mx-auto text-white/45">
+              Tout ce dont vous avez besoin pour vendre plus, dormir mieux et ravir vos clients.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map(({ icon: Icon, title, description, color, accent }) => (
-              <div key={title} className={`relative bg-gradient-to-br ${color} border border-white/8 rounded-2xl p-6 hover:border-white/15 transition-all duration-300 hover:-translate-y-1`}>
-                <div className={`w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-4 ${accent}`}>
-                  <Icon className="w-5 h-5" />
+            {FEATURES.map(({ icon: Icon, title, desc }) => (
+              <div
+                key={title}
+                className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 border bg-neon/[0.03] border-white/7 hover:border-neon/30 hover:bg-neon/[0.06] group"
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 border bg-neon/12 border-neon/25">
+                  <Icon className="text-neon" style={{ width: 18, height: 18 }} />
                 </div>
-                <h3 className="text-white font-semibold text-lg mb-2">{title}</h3>
-                <p className="text-white/50 text-sm leading-relaxed">{description}</p>
+                <h3 className="font-semibold text-lg mb-2 text-white font-syne">{title}</h3>
+                <p className="text-sm leading-relaxed text-white/50">{desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== DEMO ===== */}
+      {/* ── DEMO ───────────────────────────────────────────────────────── */}
       <section id="demo" className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/20 to-teal-900/20" />
+        <div className="absolute inset-0 pointer-events-none bg-gradient-radial from-neon/5 to-transparent" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <div className="inline-block bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 text-xs font-semibold px-4 py-2 rounded-full mb-6 uppercase tracking-widest">
+              <div className="inline-block text-xs font-semibold px-4 py-2 rounded-full mb-6 border bg-neon/8 border-neon/20 text-neon font-syne uppercase tracking-widest">
                 Démo en direct
               </div>
-              <h2 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
-                Votre bot, votre<br />
-                <span className="text-emerald-400">style de vente</span>
+              <h2 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight font-syne">
+                Votre bot, votre{' '}
+                <span className="text-neon">style de vente</span>
               </h2>
-              <p className="text-white/60 text-lg leading-relaxed mb-8">
+              <p className="text-lg leading-relaxed mb-8 text-white/55">
                 NéoBot s&apos;adapte à votre secteur. Donnez-lui vos informations,
                 et il parle exactement comme vous le feriez — en mieux.
               </p>
@@ -253,134 +444,123 @@ export default function LandingPage() {
                   'Répond avec vos prix et menus exacts',
                   'Gère les objections et relance automatiquement',
                   "Escalade vers vous si le client est urgent",
-                  'Parle français, anglais, et dialectes locaux',
+                  'Français, anglais, dialectes locaux',
                 ].map(text => (
                   <div key={text} className="flex items-center gap-3">
-                    <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-                    <span className="text-white/80 text-sm">{text}</span>
+                    <CheckCircle className="text-neon flex-shrink-0" style={{ width: 18, height: 18 }} />
+                    <span className="text-sm text-white/75">{text}</span>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* Chat mockup */}
-            <div className="bg-gray-900 rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
-              <div className="bg-emerald-600 px-4 py-3 flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <div className="text-white font-semibold text-sm">NéoBot Commercial</div>
-                  <div className="text-emerald-200 text-xs">En ligne</div>
-                </div>
-              </div>
-              <div className="p-4 space-y-3 min-h-64">
-                <div className="flex justify-start">
-                  <div className="bg-white/10 rounded-2xl rounded-tl-none px-4 py-2.5 max-w-xs text-sm text-white/90">
-                    Bonsoir, c&apos;est combien le Plan Pro ? 🤔
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <div className="bg-emerald-600 rounded-2xl rounded-tr-none px-4 py-2.5 max-w-xs text-sm text-white">
-                    Bonsoir ! 👋 Le Plan Pro c&apos;est <strong>50 000 FCFA/mois</strong> avec messages illimités + analytics + API.
-                    Vous voulez une démo gratuite ?
-                  </div>
-                </div>
-                <div className="flex justify-start">
-                  <div className="bg-white/10 rounded-2xl rounded-tl-none px-4 py-2.5 max-w-xs text-sm text-white/90">
-                    Oui ! Comment on commence ?
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <div className="bg-emerald-600 rounded-2xl rounded-tr-none px-4 py-2.5 max-w-xs text-sm text-white">
-                    Parfait ! 🚀 Je vous envoie le lien d&apos;inscription. C&apos;est gratuit 7 jours, pas de carte requise. Vous avez un site web actuellement ?
-                  </div>
-                </div>
-                <div className="text-center text-white/20 text-xs py-2">Réponse générée en 1.3s</div>
-              </div>
-            </div>
+            <ChatMockup />
           </div>
         </div>
       </section>
 
-      {/* ===== USE CASES ===== */}
+      {/* ── USE CASES ──────────────────────────────────────────────────── */}
       <section id="use-cases" className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4">Pour tous les secteurs</h2>
-            <p className="text-white/50 text-lg">NéoBot s&apos;installe en moins de 5 minutes dans votre activité.</p>
+            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Pour tous les secteurs</h2>
+            <p className="text-lg text-white/45">
+              NéoBot s&apos;installe en moins de 5 minutes dans votre activité.
+            </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {USE_CASES.map(({ icon, title, text }) => (
-              <div key={title} className="bg-white/5 hover:bg-white/8 border border-white/8 hover:border-white/15 rounded-2xl p-5 text-center transition-all duration-200 hover:-translate-y-1 cursor-default">
+              <div
+                key={title}
+                className="rounded-2xl p-5 text-center cursor-default border bg-neon/[0.03] border-white/7 hover:border-neon/30 transition-all duration-200 hover:-translate-y-1"
+              >
                 <div className="text-3xl mb-3">{icon}</div>
-                <div className="text-white font-semibold text-sm mb-1">{title}</div>
-                <div className="text-white/40 text-xs leading-relaxed">{text}</div>
+                <div className="text-white font-semibold text-sm mb-1 font-syne">{title}</div>
+                <div className="text-xs leading-relaxed text-white/38">{text}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== PRICING ===== */}
+      {/* ── PRICING ────────────────────────────────────────────────────── */}
       <section id="pricing" className="py-24 relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_50%,rgba(52,211,153,0.06),transparent)]" />
+        <div className="absolute inset-0 pointer-events-none bg-gradient-radial from-neon/4 to-transparent" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
-            <div className="inline-block bg-white/5 border border-white/10 text-white/60 text-xs font-semibold px-4 py-2 rounded-full mb-4 uppercase tracking-widest">
+            <div className="inline-block text-xs font-semibold px-4 py-2 rounded-full mb-4 border bg-neon/8 border-neon/20 text-neon font-syne uppercase tracking-widest">
               Tarifs
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4">Pricing transparent</h2>
-            <p className="text-white/50 text-lg max-w-xl mx-auto">
-              7 jours gratuits sur tous les plans. Aucune carte requise. Annulation en 1 clic.
+            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Pricing transparent</h2>
+            <p className="text-lg max-w-xl mx-auto text-white/45">
+              14 jours gratuits sur le plan Essential. Aucune carte requise.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
             {PLANS.map((plan) => (
               <div
-                key={plan.name}
+                key={plan.key}
                 className={`relative rounded-3xl border p-8 transition-all duration-300 ${
                   plan.highlighted
-                    ? 'bg-gradient-to-b from-emerald-500/15 to-green-500/5 border-emerald-500/40 shadow-2xl shadow-emerald-500/10 -translate-y-2'
-                    : 'bg-white/5 border-white/10 hover:border-white/20'
+                    ? 'bg-neon/[0.06] border-neon/40 shadow-neon'
+                    : 'bg-neon/[0.02] border-white/9'
                 }`}
               >
-                {plan.highlighted && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap">
+                {plan.badge && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap flex items-center gap-1.5 bg-white/10 text-white/45 border border-white/15">
+                    <Lock style={{ width: 10, height: 10 }} />
+                    {plan.badge}
+                  </div>
+                )}
+                {!plan.badge && plan.highlighted && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap bg-neon text-dark font-syne">
                     LE PLUS POPULAIRE
                   </div>
                 )}
 
                 <div className="mb-6">
-                  <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
-                  <p className="text-white/40 text-sm">{plan.description}</p>
+                  <h3 className={`text-xl font-bold mb-1 font-syne ${plan.available ? 'text-white' : 'text-white/40'}`}>
+                    {plan.name}
+                  </h3>
+                  <p className="text-sm text-white/35">{plan.desc}</p>
                 </div>
 
                 <div className="mb-6">
                   <div className="flex items-end gap-1 mb-1">
-                    <span className="text-4xl font-bold text-white">{plan.price}</span>
-                    <span className="text-white/40 mb-1">FCFA/mois</span>
+                    <span className={`text-4xl font-bold font-syne ${plan.available ? 'text-neon' : 'text-white/35'}`}>
+                      {plan.price}
+                    </span>
+                    {plan.available && (
+                      <span className="mb-1 text-sm text-white/35">FCFA/mois</span>
+                    )}
                   </div>
-                  <span className="text-emerald-400 text-sm font-medium">{plan.messages}</span>
                 </div>
 
-                <Link
-                  href="/signup"
-                  className={`w-full py-3 rounded-xl font-semibold text-sm text-center block mb-6 transition-all ${
-                    plan.highlighted
-                      ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20'
-                      : 'bg-white/10 hover:bg-white/15 text-white border border-white/10'
-                  }`}
-                >
-                  {plan.cta}
-                </Link>
+                {plan.available ? (
+                  <Link
+                    href="/signup"
+                    className={`w-full py-3 rounded-xl font-semibold text-sm text-center block mb-6 font-syne transition-all ${
+                      plan.highlighted
+                        ? 'bg-neon text-dark shadow-neon-sm hover:shadow-neon'
+                        : 'bg-transparent text-neon border border-neon/45 hover:border-neon/70'
+                    }`}
+                  >
+                    {plan.cta}
+                  </Link>
+                ) : (
+                  <div className="w-full py-3 rounded-xl font-semibold text-sm text-center block mb-6 font-syne bg-white/5 text-white/25 border border-white/8 cursor-not-allowed">
+                    {plan.cta}
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   {plan.features.map(f => (
                     <div key={f} className="flex items-center gap-2.5">
-                      <CheckCircle className={`w-4 h-4 flex-shrink-0 ${plan.highlighted ? 'text-emerald-400' : 'text-white/30'}`} />
-                      <span className="text-white/70 text-sm">{f}</span>
+                      <CheckCircle
+                        className={plan.available ? 'text-neon' : 'text-white/20'}
+                        style={{ width: 15, height: 15, flexShrink: 0 }}
+                      />
+                      <span className={`text-sm ${plan.available ? 'text-white/65' : 'text-white/25'}`}>{f}</span>
                     </div>
                   ))}
                 </div>
@@ -388,50 +568,37 @@ export default function LandingPage() {
             ))}
           </div>
 
-          <div className="mt-10 text-center text-white/30 text-sm">
-            Dépassement : 7 000 FCFA par tranche de 1 000 messages supplémentaires. Pas de coupure de service.
+          <div className="mt-10 text-center text-sm text-white/25">
+            Dépassement sur Essential : service maintenu avec notification. Annulation à tout moment.
           </div>
         </div>
       </section>
 
-      {/* ===== TESTIMONIALS ===== */}
+      {/* ── TESTIMONIALS ───────────────────────────────────────────────── */}
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4">Ce qu&apos;ils en disent</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Ce qu&apos;ils en disent</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {([
-              {
-                name: 'Rodrigue K.', role: 'Restaurant Chez Mama, Yaoundé',
-                text: 'En 1 semaine, notre bot répond à plus de 200 messages par jour. Nos commandes ont augmenté de 40%.',
-                rating: 5,
-              },
-              {
-                name: 'Aïcha N.', role: 'Boutique Fashion, Douala',
-                text: 'Les clients commandent directement via WhatsApp maintenant. NéoBot envoie les confirmations tout seul.',
-                rating: 5,
-              },
-              {
-                name: 'Patrick D.', role: 'Agence de voyage, Abidjan',
-                text: 'Notre service client fonctionne 24h/24 sans recruter. Le ROI a été immédiat dès le 1er mois.',
-                rating: 5,
-              },
-            ] as { name: string; role: string; text: string; rating: number }[]).map(({ name, role, text, rating }) => (
-              <div key={name} className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-white/15 transition-all">
+            {TESTIMONIALS.map(({ name, role, text, rating }) => (
+              <div
+                key={name}
+                className="rounded-2xl p-6 border bg-neon/[0.03] border-white/8 hover:border-neon/25 hover:-translate-y-1 transition-all duration-300"
+              >
                 <div className="flex gap-0.5 mb-4">
                   {Array.from({ length: rating }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <Star key={i} className="fill-yellow-400 text-yellow-400" style={{ width: 14, height: 14 }} />
                   ))}
                 </div>
-                <p className="text-white/70 text-sm leading-relaxed mb-5">&ldquo;{text}&rdquo;</p>
+                <p className="text-sm leading-relaxed mb-5 text-white/65">&ldquo;{text}&rdquo;</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-emerald-400 rounded-full flex items-center justify-center text-gray-900 font-bold text-sm">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold bg-neon/20 text-neon font-syne">
                     {name[0]}
                   </div>
                   <div>
-                    <div className="text-white font-semibold text-sm">{name}</div>
-                    <div className="text-white/40 text-xs">{role}</div>
+                    <div className="text-white font-semibold text-sm font-syne">{name}</div>
+                    <div className="text-xs text-white/35">{role}</div>
                   </div>
                 </div>
               </div>
@@ -440,89 +607,89 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== FAQ ===== */}
+      {/* ── FAQ ────────────────────────────────────────────────────────── */}
       <section id="faq" className="py-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold mb-4">Questions fréquentes</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold mb-4 font-syne">Questions fréquentes</h2>
           </div>
           <div className="space-y-4">
             {FAQS.map(({ q, a }) => (
-              <details key={q} className="group bg-white/5 border border-white/10 rounded-2xl overflow-hidden hover:border-white/15 transition-colors">
-                <summary className="flex items-center justify-between px-6 py-5 cursor-pointer list-none">
-                  <span className="text-white font-semibold text-sm pr-4">{q}</span>
-                  <ChevronDown className="w-5 h-5 text-white/40 flex-shrink-0 group-open:rotate-180 transition-transform" />
-                </summary>
-                <div className="px-6 pb-5 text-white/60 text-sm leading-relaxed">{a}</div>
-              </details>
+              <FaqItem key={q} q={q} a={a} />
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== CTA FINAL ===== */}
+      {/* ── CTA FINAL ──────────────────────────────────────────────────── */}
       <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/30 via-green-900/20 to-gray-950" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(52,211,153,0.1),transparent)]" />
+        <div className="absolute inset-0 pointer-events-none bg-gradient-radial from-neon/8 to-transparent" />
+        <Particles />
         <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <div className="w-16 h-16 bg-emerald-400 rounded-3xl flex items-center justify-center mx-auto mb-8">
-            <Bot className="w-9 h-9 text-gray-900" />
+          <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-8 bg-neon/15 border border-neon/35">
+            <Bot className="text-neon" style={{ width: 32, height: 32 }} />
           </div>
-          <h2 className="text-4xl sm:text-5xl font-bold mb-6">
+          <h2 className="text-4xl sm:text-5xl font-bold mb-6 font-syne">
             Prêt à transformer<br />votre WhatsApp ?
           </h2>
-          <p className="text-white/60 text-lg mb-10">
+          <p className="text-lg mb-10 text-white/55">
             Rejoignez des milliers d&apos;entreprises africaines qui font déjà confiance à NéoBot.
-            7 jours gratuits, sans carte bancaire.
+            <br />14 jours gratuits, sans carte bancaire.
           </p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-10 py-4 rounded-2xl text-lg transition-all duration-200 shadow-2xl shadow-emerald-500/25 hover:shadow-emerald-400/30 hover:-translate-y-0.5"
+            className="inline-flex items-center gap-2 font-semibold px-10 py-4 rounded-2xl text-lg bg-neon text-dark font-syne shadow-neon-lg hover:shadow-neon transition-all duration-200 hover:-translate-y-0.5"
           >
             Démarrer gratuitement
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight style={{ width: 20, height: 20 }} />
           </Link>
-          <p className="text-white/30 text-sm mt-5">
-            ✓ Sans carte &nbsp;·&nbsp; ✓ 7 jours gratuits &nbsp;·&nbsp; ✓ Annulation immédiate
+          <p className="text-sm mt-5 text-white/25">
+            ✓ Sans carte &nbsp;·&nbsp; ✓ 14 jours gratuits &nbsp;·&nbsp; ✓ Annulation immédiate
           </p>
         </div>
       </section>
 
-      {/* ===== FOOTER ===== */}
-      <footer className="border-t border-white/5 py-16">
+      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
+      <footer className="border-t border-neon/10 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12">
             <div className="col-span-2 sm:col-span-1">
               <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-9 h-9 bg-emerald-400 rounded-xl flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-gray-900" />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-neon/12 border border-neon/30">
+                  <Bot className="text-neon" style={{ width: 16, height: 16 }} />
                 </div>
-                <span className="text-white font-bold">NéoBot</span>
+                <span className="font-bold text-lg text-white font-syne">NéoBot</span>
               </div>
-              <p className="text-white/40 text-sm leading-relaxed">
-                L&apos;assistant WhatsApp IA conçu pour les entreprises africaines.
+              <p className="text-sm leading-relaxed text-white/35">
+                L&apos;assistant IA WhatsApp conçu pour les entreprises africaines.
               </p>
             </div>
+
             {([
-              { title: 'Produit', links: [['#features', 'Fonctionnalités'], ['#pricing', 'Tarifs'], ['/signup', 'Essai gratuit']] },
-              { title: 'Compte', links: [['/login', 'Connexion'], ['/signup', 'Inscription'], ['/dashboard', 'Dashboard']] },
-              { title: 'Légal', links: [['#', "Conditions d'utilisation"], ['#', 'Confidentialité'], ['#', 'Cookies']] },
-            ] as { title: string; links: [string, string][] }[]).map(({ title, links }) => (
+              ['Produit', ['Fonctionnalités', 'Tarifs', 'Roadmap', 'API']],
+              ['Support', ['Documentation', 'Contact', 'WhatsApp: +237 6XX XXX XXX']],
+              ['Entreprise', ["À propos", 'Blog', 'Mentions légales', 'Confidentialité']],
+            ] as [string, string[]][]).map(([title, links]) => (
               <div key={title}>
-                <h4 className="text-white font-semibold text-sm mb-4">{title}</h4>
+                <h4 className="font-semibold text-sm mb-4 text-white font-syne">{title}</h4>
                 <ul className="space-y-2.5">
-                  {links.map(([href, label]) => (
-                    <li key={label}>
-                      <a href={href} className="text-white/40 hover:text-white/70 text-sm transition-colors">{label}</a>
+                  {links.map(link => (
+                    <li key={link}>
+                      <a href="#" className="text-sm text-white/35 hover:text-white transition-colors">
+                        {link}
+                      </a>
                     </li>
                   ))}
                 </ul>
               </div>
             ))}
           </div>
-          <div className="border-t border-white/5 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-white/30 text-sm">© 2026 NéoBot — Tim Patrick DIMANI BALLA</p>
-            <p className="text-white/20 text-sm">Made with ❤️ in Cameroon 🇨🇲</p>
+
+          <div className="border-t border-white/6 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-white/25">© 2026 NéoBot. Tous droits réservés.</p>
+            <p className="text-sm text-white/20">
+              Conçu pour les PME africaines · Propulsé par DeepSeek AI
+            </p>
           </div>
         </div>
       </footer>

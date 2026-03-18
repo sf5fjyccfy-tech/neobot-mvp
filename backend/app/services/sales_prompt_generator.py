@@ -94,7 +94,8 @@ class SalesPromptGenerator:
         intent: str,
         category: str,
         business_data: Dict,
-        conversation_history: Optional[list] = None
+        conversation_history: Optional[list] = None,
+        extra_context: Optional[str] = None
     ) -> str:
         """
         Génère un prompt optimisé pour DeepSeek
@@ -170,6 +171,9 @@ Message de l'utilisateur: "{message}"
 Réponds à la question de l'utilisateur en intégrant naturellement les informations ci-dessus.
 Termine TOUJOURS par: 🎯 QUESTION: [la question sélectionnée]
 """
+        
+        if extra_context and extra_context.strip():
+            prompt += f"\n=== CONTEXTE CLIENT (CRM & Historique) ===\n{extra_context.strip()}\n"
         
         logger.info(f"✅ Prompt générée pour intent={intent}, question='{question[:60]}...'")
         

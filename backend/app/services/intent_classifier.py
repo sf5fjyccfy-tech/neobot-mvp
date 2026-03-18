@@ -47,72 +47,29 @@ class IntentClassifier:
     @staticmethod
     def classify(message: str, business_type: str = "neobot") -> Tuple[bool, str, str]:
         """
-        Classifie un message
-        
-        Args:
-            message: Le message de l'utilisateur
-            business_type: Type de business ("neobot", "restaurant", "ecommerce")
-        
+        Classifie un message.
+
+        Principe : TOUT message reçoit une réponse SAUF les sujets
+        explicitement hors-périmètre (politique, sport, recettes...).
+        Un bot WhatsApp professionnel ne laisse jamais un client sans réponse.
+
         Returns:
             (is_relevant: bool, intent: str, category: str)
-            - is_relevant: True si pertinent, False si hors-sujet
-            - intent: Type d'intention détectée
-            - category: Catégorie de la question
         """
         message_lower = message.lower().strip()
-        
+
         logger.info(f"🔍 Classifying intent for: '{message_lower[:100]}'")
-        
-        # 1. Vérifier si c'est clairement hors-sujet
-        for irrelevant_pattern in IntentClassifier.IRRELEVANT_PATTERNS:
-            if irrelevant_pattern in message_lower:
-                logger.warning(f"⚠️ HORS-SUJET détecté: {irrelevant_pattern}")
+
+        # Rejeter UNIQUEMENT les sujets clairement non liés au business
+        for pattern in IntentClassifier.IRRELEVANT_PATTERNS:
+            if pattern in message_lower:
+                logger.warning(f"⚠️ HORS-SUJET détecté: {pattern}")
                 return False, "out_of_scope", "completely_irrelevant"
-        
-        # 2. Vérifier les mots-clés pertinents
-        relevant_count = sum(
-            1 for keyword in IntentClassifier.RELEVANT_KEYWORDS
-            if keyword in message_lower
-        )
-        
-        # 3. Questions courtes sans keywords = probablement hors-sujet
-        if len(message_lower.split()) <= 5 and relevant_count == 0:
-            # Vérifier quelques patterns génériques
-            generic_patterns = ["qui es-tu", "qui tu es", "what are you", "who are you", 
-                              "salut", "bonjour", "hello", "hi"]
-            if any(pattern in message_lower for pattern in generic_patterns):
-                logger.info("💭 Generic greeting detected")
-                return True, "greeting", "generic_inquiry"
-            
-            # Vérifier des patterns basés sur les verbes "avoir", "proposer", "montrer"
-            # qui sont typiquement des questions produits/services
-            ask_patterns = ["vous proposez", "proposez", "montrez", "montrer", "avez", "avez-", "quel", "quels", "quelle", "quelles"]
-            if any(pattern in message_lower for pattern in ask_patterns):
-                logger.info("💭 Product/Service inquiry pattern detected")
-                return True, "product_inquiry", "business_related"
-            
-            # Pattern par défaut pour messages courts
-            logger.warning(f"⚠️ HORS-SUJET: Message court sans keywords")
-            return False, "out_of_scope", "too_generic"
-        
-        # 4. Si on a au moins des keywords pertinents = RELEVANT
-        if relevant_count > 0:
-            intent = IntentClassifier._determine_intent(message_lower)
-            logger.info(f"✅ PERTINENT - Intent: {intent}")
-            return True, intent, "business_related"
-        
-        # 5. Questions qui contiennent des mots génériques mais basiques
-        basic_questions = ["c'est quoi", "comment", "pourquoi", "quand", "où",
-                         "vous faites", "vous proposez", "vous vendez"]
-        if any(q in message_lower for q in basic_questions):
-            # Si c'est une question basique sans keyword pertinent = UNCERTAIN
-            # Mais on considère comme pertinent avec tag "uncertain"
-            logger.info("❓ UNCERTAIN - Question générique")
-            return True, "uncertain", "generic_question"
-        
-        # Par défaut = HORS-SUJET
-        logger.warning(f"⚠️ Par défaut = HORS-SUJET")
-        return False, "unknown", "unclassified"
+
+        # Tout le reste → classifier l'intention et répondre
+        intent = IntentClassifier._determine_intent(message_lower)
+        logger.info(f"✅ PERTINENT - Intent: {intent}")
+        return True, intent, "business_related"
     
     @staticmethod
     def _determine_intent(message_lower: str) -> str:

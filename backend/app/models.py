@@ -1,18 +1,36 @@
 """
 MODÈLES NÉOBOT OPTIMISÉS - Version robuste sans dépendances circulaires
 """
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, JSON, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 import enum
 from .database import Base
 
 # ========== ENUMS ==========
+
+class AgentType(str, enum.Enum):
+    """Types d'agents disponibles pour chaque tenant"""
+    LIBRE         = "libre"           # Template vierge — le client prompt lui-même
+    RDV           = "rdv"             # Gestionnaire de rendez-vous
+    SUPPORT       = "support"         # Support client polyvalent
+    FAQ           = "faq"             # Question/Réponse
+    VENTE         = "vente"           # Closeur pro
+    QUALIFICATION = "qualification"   # Qualificateur d'offre
+    # NOTIFICATION supprimé — fonctions redistribuées sur RDV/VENTE/SUPPORT
+
+class KnowledgeSourceType(str, enum.Enum):
+    URL       = "url"
+    PDF       = "pdf"
+    YOUTUBE   = "youtube"
+    FAQ       = "faq"
+    TEXT      = "text"
+
 class PlanType(str, enum.Enum):
-    NEOBOT = "NEOBOT"  # Valeur par défaut pour l'admin
-    BASIQUE = "basique"
-    STANDARD = "standard"
-    PRO = "pro"
+    NEOBOT    = "NEOBOT"    # Plan admin/plateforme
+    BASIC     = "BASIC"     # Renommé Essential en affichage (valeur DB inchangée)
+    STANDARD  = "STANDARD"  # Gelé — renommé Business en affichage
+    PRO       = "PRO"       # Gelé — renommé Enterprise en affichage
 
 class ConversationStatus(str, enum.Enum):
     ACTIVE = "active"
@@ -34,41 +52,105 @@ class BusinessType(str, enum.Enum):
 # ========== PLAN LIMITS ==========
 PLAN_LIMITS = {
     PlanType.NEOBOT: {
-        "name": "NéoBot",
+        "name": "NéoBot Admin",
+        "display_name": "NéoBot",
+        "available": False,
         "price_fcfa": 0,
-        "whatsapp_messages": -1,  # illimité
-        "other_platforms_messages": -1,
+        "whatsapp_messages": -1,
         "channels": -1,
+        "max_agents": -1,
+        "max_knowledge_sources": -1,
+        "allowed_source_types": ["text", "pdf", "url", "youtube"],
+        "can_generate_prompt_ai": True,
+        "response_delay_configurable": True,
+        "test_credits_per_session": 20,
+        "outbound_triggers": ["rdv_reminder", "order_followup", "subscription_expiry", "promo"],
+        "analytics_days": -1,
         "features": ["Tout accès", "Support prioritaire"],
-        "trial_days": 0
+        "trial_days": 0,
     },
-    PlanType.BASIQUE: {
-        "name": "Basique",
+    PlanType.BASIC: {
+        "name": "Essential",
+        "display_name": "Essential",
+        "available": True,
         "price_fcfa": 20000,
-        "whatsapp_messages": 2000,
-        "other_platforms_messages": 4000,
+        "whatsapp_messages": 2000,           # 2 000 messages/mois
         "channels": 1,
-        "features": ["1 canal", "Réponses automatiques", "Dashboard basique"],
-        "trial_days": 14
+        "max_agents": 1,                     # 1 seul agent actif
+        "max_knowledge_sources": 3,          # 3 sources max
+        "allowed_source_types": ["text", "pdf"],  # Pas d'URL ni YouTube
+        "can_generate_prompt_ai": True,
+        "response_delay_configurable": True,
+        "test_credits_per_session": 20,
+        "outbound_triggers": ["rdv_reminder"],   # Rappels RDV seulement
+        "analytics_days": 30,
+        "features": [
+            "1 agent IA actif",
+            "2 000 messages/mois",
+            "Types d'agents : Libre, RDV, Support, FAQ, Vente, Qualification",
+            "Sources : Texte + PDF (3 max)",
+            "Génération prompt par IA",
+            "Délai de réponse configurable",
+            "Rappels RDV automatiques",
+            "Dashboard 30 jours",
+            "20 messages de test par session",
+            "Essai gratuit 14 jours",
+        ],
+        "trial_days": 14,
     },
     PlanType.STANDARD: {
-        "name": "Standard",
+        "name": "Business",
+        "display_name": "Business",
+        "available": False,                  # Gelé — bientôt disponible
         "price_fcfa": 50000,
-        "whatsapp_messages": 2500,
-        "other_platforms_messages": -1,  # illimité
+        "whatsapp_messages": 5000,
         "channels": 3,
-        "features": ["3 canaux", "IA avancée", "NÉOBRAIN", "Analytics"],
-        "trial_days": 7
+        "max_agents": 3,
+        "max_knowledge_sources": 10,
+        "allowed_source_types": ["text", "pdf", "url", "youtube"],
+        "can_generate_prompt_ai": True,
+        "response_delay_configurable": True,
+        "test_credits_per_session": 20,
+        "outbound_triggers": ["rdv_reminder", "order_followup", "promo"],
+        "analytics_days": 30,
+        "features": [
+            "3 agents IA actifs",
+            "5 000 messages/mois",
+            "Tous les types d'agents",
+            "Sources : Texte + PDF + URL + YouTube (10 max)",
+            "Génération prompt par IA",
+            "Rappels RDV + Suivi commande + Promos ciblées",
+            "Dashboard 30 jours",
+            "Support email prioritaire",
+        ],
+        "trial_days": 7,
     },
     PlanType.PRO: {
-        "name": "Pro",
+        "name": "Enterprise",
+        "display_name": "Enterprise",
+        "available": False,                  # Gelé — bientôt disponible
         "price_fcfa": 90000,
-        "whatsapp_messages": 4000,
-        "other_platforms_messages": -1,  # illimité
-        "channels": -1,  # tous
-        "features": ["Canaux illimités", "CLOSEUR PRO", "API", "Support dédié"],
-        "trial_days": 0
-    }
+        "whatsapp_messages": -1,             # Illimité
+        "channels": -1,
+        "max_agents": -1,
+        "max_knowledge_sources": -1,
+        "allowed_source_types": ["text", "pdf", "url", "youtube"],
+        "can_generate_prompt_ai": True,
+        "response_delay_configurable": True,
+        "test_credits_per_session": 20,
+        "outbound_triggers": ["rdv_reminder", "order_followup", "subscription_expiry", "promo"],
+        "analytics_days": 90,
+        "features": [
+            "Agents illimités",
+            "Messages illimités",
+            "Tous les types d'agents",
+            "Sources illimitées (Texte + PDF + URL + YouTube)",
+            "Expiration abonnement + Tous les sortants",
+            "Dashboard 90 jours + Export",
+            "Support dédié WhatsApp",
+        ],
+        "trial_days": 0,
+    },
 }
 
 # ========== MODÈLES PRINCIPAUX ==========
@@ -80,9 +162,9 @@ class Tenant(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     phone = Column(String(50), nullable=False)
     business_type = Column(String(100), default="autre")
-    plan = Column(SQLEnum(PlanType), default=PlanType.BASIQUE, nullable=False)
+    plan = Column(SQLEnum(PlanType), default=PlanType.BASIC, nullable=False)
     
-    whatsapp_provider = Column(String(50), default="wasender_api")
+    whatsapp_provider = Column(String(50), default="WASENDER_API")
     whatsapp_connected = Column(Boolean, default=False)
     
     messages_used = Column(Integer, default=0)
@@ -93,7 +175,7 @@ class Tenant(Base):
 
     def get_plan_config(self):
         """Obtenir la configuration du plan"""
-        return PLAN_LIMITS.get(self.plan, PLAN_LIMITS[PlanType.NEOBOT])
+        return PLAN_LIMITS.get(self.plan, PLAN_LIMITS[PlanType.BASIC])
 
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -468,3 +550,153 @@ class QueuedMessage(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ========== SYSTÈME D'AGENTS (NOUVELLE FEATURE) ==========
+
+class AgentTemplate(Base):
+    """
+    Template d'agent IA configuré par le tenant.
+    Chaque tenant peut avoir plusieurs agents (un actif à la fois).
+    """
+    __tablename__ = "agent_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    
+    # Identité de l'agent
+    name = Column(String(255), nullable=False)                          # "Mon Bot Vente"
+    agent_type = Column(SQLEnum(AgentType), nullable=False, default=AgentType.LIBRE)
+    description = Column(Text, nullable=True)
+    
+    # Prompt système (couche 2 — modifiable par le tenant)
+    system_prompt = Column(Text, nullable=True)                         # Prompt pré-défini du type
+    custom_prompt_override = Column(Text, nullable=True)               # Prompt libre saisi par le tenant
+    
+    # Personnalité
+    tone = Column(String(100), default="Friendly, Professional")        # "Friendly", "Expert", etc.
+    language = Column(String(10), default="fr")                         # "fr", "en", "ar"
+    emoji_enabled = Column(Boolean, default=True)
+    max_response_length = Column(Integer, default=400)                  # Tokens max
+    
+    # Délai de réponse (simule un comportement humain)
+    # "immediate" = 0s, "natural" = 2-4s, "human" = 5-12s, "slow" = 15-30s
+    response_delay = Column(String(20), default="natural")
+    typing_indicator = Column(Boolean, default=True)                   # Afficher "est en train d'écrire..."
+
+    # Disponibilité horaire
+    availability_start = Column(String(5), nullable=True)              # "08:00"
+    availability_end = Column(String(5), nullable=True)                # "22:00"
+    off_hours_message = Column(Text, nullable=True)                    # Message hors horaires
+    
+    # Score de qualité (calculé automatiquement 0-100)
+    prompt_score = Column(Integer, default=0)
+    
+    # Etat
+    is_active = Column(Boolean, default=False)                         # Un seul actif à la fois
+    is_default = Column(Boolean, default=False)                        # Template par défaut
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relations
+    knowledge_sources = relationship("KnowledgeSource", back_populates="agent", cascade="all, delete-orphan")
+    prompt_variables = relationship("PromptVariable", back_populates="agent", cascade="all, delete-orphan")
+
+
+class KnowledgeSource(Base):
+    """
+    Sources de connaissance attachées à un agent.
+    Le contenu extrait est injecté dans le prompt IA.
+    """
+    __tablename__ = "knowledge_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agent_templates.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+
+    # Source
+    source_type = Column(SQLEnum(KnowledgeSourceType), nullable=False)  # url, pdf, youtube, faq, text
+    name = Column(String(255), nullable=True)                           # Nom lisible
+    source_url = Column(Text, nullable=True)                            # URL ou lien YouTube
+    file_path = Column(Text, nullable=True)                             # Chemin vers le fichier uploadé
+
+    # Contenu extrait (indexé pour injection dans le prompt)
+    content_extracted = Column(Text, nullable=True)
+    content_preview = Column(Text, nullable=True)                       # 500 premiers chars pour aperçu
+
+    # Sync
+    sync_status = Column(String(50), default="pending")                 # pending, synced, error
+    sync_error = Column(Text, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent = relationship("AgentTemplate", back_populates="knowledge_sources")
+
+
+class PromptVariable(Base):
+    """
+    Variables substituables dans les prompts : {{nom_entreprise}}, {{lien_catalogue}}, etc.
+    Permettent de rendre les prompts dynamiques sans les réécrire.
+    """
+    __tablename__ = "prompt_variables"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agent_templates.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+
+    key = Column(String(100), nullable=False)    # "nom_entreprise"
+    value = Column(Text, nullable=True)          # "Le Gourmet Restaurant"
+    description = Column(String(255), nullable=True)  # Hint pour l'UI
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent = relationship("AgentTemplate", back_populates="prompt_variables")
+
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('agent_id', 'key', name='uq_agent_variable_key'),
+    )
+
+
+# ========== OUTBOUND TRACKING ==========
+
+class OutboundTracking(Base):
+    """
+    Suivi des messages sortants par contact.
+    Enforcement backend : max 2 messages proactifs par contact, jamais de cold outreach.
+    Cold outreach (numéro sans historique) = rejeté avant même d'arriver ici.
+    """
+    __tablename__ = "outbound_tracking"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=False, index=True)       # Numéro destinataire
+
+    # Compteur par type de déclencheur
+    rdv_outbound_count = Column(Integer, default=0)          # Rappels RDV
+    order_outbound_count = Column(Integer, default=0)        # Suivi commande
+    subscription_outbound_count = Column(Integer, default=0) # Expiration abonnement
+    promo_outbound_count = Column(Integer, default=0)        # Promos ciblées
+
+    # Total global = somme de tous les types
+    total_outbound_count = Column(Integer, default=0)        # Max 2 au total
+
+    last_outbound_at = Column(DateTime, nullable=True)
+    last_trigger_type = Column(String(50), nullable=True)    # "rdv_reminder", "order_followup", etc.
+
+    # Opt-out : si True, aucun sortant autorisé pour ce contact
+    opted_out = Column(Boolean, default=False)
+    opted_out_at = Column(DateTime, nullable=True)
+
+    # Fenêtre de reset : les compteurs se remettent à 0 chaque mois
+    window_start = Column(DateTime, default=datetime.utcnow)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'phone_number', name='uq_outbound_tenant_phone'),
+    )

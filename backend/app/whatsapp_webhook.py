@@ -53,6 +53,7 @@ class WhatsAppMessage(BaseModel):
     """Incoming message from WhatsApp service"""
     tenant_id: Optional[int] = None
     from_: Optional[str] = None  # Phone number
+    reply_jid: Optional[str] = None  # JID exact de l'expéditeur (ex: 221XXXXXXX@s.whatsapp.net ou @lid)
     to: Optional[str] = None     # Bot number (optional)
     text: str
     senderName: str
@@ -290,40 +291,57 @@ Ou posez votre question!
                 except Exception as e:
                     logger.warning(f"Could not get conversation history: {e}")
             
-            # ✅ STEP 4: GÉNÉRER LE PROMPT AVEC QUESTIONS DE VENTE ET CRM
+            # ✅ STEP 4: CONSTRUIRE LE PROMPT — agent actif ou fallback SalesPromptGenerator
+            from .services.agent_service import AgentService, build_agent_system_prompt
             from .services.sales_prompt_generator import SalesPromptGenerator
-            
-            # Ajouter le contexte CRM et mémoire au prompt
-            enriched_context = f"""
-{history_text}
-
-{CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)}
-"""
-            
-            # Générer le prompt spécial avec question
-            sales_prompt = SalesPromptGenerator.generate(
-                message=user_message,
-                intent=intent,
-                category=category,
-                business_data=business_data,
-                conversation_history=conversation_history,
-                extra_context=enriched_context
-            )
-            
-            logger.info(f"📝 Generated sales prompt with CRM, Memory & question for intent: {intent}")
-            
-            # ✅ STEP 5: APPELER DEEPSEEK AVEC LE PROMPT DE VENTE
             from .services.http_client import DeepSeekClient
-            
+
+            active_agent = AgentService.get_active_agent(tenant_id, db)
+
+            if active_agent:
+                # Mode AGENT : utiliser le prompt système de l'agent configuré
+                system_prompt = build_agent_system_prompt(active_agent, db)
+                max_tokens = active_agent.max_response_length or 500
+
+                # Injecter l'historique CRM dans le contexte utilisateur
+                enriched_context = f"{history_text}\n\n{CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)}"
+
+                messages = []
+                messages.append({"role": "system", "content": system_prompt})
+                if conversation_history:
+                    messages.extend(conversation_history[:-1])  # historique sauf dernier
+                if enriched_context.strip():
+                    messages.append({"role": "user", "content": f"[Contexte client]\n{enriched_context.strip()}\n\n[Message]\n{user_message}"})
+                else:
+                    messages.append({"role": "user", "content": user_message})
+
+                logger.info(f"🤖 Using agent '{active_agent.name}' (type={active_agent.agent_type}, score={active_agent.prompt_score})")
+
+            else:
+                # Mode FALLBACK : SalesPromptGenerator (comportement original)
+                enriched_context = f"{history_text}\n\n{CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)}"
+
+                sales_prompt = SalesPromptGenerator.generate(
+                    message=user_message,
+                    intent=intent,
+                    category=category,
+                    business_data=business_data,
+                    conversation_history=conversation_history,
+                    extra_context=enriched_context,
+                )
+                messages = [{"role": "user", "content": sales_prompt}]
+                max_tokens = 500
+                logger.info(f"📝 No active agent — fallback SalesPromptGenerator (intent={intent})")
+
+            # ✅ STEP 5: APPELER DEEPSEEK
             http_client = DeepSeekClient(api_key=self.deepseek_api_key)
-            
             response = await http_client.call(
-                messages=[{"role": "user", "content": sales_prompt}],
+                messages=messages,
                 temperature=0.7,
-                max_tokens=500
+                max_tokens=max_tokens,
             )
-            
-            logger.info(f"✅ Generated response using SALES PROMPT + RAG + CRM + Memory: {response[:100]}...")
+
+            logger.info(f"✅ DeepSeek response: {response[:100]}...")
             return response
         
         except Exception as e:
@@ -438,11 +456,11 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         from .services.overage_pricing_service import OveragePricingService
         OveragePricingService.update_overage_cost(tenant_id, db)
         
-        # Send response in background
+        # Send response in background — utiliser reply_jid si dispo (JID exact de l'expéditeur)
         background_tasks.add_task(
             send_whatsapp_response,
             tenant_id=tenant_id,
-            phone=phone,
+            phone=message.reply_jid or phone,
             text=response_text
         )
         

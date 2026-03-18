@@ -45,35 +45,36 @@ class EscalationService:
         try:
             text = message.lower().strip()
             
-            # Pattern 1: Client frustré
-            frustration_words = [
-                "frustré", "énervé", "pas content", "arrêter", "désabonner",
-                "veux parler", "parler humain", "agent", "support", "très mécontent",
-                "erreur", "problème", "c'est nul", "mauvais service", "aide"
+            # Pattern 1: Client explicitement frustré (expressions fortes uniquement)
+            frustration_phrases = [
+                "très mécontent", "pas content du tout", "c'est nul", "mauvais service",
+                "je suis frustré", "je suis énervé", "veux me désabonner",
+                "arrêter mon abonnement", "annuler mon compte", "rembourse",
+                "je veux parler à un humain", "je veux parler à quelqu'un",
             ]
-            if any(word in text for word in frustration_words):
+            if any(phrase in text for phrase in frustration_phrases):
                 logger.info(f"🚨 Escalade détectée: CLIENT_FRUSTRATED")
                 return EscalationReason.CUSTOMER_FRUSTRATED
             
             # Pattern 2: Question complexe (plusieurs points d'interrogation ou très long)
-            if text.count("?") >= 3 or len(text) > 300:
+            if text.count("?") >= 4 or len(text) > 500:
                 logger.info(f"🚨 Escalade détectée: COMPLEX_QUESTION")
                 return EscalationReason.COMPLEX_QUESTION
             
             # Pattern 3: Problème de paiement
-            payment_words = ["paiement", "facture", "remboursement", "charge", "transaction", "crédit", "carte"]
+            payment_words = ["remboursement", "litige paiement", "erreur de facturation", "débit non autorisé"]
             if any(word in text for word in payment_words):
                 logger.info(f"🚨 Escalade détectée: PAYMENT_ISSUE")
                 return EscalationReason.PAYMENT_ISSUE
             
-            # Pattern 4: Problème technique
-            tech_words = ["bug", "erreur", "ne fonctionne pas", "crash", "bloqué", "problème technique", "bug"]
-            if any(word in text for word in tech_words):
+            # Pattern 4: Problème technique bloquant
+            tech_phrases = ["ne fonctionne plus du tout", "complètement bloqué", "impossible de se connecter", "ça plante", "ça crash"]
+            if any(phrase in text for phrase in tech_phrases):
                 logger.info(f"🚨 Escalade détectée: TECHNICAL_ISSUE")
                 return EscalationReason.TECHNICAL_ISSUE
             
-            # Pattern 5: Demande explicite
-            if any(phrase in text for phrase in ["parler à quelqu'un", "agent humain", "support client", "humain"]):
+            # Pattern 5: Demande explicite d'agent humain
+            if any(phrase in text for phrase in ["parler à un conseiller", "agent humain", "un humain s'il vous plaît", "je veux parler à quelqu'un"]):
                 logger.info(f"🚨 Escalade détectée: REQUEST_HUMAN")
                 return EscalationReason.REQUEST_HUMAN
             
