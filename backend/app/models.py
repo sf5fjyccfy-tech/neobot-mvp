@@ -1,7 +1,7 @@
 """
 MODÈLES NÉOBOT OPTIMISÉS - Version robuste sans dépendances circulaires
 """
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, JSON, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, JSON, Float, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 import enum
@@ -73,8 +73,9 @@ PLAN_LIMITS = {
         "name": "Essential",
         "display_name": "Essential",
         "available": True,
-        "price_fcfa": 20000,
-        "whatsapp_messages": 2000,           # 2 000 messages/mois
+        "price_fcfa": 20000,    # XAF (Afrique centrale)
+        "price_ngn": 20000,     # NGN (Nigeria)
+        "whatsapp_messages": 2500,           # 2 500 messages/mois
         "channels": 1,
         "max_agents": 1,                     # 1 seul agent actif
         "max_knowledge_sources": 3,          # 3 sources max
@@ -86,14 +87,15 @@ PLAN_LIMITS = {
         "analytics_days": 30,
         "features": [
             "1 agent IA actif",
-            "2 000 messages/mois",
+            "2 500 messages WhatsApp/mois",
             "Types d'agents : Libre, RDV, Support, FAQ, Vente, Qualification",
-            "Sources : Texte + PDF (3 max)",
-            "Génération prompt par IA",
+            "Sources de connaissance : Texte + PDF (3 max)",
+            "Génération de prompt par IA",
             "Délai de réponse configurable",
             "Rappels RDV automatiques",
-            "Dashboard 30 jours",
-            "20 messages de test par session",
+            "Dashboard Analytics 30 jours",
+            "20 crédits de test bot par session",
+            "Support par email",
             "Essai gratuit 14 jours",
         ],
         "trial_days": 14,
@@ -102,12 +104,13 @@ PLAN_LIMITS = {
         "name": "Business",
         "display_name": "Business",
         "available": False,                  # Gelé — bientôt disponible
-        "price_fcfa": 50000,
+        "price_fcfa": 50000,    # XAF
+        "price_ngn": 50000,     # NGN
         "whatsapp_messages": 5000,
         "channels": 3,
         "max_agents": 3,
         "max_knowledge_sources": 10,
-        "allowed_source_types": ["text", "pdf", "url", "youtube"],
+        "allowed_source_types": ["text", "pdf"],  # Pas d'URL ni YouTube
         "can_generate_prompt_ai": True,
         "response_delay_configurable": True,
         "test_credits_per_session": 20,
@@ -115,12 +118,14 @@ PLAN_LIMITS = {
         "analytics_days": 30,
         "features": [
             "3 agents IA actifs",
-            "5 000 messages/mois",
+            "5 000 messages WhatsApp/mois",
             "Tous les types d'agents",
-            "Sources : Texte + PDF + URL + YouTube (10 max)",
-            "Génération prompt par IA",
+            "Sources de connaissance : Texte + PDF (10 max)",
+            "Génération de prompt par IA",
+            "Délai de réponse configurable",
             "Rappels RDV + Suivi commande + Promos ciblées",
-            "Dashboard 30 jours",
+            "Dashboard Analytics 30 jours",
+            "20 crédits de test bot par session",
             "Support email prioritaire",
         ],
         "trial_days": 7,
@@ -129,12 +134,13 @@ PLAN_LIMITS = {
         "name": "Enterprise",
         "display_name": "Enterprise",
         "available": False,                  # Gelé — bientôt disponible
-        "price_fcfa": 90000,
+        "price_fcfa": 100000,   # XAF
+        "price_ngn": 100000,    # NGN
         "whatsapp_messages": -1,             # Illimité
         "channels": -1,
         "max_agents": -1,
         "max_knowledge_sources": -1,
-        "allowed_source_types": ["text", "pdf", "url", "youtube"],
+        "allowed_source_types": ["text", "pdf"],  # Pas d'URL ni YouTube
         "can_generate_prompt_ai": True,
         "response_delay_configurable": True,
         "test_credits_per_session": 20,
@@ -144,9 +150,12 @@ PLAN_LIMITS = {
             "Agents illimités",
             "Messages illimités",
             "Tous les types d'agents",
-            "Sources illimitées (Texte + PDF + URL + YouTube)",
-            "Expiration abonnement + Tous les sortants",
-            "Dashboard 90 jours + Export",
+            "Sources de connaissance illimitées (Texte + PDF)",
+            "Génération de prompt par IA",
+            "Délai de réponse configurable",
+            "Rappels RDV + Commandes + Expiration abonnement + Promos",
+            "Dashboard Analytics 90 jours + Export",
+            "20 crédits de test bot par session",
             "Support dédié WhatsApp",
         ],
         "trial_days": 0,
@@ -168,7 +177,7 @@ class Tenant(Base):
     whatsapp_connected = Column(Boolean, default=False)
     
     messages_used = Column(Integer, default=0)
-    messages_limit = Column(Integer, default=2000)
+    messages_limit = Column(Integer, default=2500)
     
     is_trial = Column(Boolean, default=True)
     trial_ends_at = Column(DateTime, nullable=True)
@@ -178,6 +187,15 @@ class Tenant(Base):
         return PLAN_LIMITS.get(self.plan, PLAN_LIMITS[PlanType.BASIC])
 
     
+    is_suspended = Column(Boolean, default=False, nullable=False, server_default="false")
+    suspension_reason = Column(Text, nullable=True)
+    suspended_at = Column(DateTime, nullable=True)
+
+    is_deleted = Column(Boolean, default=False, nullable=False, server_default="false")
+    deleted_at = Column(DateTime, nullable=True)
+
+    messages_period_start = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -195,10 +213,17 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
     role = Column(String(50), default="user")  # "user", "admin", "owner"
+    is_superadmin = Column(Boolean, default=False, nullable=False, server_default="false")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
-    
+    # TOTP 2FA (superadmin uniquement)
+    totp_secret = Column(String(64), nullable=True)
+    totp_enabled = Column(Boolean, default=False, nullable=False, server_default="false")
+    # Reset de mot de passe
+    reset_token = Column(String(255), nullable=True, unique=True)          # SHA-256 du token envoyé par email
+    reset_token_expires_at = Column(DateTime, nullable=True)
+
     tenant = relationship("Tenant", back_populates="users")
 
 # ========== CONTACTS ==========
@@ -225,7 +250,7 @@ class Contact(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (
-        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'phone', name='uq_contact_phone'),
+        UniqueConstraint('tenant_id', 'phone', name='uq_contact_phone'),
     )
 
 class Conversation(Base):
@@ -239,7 +264,10 @@ class Conversation(Base):
     status = Column(String(50), default="active")  # active, escalated, closed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     last_message_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    # Outcome détecté par le bot (rdv_pris, vente, lead_qualifié, support_résolu, désintérêt)
+    outcome_type = Column(String(50), nullable=True, default=None)
+    outcome_detected_at = Column(DateTime, nullable=True, default=None)
+
     # Relations (en utilisant des strings)
     tenant = relationship("Tenant", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation")
@@ -289,7 +317,7 @@ class TenantBusinessConfig(Base):
     
     # Configuration IA
     tone = Column(String(50), nullable=True)                   # "Friendly", "Professional"
-    selling_focus = Column(String(255), nullable=True)         # "Quality", "Price", "Service"
+    selling_focus = Column(Text, nullable=True)               # texte libre, peut être long
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -352,7 +380,7 @@ class UsageTracking(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (
-        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'month_year', name='uq_tenant_month'),
+        UniqueConstraint('tenant_id', 'month_year', name='uq_tenant_month'),
     )
 
 # ========== OVERAGE PRICING ==========
@@ -374,7 +402,7 @@ class Overage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (
-        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'month_year', name='uq_overage_tenant_month'),
+        UniqueConstraint('tenant_id', 'month_year', name='uq_overage_tenant_month'),
     )
 
 # ========== SUBSCRIPTION MANAGEMENT ==========
@@ -484,7 +512,7 @@ class ContactSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (
-        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'phone_number', name='uq_contact_setting'),
+        UniqueConstraint('tenant_id', 'phone_number', name='uq_contact_setting'),
     )
 
 
@@ -657,7 +685,7 @@ class PromptVariable(Base):
     agent = relationship("AgentTemplate", back_populates="prompt_variables")
 
     __table_args__ = (
-        __import__('sqlalchemy').UniqueConstraint('agent_id', 'key', name='uq_agent_variable_key'),
+        UniqueConstraint('agent_id', 'key', name='uq_agent_variable_key'),
     )
 
 
@@ -698,5 +726,172 @@ class OutboundTracking(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        __import__('sqlalchemy').UniqueConstraint('tenant_id', 'phone_number', name='uq_outbound_tenant_phone'),
+        UniqueConstraint('tenant_id', 'phone_number', name='uq_outbound_tenant_phone'),
     )
+
+
+# ========== NEOPAY — SYSTÈME DE PAIEMENT ==========
+
+class PaymentLink(Base):
+    """
+    Lien de paiement unique à durée limitée (24h).
+    URL publique : /pay/{token}
+    Généré à l'inscription ou via l'admin.
+    """
+    __tablename__ = "payment_links"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    token       = Column(String(64), unique=True, nullable=False, index=True)
+    tenant_id   = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    plan        = Column(String(50), nullable=False)    # BASIC | STANDARD | PRO
+    amount      = Column(Integer, nullable=False)        # Montant en unité de devise
+    currency    = Column(String(10), nullable=False, default="NGN")
+    status      = Column(String(20), nullable=False, default="pending")
+    # pending | paid | expired | cancelled
+    expires_at  = Column(DateTime, nullable=False)
+    paid_at     = Column(DateTime, nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+
+
+class PaymentEvent(Base):
+    """
+    Trace de chaque transaction paiement, quel que soit le provider.
+    Source unique de vérité. Jamais de numéro de carte, CVV ou données bancaires.
+    """
+    __tablename__ = "payment_events"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    transaction_id       = Column(String(255), unique=True, nullable=False, index=True)
+    provider             = Column(String(20), nullable=False)   # korapay | campay
+    payment_link_id      = Column(Integer, ForeignKey("payment_links.id"), nullable=True)
+    tenant_id            = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    plan                 = Column(String(50), nullable=False)
+    amount               = Column(Integer, nullable=False)
+    currency             = Column(String(10), nullable=False, default="NGN")
+    payment_method       = Column(String(50), nullable=True)    # card | mobile_money
+    status               = Column(String(30), nullable=False, default="initiated")
+    # initiated | pending | confirmed | failed | refunded | cancelled
+    provider_raw_status  = Column(String(100), nullable=True)
+    failure_reason       = Column(Text, nullable=True)
+    customer_email       = Column(String(255), nullable=True)
+    customer_phone       = Column(String(50), nullable=True)
+    payment_metadata     = Column(JSON, nullable=True)           # Données extra provider (jamais de carte)
+    created_at           = Column(DateTime, default=datetime.utcnow)
+    updated_at           = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tenant       = relationship("Tenant", foreign_keys=[tenant_id])
+    payment_link = relationship("PaymentLink", foreign_keys=[payment_link_id])
+
+
+class SentryAlert(Base):
+    """
+    Anti-spam des notifications Sentry.
+    1 analyse Claude + 1 GitHub Issue max par erreur unique par heure.
+    """
+    __tablename__ = "sentry_alerts"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    error_id          = Column(String(255), unique=True, nullable=False, index=True)
+    title             = Column(String(500), nullable=True)
+    service           = Column(String(50), nullable=True)    # backend | frontend | whatsapp
+    severity          = Column(String(20), nullable=True)    # critique | haute | moyenne
+    occurrences_count = Column(Integer, nullable=False, default=1)
+    status            = Column(String(20), nullable=False, default="open")  # open | resolved
+    issue_github_url  = Column(Text, nullable=True)
+    last_notified_at  = Column(DateTime, nullable=False, default=datetime.utcnow)
+    first_seen_at     = Column(DateTime, nullable=True)
+    last_seen_at      = Column(DateTime, nullable=True)
+    sentry_url        = Column(Text, nullable=True)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ApiCredit(Base):
+    """
+    Historique des soldes API (DeepSeek + Anthropic).
+    Utilisé pour le dashboard admin, les graphiques 30j et les alertes de seuil.
+    """
+    __tablename__ = "api_credits"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    provider       = Column(String(30), nullable=False, index=True)  # deepseek | anthropic
+    balance_usd    = Column(Float, nullable=False)
+    balance_tokens = Column(Integer, nullable=True)
+    is_degraded    = Column(Boolean, nullable=False, default=False)
+    checked_at     = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class WebhookEvent(Base):
+    """
+    Idempotence stricte des webhooks entrants.
+    Chaque webhook_id est traité une seule fois.
+    Retry automatique si traitement échoue (max 12 tentatives sur 1h).
+    """
+    __tablename__ = "webhook_events"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    webhook_id      = Column(String(255), unique=True, nullable=False, index=True)
+    provider        = Column(String(20), nullable=False)        # korapay | campay
+    event_type      = Column(String(100), nullable=False)       # charge.completed
+    status          = Column(String(20), nullable=False, default="pending")
+    # pending | processed | failed | skipped
+    raw_payload     = Column(JSON, nullable=False)
+    attempts        = Column(Integer, nullable=False, default=0)
+    last_attempt_at = Column(DateTime, nullable=True)
+    processed_at    = Column(DateTime, nullable=True)
+    error_detail    = Column(Text, nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ========== SÉCURITÉ — ANTI-BRUTE-FORCE + TOKENS ================================
+
+class LoginAttempt(Base):
+    """
+    Trace chaque tentative de connexion par IP.
+    Permet de détecter et bloquer les attaques brute-force.
+    Anti-spam : purgé automatiquement sur les entrées > 24h en cron.
+    """
+    __tablename__ = "login_attempts"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    ip_address   = Column(String(45), nullable=False, index=True)   # IPv4 ou IPv6
+    email        = Column(String(255), nullable=True)                # Email tenté
+    success      = Column(Boolean, nullable=False, default=False)
+    attempted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class RefreshToken(Base):
+    """
+    Tokens de rafraîchissement JWT (expiration 30 jours, rotation sécurisée).
+    Un refresh invalide l'ancien et émet un nouveau — detect theft via token reuse.
+    """
+    __tablename__ = "refresh_tokens"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)  # SHA-256
+    revoked    = Column(Boolean, nullable=False, default=False)
+    revoked_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class RevokedToken(Base):
+    """
+    Blacklist des access tokens JWT révoqués (logout explicite).
+    Purgé automatiquement par le cron après expiration du JWT.
+    """
+    __tablename__ = "revoked_tokens"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    jti        = Column(String(64), unique=True, nullable=False, index=True)
+    user_id    = Column(Integer, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, nullable=False, default=datetime.utcnow)

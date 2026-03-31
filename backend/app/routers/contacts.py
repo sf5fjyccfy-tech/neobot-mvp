@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 import logging
 
 from ..database import get_db
-from ..models import ContactSetting
+from ..models import ContactSetting, User
 from ..services.contact_filter_service import ContactFilterService
 from ..schemas import AIToggleRequest, BulkPhoneRequest
+from ..dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,11 @@ router = APIRouter(prefix="/api/tenants", tags=["contacts"])
 @router.get("/{tenant_id}/contacts")
 async def get_all_contacts(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Récupère tous les contacts avec leurs settings
     Triés par nombre de messages (décroissant)
@@ -44,8 +48,11 @@ async def get_all_contacts(
 @router.get("/{tenant_id}/contacts/disabled")
 async def get_disabled_contacts(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Récupère seulement les contacts avec IA désactivée
     """
@@ -69,8 +76,11 @@ async def toggle_ai_for_contact(
     tenant_id: int,
     phone: str,
     body: AIToggleRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Active/désactive IA pour un contact spécifique
     
@@ -100,8 +110,11 @@ async def toggle_ai_for_contact(
 async def bulk_disable_ai(
     tenant_id: int,
     body: BulkPhoneRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Désactive IA pour plusieurs contacts
     
@@ -129,8 +142,11 @@ async def bulk_disable_ai(
 async def bulk_enable_ai(
     tenant_id: int,
     body: BulkPhoneRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Réactive IA pour plusieurs contacts
     

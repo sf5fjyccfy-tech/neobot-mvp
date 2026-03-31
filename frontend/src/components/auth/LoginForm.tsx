@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { setToken } from '@/lib/api';
+import { buildApiUrl, setToken, setTenantId, setIsSuperadmin } from '@/lib/api';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 
 interface LoginFormData {
@@ -14,8 +14,16 @@ export default function LoginForm() {
   const router = useRouter();
   const [formData, setFormData] = useState<LoginFormData>({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('session_expired')) {
+      setSessionExpired(true);
+      localStorage.removeItem('session_expired');
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -27,7 +35,7 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login`, {
+      const response = await fetch(buildApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -41,7 +49,10 @@ export default function LoginForm() {
       }
 
       setToken(data.access_token);
-      router.push('/dashboard');
+      setTenantId(data.tenant_id);
+      setIsSuperadmin(data.is_superadmin ?? false);
+      // Hard redirect : garantit que le cookie auth_session est envoyé avec la prochaine requête middleware
+      window.location.href = data.is_superadmin ? '/admin' : '/dashboard';
     } catch {
       setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
     } finally {
@@ -54,6 +65,12 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {sessionExpired && (
+        <div className="bg-orange-500/15 border border-orange-400/30 text-orange-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+          <span className="text-orange-400 mt-0.5">🔒</span>
+          Votre session a expiré. Reconnectez-vous pour continuer.
+        </div>
+      )}
       {error && (
         <div className="bg-red-500/20 border border-red-400/30 text-red-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
           <span className="text-red-400 mt-0.5">⚠</span>
@@ -76,7 +93,7 @@ export default function LoginForm() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className={labelClass.replace('mb-1.5', '')}>Mot de passe</label>
-          <a href="#" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+          <a href="/forgot-password" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
             Mot de passe oublié ?
           </a>
         </div>

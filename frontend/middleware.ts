@@ -1,45 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Protected routes that require authentication
+// Routes protégées (utilisateurs normaux) — redirige vers /login sans cookie
 const PROTECTED_ROUTES = [
   '/dashboard',
+  '/agent',
   '/conversations',
   '/settings',
   '/analytics',
-  '/clients',
+  '/config',
   '/billing',
+  '/pricing',
 ];
 
-// Public routes (no auth required)
-const PUBLIC_ROUTES = ['/login', '/signup', '/'];
+// Routes admin — endpoint d'entrée séparé : /admin/login
+// /admin/login est PUBLIC intentionnellement (pas de cookie requis)
+const ADMIN_PUBLIC = '/admin/login';
+const ADMIN_PREFIX = '/admin';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  // Check if route is protected
-  const isProtected = PROTECTED_ROUTES.some(route => pathname.startsWith(route));
-  
-  // Get token from cookies (set by backend after login)
-  const token = request.cookies.get('access_token')?.value;
-  
-  // If route is protected and no token, redirect to login
-  if (isProtected && !token) {
+  const authSession = request.cookies.get('auth_session')?.value;
+
+  // ── Routes admin ──────────────────────────────────────────────────────────
+  if (pathname.startsWith(ADMIN_PREFIX)) {
+    if (pathname === ADMIN_PUBLIC || pathname.startsWith(ADMIN_PUBLIC + '/')) {
+      // Page de login admin : si déjà connecté → /admin
+      if (authSession) return NextResponse.redirect(new URL('/admin', request.url));
+      return NextResponse.next();
+    }
+    // Toute autre page /admin/* → doit passer par /admin/login (PAS /login)
+    if (!authSession) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // ── Routes protégées normales ─────────────────────────────────────────────
+  const isProtected = PROTECTED_ROUTES.some(r => pathname.startsWith(r));
+  if (isProtected && !authSession) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }
-  
-  // If user is logged in and tries to access login/signup, redirect to dashboard
-  if (token && (pathname === '/login' || pathname === '/signup')) {
+
+  // Si connecté et essaie d'accéder à login/signup → dashboard
+  if (authSession && (pathname === '/login' || pathname === '/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
-  
+
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    // Match all routes except static files and api routes
     '/((?!_next/static|_next/image|favicon.ico|api).*)',
   ],
 };
+

@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 
 from app.database import get_db
-from app.models import AgentTemplate, AgentType, KnowledgeSource, PromptVariable, Tenant
+from app.models import AgentTemplate, AgentType, KnowledgeSource, PromptVariable, Tenant, User
+from app.dependencies import get_current_user
 from app.services.agent_service import (
     AgentService,
     build_agent_system_prompt,
@@ -20,7 +21,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/tenants", tags=["agents"])
+router = APIRouter(
+    prefix="/api/tenants",
+    tags=["agents"],
+    dependencies=[Depends(get_current_user)],  # Toutes les routes exigent un login
+)
 
 
 # ======================== SCHEMAS ========================
@@ -37,6 +42,7 @@ class AgentCreateRequest(BaseModel):
     availability_start: Optional[str] = None   # "08:00"
     availability_end: Optional[str] = None     # "22:00"
     off_hours_message: Optional[str] = None
+    response_delay: Optional[str] = None       # "instant", "natural", "slow"
     activate: bool = False
 
 
@@ -51,10 +57,13 @@ class AgentUpdateRequest(BaseModel):
     availability_start: Optional[str] = None
     availability_end: Optional[str] = None
     off_hours_message: Optional[str] = None
+    response_delay: Optional[str] = None       # "instant", "natural", "slow"
+    typing_indicator: Optional[bool] = None
 
 
 class PromptVariableRequest(BaseModel):
-    key: str = Field(..., pattern=r'^[a-z_][a-z0-9_]*$')
+    # Accepte lettres latines + accents (é, è, ê...) + chiffres + underscore
+    key: str = Field(..., pattern=r'^[\w][\w0-9]*$', min_length=1, max_length=64)
     value: str
     description: Optional[str] = None
 
@@ -90,6 +99,8 @@ def _agent_to_dict(agent: AgentTemplate) -> dict:
         "availability_start": agent.availability_start,
         "availability_end": agent.availability_end,
         "off_hours_message": agent.off_hours_message,
+        "response_delay": agent.response_delay,
+        "typing_indicator": agent.typing_indicator,
         "prompt_score": agent.prompt_score,
         "is_active": agent.is_active,
         "created_at": agent.created_at.isoformat() if agent.created_at else None,
@@ -97,11 +108,22 @@ def _agent_to_dict(agent: AgentTemplate) -> dict:
     }
 
 
+def _check_tenant_access(tenant_id: int, current_user: User) -> None:
+    """Vérifie isolation tenant — superadmin peut tout voir."""
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé à ce tenant")
+
+
 # ======================== ENDPOINTS AGENTS ========================
 
 @router.get("/{tenant_id}/agents")
-async def list_agents(tenant_id: int, db: Session = Depends(get_db)):
+async def list_agents(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Liste tous les agents du tenant."""
+    _check_tenant_access(tenant_id, current_user)
     agents = AgentService.list_agents(tenant_id, db)
     return {
         "tenant_id": tenant_id,
@@ -111,8 +133,19 @@ async def list_agents(tenant_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{tenant_id}/agents", status_code=201)
-async def create_agent(tenant_id: int, body: AgentCreateRequest, db: Session = Depends(get_db)):
+async def create_agent(
+    tenant_id: int,
+    body: AgentCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Crée un nouvel agent pour le tenant."""
+    _check_tenant_access(tenant_id, current_user)
+    if tenant_id == 1:
+        raise HTTPException(
+            status_code=403,
+            detail="Le tenant NéoBot (id=1) est verrouillé. Modifiez directement l'agent existant via PUT."
+        )
     agent = AgentService.create_agent(
         tenant_id=tenant_id,
         name=body.name,
@@ -133,8 +166,13 @@ async def create_agent(tenant_id: int, body: AgentCreateRequest, db: Session = D
 
 
 @router.get("/{tenant_id}/agents/active")
-async def get_active_agent(tenant_id: int, db: Session = Depends(get_db)):
+async def get_active_agent(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Retourne l'agent actuellement actif du tenant."""
+    _check_tenant_access(tenant_id, current_user)
     agent = AgentService.get_active_agent(tenant_id, db)
     if not agent:
         return {"tenant_id": tenant_id, "agent": None, "message": "Aucun agent actif"}
@@ -148,8 +186,14 @@ async def get_default_prompts(tenant_id: int):
 
 
 @router.get("/{tenant_id}/agents/{agent_id}")
-async def get_agent(tenant_id: int, agent_id: int, db: Session = Depends(get_db)):
+async def get_agent(
+    tenant_id: int,
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Récupère un agent par son ID."""
+    _check_tenant_access(tenant_id, current_user)
     agent = db.query(AgentTemplate).filter(
         AgentTemplate.id == agent_id,
         AgentTemplate.tenant_id == tenant_id,
@@ -161,9 +205,14 @@ async def get_agent(tenant_id: int, agent_id: int, db: Session = Depends(get_db)
 
 @router.put("/{tenant_id}/agents/{agent_id}")
 async def update_agent(
-    tenant_id: int, agent_id: int, body: AgentUpdateRequest, db: Session = Depends(get_db)
+    tenant_id: int,
+    agent_id: int,
+    body: AgentUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Met à jour les champs d'un agent."""
+    _check_tenant_access(tenant_id, current_user)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if "custom_prompt" in updates:
         updates["custom_prompt_override"] = updates.pop("custom_prompt")
@@ -175,8 +224,19 @@ async def update_agent(
 
 
 @router.post("/{tenant_id}/agents/{agent_id}/activate")
-async def activate_agent(tenant_id: int, agent_id: int, db: Session = Depends(get_db)):
+async def activate_agent(
+    tenant_id: int,
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Active un agent (désactive les autres)."""
+    _check_tenant_access(tenant_id, current_user)
+    if tenant_id == 1 and agent_id != 1:
+        raise HTTPException(
+            status_code=403,
+            detail="Le tenant NéoBot est verrouillé : seul l'agent NéoBot Commercial (id=1) peut être actif."
+        )
     agent = AgentService.activate_agent(agent_id, tenant_id, db)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent non trouvé")
@@ -184,8 +244,19 @@ async def activate_agent(tenant_id: int, agent_id: int, db: Session = Depends(ge
 
 
 @router.delete("/{tenant_id}/agents/{agent_id}")
-async def delete_agent(tenant_id: int, agent_id: int, db: Session = Depends(get_db)):
+async def delete_agent(
+    tenant_id: int,
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Supprime un agent."""
+    _check_tenant_access(tenant_id, current_user)
+    if tenant_id == 1 and agent_id == 1:
+        raise HTTPException(
+            status_code=403,
+            detail="L'agent NéoBot Commercial ne peut pas être supprimé."
+        )
     success = AgentService.delete_agent(agent_id, tenant_id, db)
     if not success:
         raise HTTPException(status_code=404, detail="Agent non trouvé")
@@ -385,3 +456,56 @@ async def delete_knowledge_source(
     db.delete(source)
     db.commit()
     return {"status": "deleted", "source_id": source_id}
+
+
+# ======================== ENDPOINT CHAT TEST ========================
+
+class ChatTestRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+    history: Optional[List[dict]] = []
+
+
+@router.post("/{tenant_id}/agents/{agent_id}/chat-test")
+async def chat_test(
+    tenant_id: int, agent_id: int, body: ChatTestRequest, db: Session = Depends(get_db)
+):
+    """
+    Teste l'agent en temps réel depuis le dashboard.
+    Utilise le prompt système complet (variables résolues, base de connaissance) + l'historique.
+    Limité à 5 échanges côté frontend — pas de suivi de quota ici.
+    """
+    agent = db.query(AgentTemplate).filter(
+        AgentTemplate.id == agent_id,
+        AgentTemplate.tenant_id == tenant_id,
+    ).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent non trouvé")
+
+    system_prompt = build_agent_system_prompt(agent, db)
+
+    # Reconstituer l'historique au format OpenAI (le frontend envoie role='bot', DeepSeek attend 'assistant')
+    messages: list = [{"role": "system", "content": system_prompt}]
+    for turn in (body.history or []):
+        role = turn.get("role", "user")
+        if role == "bot":
+            role = "assistant"
+        if role in ("user", "assistant") and turn.get("content"):
+            messages.append({"role": role, "content": turn["content"]})
+    messages.append({"role": "user", "content": body.message})
+
+    result = await DeepSeekClient.call(
+        messages=messages,
+        model="deepseek-chat",
+        temperature=0.7,
+        max_tokens=300,
+    )
+
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=f"Erreur IA : {result['error']}")
+
+    try:
+        response_text = result["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError):
+        raise HTTPException(status_code=503, detail="Réponse IA invalide")
+
+    return {"response": response_text, "agent_id": agent_id}

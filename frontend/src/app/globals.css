@@ -2,69 +2,236 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   NEOBOT — Design System Tokens (palette Orange × Teal)
+   ============================================================ */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* Couleurs signature NeoBot */
+  --neo-fire:    #FF4D00;   /* Orange soleil africain — CTA, accents primaires */
+  --neo-ember:   #FF7A3D;   /* Orange doux — hover, secondaire */
+  --neo-teal:    #00E5CC;   /* Turquoise électrique — accent tech */
+  --neo-teal-dk: #00B5A0;   /* Teal sombre */
+  --neo-amber:   #FFD580;   /* Ambre chaud — tertiaire */
+
+  /* Backgrounds */
+  --neo-bg:      #06040E;   /* Fond quasi-noir teinte prune */
+  --neo-surface: #0C0916;   /* Surface des cards */
+  --neo-lift:    #110D1F;   /* Surface élevée */
+
+  /* Bordures & texte */
+  --neo-border:  #1C1428;   /* Bordures subtiles */
+  --neo-muted:   #5C4E7A;   /* Texte secondaire */
+  --neo-text:    #EDE8FF;   /* Texte principal blanc lavande */
+
+  /* Héritage Tailwind */
+  --foreground-rgb: 237, 232, 255;
+  --background-start-rgb: 6, 4, 14;
+  --background-end-rgb: 6, 4, 14;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
-}
-
+/* ============================================================
+   BASE
+   ============================================================ */
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--neo-text);
+  background-color: var(--neo-bg);
+  font-family: 'DM Sans', sans-serif;
 }
 
-/* Custom scrollbar */
+/* Z-index layering : canvas galaxy = 0, contenu = 1+ */
+#neo-galaxy-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Tout le contenu par-dessus le canvas */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
+  background: var(--neo-bg);
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: var(--neo-border);
   border-radius: 10px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: var(--neo-muted);
 }
 
-/* Animation pour les cartes */
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+/* Scintillement étoiles (CSS fallback pour éléments non-canvas) */
+@keyframes neo-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50%       { opacity: 1; }
+}
+
+/* Étoile filante CSS (pour landing uniquement) */
+@keyframes neo-shoot {
+  0%   { transform: translateX(0) translateY(0); opacity: 1; }
+  100% { transform: translateX(400px) translateY(200px); opacity: 0; }
+}
+
+/* Flottement particule */
+@keyframes neo-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-12px); }
+}
+
+/* Pulsation glow */
+@keyframes neo-pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,77,0,0.3); }
+  50%       { box-shadow: 0 0 24px rgba(255,77,0,0.7), 0 0 48px rgba(255,77,0,0.2); }
+}
+
+/* Fade-up (apparition UI) */
+@keyframes neo-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Spin lent (icônes de chargement) */
+@keyframes neo-spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+/* Gradient animé sur texte */
+@keyframes neo-gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Loading pulse (skeleton) */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ============================================================
+   UTILITAIRES
+   ============================================================ */
+
+.animate-pulse       { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.animate-neo-float   { animation: neo-float 4s ease-in-out infinite; }
+.animate-neo-fade-up { animation: neo-fade-up 0.5s ease forwards; }
+
+/* Card NeoBot standard — glass effect */
+.neo-card {
+  background: rgba(12, 9, 22, 0.78);
+  border: 1px solid var(--neo-border);
+  border-radius: 16px;
+  padding: 24px;
+  position: relative;
+  z-index: 1;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* Bouton primaire */
+.neo-btn-primary {
+  background: var(--neo-fire);
+  color: #fff;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 28px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.neo-btn-primary:hover {
+  background: var(--neo-ember);
+  box-shadow: 0 0 20px rgba(255,77,0,0.4);
+}
+
+/* Texte dégradé orange→teal */
+.neo-gradient-text {
+  background: linear-gradient(135deg, var(--neo-fire), var(--neo-teal));
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: neo-gradient-shift 4s ease infinite;
+}
+
+/* Hover card */
 .card-hover {
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 }
-
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-color: rgba(255,77,0,0.3) !important;
+  box-shadow: 0 8px 32px rgba(255,77,0,0.1);
 }
 
-/* Loading animation */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+/* ============================================================
+   APP SHELL — Sidebar navigation responsive
+   ============================================================ */
+
+/* Sidebar fixe gauche (desktop) */
+.app-shell-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 220px;
+  background: rgba(12, 9, 22, 0.95);
+  border-right: 1px solid #1C1428;
+  backdrop-filter: blur(12px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease;
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* Contenu principal décalé à droite de la sidebar */
+.app-shell-main {
+  margin-left: 220px;
+  min-height: 100vh;
+}
+
+/* Bottom nav (mobile) — caché par défaut sur desktop */
+.app-shell-bottom-nav {
+  display: none;
+}
+
+/* Mobile : cacher la sidebar, montrer la bottom nav */
+@media (max-width: 768px) {
+  .app-shell-sidebar {
+    display: none;
+  }
+
+  .app-shell-main {
+    margin-left: 0;
+    padding-bottom: 70px; /* espace pour la bottom nav */
+  }
+
+  .app-shell-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(12, 9, 22, 0.97);
+    border-top: 1px solid #1C1428;
+    backdrop-filter: blur(12px);
+    z-index: 50;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px;
+  }
 }

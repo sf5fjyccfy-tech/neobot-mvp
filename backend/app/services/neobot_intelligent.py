@@ -19,7 +19,7 @@ class NeobotIntelligent:
                 "🚀 **NÉOBOT** par DIMANI BALLA TIM PATRICK\n\nSolution d'automatisation conversationnelle par IA pour les businesses africains.\n\n✨ **Fonctionnalités :** IA conversationnelle, Multi-canaux, Analytics temps réel\n🎯 **Secteurs :** Restaurants, E-commerce, Boutiques, Services\n\n💬 Envie d'en savoir plus ?"
             ],
             "prix": [
-                "💰 **FORMULES NÉOBOT**\n\n• BASIQUE : 20,000 FCFA/mois (2,000 messages, 1 canal)\n• STANDARD : 50,000 FCFA/mois (5,000 messages, 3 canaux, IA avancée)\n• PREMIUM : 90,000 FCFA/mois (Messages illimités, Tous canaux, Support prioritaire)\n\n💡 Promotions possibles selon votre business !"
+                "💰 **PLAN ESSENTIAL — NéoBot**\n\n🏷️ Essential : 20 000 FCFA/mois\n   ✅ 2 500 messages WhatsApp/mois\n   ✅ 1 agent IA actif\n   ✅ Sources Texte + PDF\n   ✅ Dashboard Analytics 30 jours\n   ✅ Essai gratuit 14 jours — aucune carte requise\n\nD'autres formules arrivent bientôt."
             ],
             "fondateur": [
                 "👨‍💼 **FONDATEUR : DIMANI BALLA TIM PATRICK**\n\nCréateur de NéoBot - Solution d'IA optimisée marché africain.\n🎯 Mission : Rendre l'automatisation accessible aux businesses locaux.\n\n🚀 Une question sur NéoBot ?"

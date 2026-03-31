@@ -1,10 +1,45 @@
 import os
+import hashlib
+import time
 import httpx
+import logging
 from typing import Union
 from ..http_client import DeepSeekClient
 
+logger = logging.getLogger(__name__)
+
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+if not DEEPSEEK_API_KEY:
+    logger.error("❌ DEEPSEEK_API_KEY non défini — les réponses IA seront non-fonctionnelles")
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+
+# ── Cache TTL en mémoire pour les réponses DeepSeek ───────────────────────────
+# Clé = SHA-256(system_prompt + message) — ne cache PAS l'historique à dessein.
+# Utile surtout pour les FAQ répétitives (bonjour, tarifs, horaires...).
+_AI_CACHE: dict[str, tuple[str, float]] = {}
+_CACHE_TTL = 3600       # 1 heure en secondes
+_CACHE_MAX_SIZE = 1000  # éjection aléatoire au-delà pour éviter la croissance infinie
+
+
+def _cache_key(system_prompt: str, message: str) -> str:
+    return hashlib.sha256(f"{system_prompt}|||{message}".encode()).hexdigest()
+
+
+def _cache_get(key: str) -> str | None:
+    entry = _AI_CACHE.get(key)
+    if entry:
+        value, expires_at = entry
+        if time.monotonic() < expires_at:
+            return value
+        del _AI_CACHE[key]  # Expiré
+    return None
+
+
+def _cache_set(key: str, value: str) -> None:
+    if len(_AI_CACHE) >= _CACHE_MAX_SIZE:
+        # Éjection simpliste : supprimer la première entrée (insertion-order dict Python 3.7+)
+        _AI_CACHE.pop(next(iter(_AI_CACHE)))
+    _AI_CACHE[key] = (value, time.monotonic() + _CACHE_TTL)
 
 # === Fonctions qui étaient dans ai_prompts ===
 def detect_mode(business_type: str, business_name: str = None) -> str:
@@ -109,7 +144,12 @@ async def generate_ai_response(
     if conversation_history:
         messages = conversation_history + messages[-2:]
     
-    # 7. Appel API avec client global (pooling) - 50% plus rapide
+    # 7. Appel API avec client global (pooling) — vérification cache d'abord
+    cache_k = _cache_key(system_prompt, message)
+    cached = _cache_get(cache_k)
+    if cached is not None:
+        return cached
+
     try:
         response_data = await DeepSeekClient.call(
             messages=messages,
@@ -137,6 +177,7 @@ async def generate_ai_response(
             if len(ai_response) > 300:
                 ai_response = ai_response[:297] + "..."
             
+            _cache_set(cache_k, ai_response)
             return ai_response
         else:
             return get_fallback_response(mode, message_lower, business_name)

@@ -130,15 +130,26 @@ PROFIL MÉTIER:
             # 3. Données NéoBot complètes
             neobot_data = {
                 "company_name": "NéoBot",
-                "company_description": "Plateforme d'automatisation WhatsApp avec IA - Répondez à vos clients 24/7",
+                "company_description": "Plateforme SaaS africaine d'automatisation WhatsApp par IA — PME africaines, réponses 24h/24 7j/7",
                 "tone": "Professional, Friendly, Expert, Persuasif",
-                "selling_focus": "Efficacité, Scaling, Support client",
+                "selling_focus": "Automatisation WhatsApp, gain de clients, disponibilité 24h/24",
                 "products_services": json.dumps([
                     {
-                        "name": "Basique",
+                        "name": "Essential",
                         "price": 20000,
-                        "description": "2000 messages/mois + Réponses automatiques + Dashboard - Seul plan actif",
-                        "features": ["2000 messages/mois", "Support email", "Réponses automatiques", "Dashboard", "Essai gratuit 7 jours"]
+                        "description": "2 500 messages/mois — 1 agent IA — Sources texte + PDF — Essai 14j gratuit",
+                        "features": [
+                            "2 500 messages WhatsApp/mois",
+                            "1 agent IA actif (Libre, RDV, Support, FAQ, Vente, Qualification)",
+                            "Sources de connaissance : Texte + PDF (3 max)",
+                            "Génération de prompt par IA",
+                            "Délai de réponse configurable",
+                            "Rappels RDV automatiques",
+                            "Dashboard Analytics 30 jours",
+                            "20 crédits de test bot par session",
+                            "Support par email",
+                            "Essai gratuit 14 jours — aucune carte bancaire requise"
+                        ]
                     }
                 ])
             }

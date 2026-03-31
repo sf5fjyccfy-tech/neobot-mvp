@@ -48,19 +48,16 @@ def get_conversation_response(message: str, db=None, tenant_id=None, phone=None)
                               "**Ça te dit d'essayer gratuitement pendant 14 jours ?**",
             
             # ÉTAPE 4: TARIFS
-            "tarifs": "💰 **INVESTISSEMENT NÉOBOT** (pour Boutique) :\n\n"
-                     "🏷️  **BASIQUE** - 20k FCFA/mois\n"
-                     "   → 2000 messages WhatsApp\n"
-                     "   → Réponses automatiques\n"
-                     "   → Dashboard de base\n\n"
-                     "🏷️  **STANDARD** - 50k FCFA/mois\n"
-                     "   → Messages illimités\n"
-                     "   → IA avancée\n"
-                     "   → Analytics complets\n\n"
-                     "🏷️  **PRO** - 90k FCFA/mois\n"
-                     "   → API + intégrations\n"
-                     "   → Support prioritaire\n\n"
-                     "🎁 **ESSAI GRATUIT 14 JOURS** (aucune carte requise)\n\n"
+            "tarifs": "💰 **PLAN ESSENTIAL — NéoBot**\n\n"
+                     "🏷️  **Essential** — 20 000 FCFA/mois\n"
+                     "   ✅ 2 500 messages WhatsApp/mois\n"
+                     "   ✅ 1 agent IA (Vente, RDV, Support, FAQ…)\n"
+                     "   ✅ Sources Texte + PDF\n"
+                     "   ✅ Dashboard Analytics 30 jours\n"
+                     "   ✅ Rappels RDV automatiques\n"
+                     "   ✅ Support par email\n\n"
+                     "🎁 **ESSAI GRATUIT 14 JOURS** — Aucune carte bancaire requise !\n\n"
+                     "D'autres formules arrivent bientôt.\n\n"
                      "**Tu veux activer l'essai maintenant ?**",
             
             # RÉPONSE PAR DÉFAUT GARANTIE

@@ -1,0 +1,22 @@
+                                          Table "public.contact_settings"
+    Column     |            Type             | Collation | Nullable |                   Default                    
+---------------+-----------------------------+-----------+----------+----------------------------------------------
+ id            | integer                     |           | not null | nextval('contact_settings_id_seq'::regclass)
+ tenant_id     | integer                     |           | not null | 
+ phone_number  | character varying(50)       |           | not null | 
+ ai_enabled    | boolean                     |           |          | 
+ contact_name  | character varying(255)      |           |          | 
+ message_count | integer                     |           |          | 
+ first_seen    | timestamp without time zone |           |          | 
+ last_seen     | timestamp without time zone |           |          | 
+ created_at    | timestamp without time zone |           |          | 
+ updated_at    | timestamp without time zone |           |          | 
+Indexes:
+    "contact_settings_pkey" PRIMARY KEY, btree (id)
+    "idx_contact_settings_phone" btree (tenant_id, phone_number)
+    "ix_contact_settings_id" btree (id)
+    "ix_contact_settings_tenant_id" btree (tenant_id)
+    "uq_contact_setting" UNIQUE CONSTRAINT, btree (tenant_id, phone_number)
+Foreign-key constraints:
+    "contact_settings_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+

@@ -3,10 +3,14 @@ Usage Router - Endpoints pour l'utilisation et les statistiques
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
+from datetime import datetime, timezone
+from typing import Optional
 
 from app.database import get_db
-from app.models import Tenant
+from app.dependencies import verify_tenant_access
+from app.models import Tenant, Message, Conversation
 from app.services.usage_tracking_service import UsageTrackingService
 
 router = APIRouter(prefix="/api/tenants", tags=["usage"])
@@ -24,6 +28,13 @@ class UsageSummaryResponse(BaseModel):
     percent: int
     over_limit: bool
     overage_messages: int
+    # Stats du jour
+    today_messages: int
+    active_conversations: int
+    # Infos essai
+    is_trial: bool
+    trial_ends_at: Optional[str]
+    trial_days_left: Optional[int]
 
 class UsageHistoryItem(BaseModel):
     month_year: str
@@ -37,6 +48,7 @@ class UsageHistoryItem(BaseModel):
 async def get_usage_summary(
     tenant_id: int,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
     """
     Récupère le résumé d'utilisation du mois courant
@@ -72,14 +84,137 @@ async def get_usage_summary(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=summary["error"]
         )
-    
+
+    # Enrichir avec les infos d'essai
+    is_trial = bool(tenant.is_trial)
+    trial_ends_at = tenant.trial_ends_at
+    trial_days_left: Optional[int] = None
+    if is_trial and trial_ends_at:
+        delta = trial_ends_at - datetime.utcnow()
+        trial_days_left = max(0, delta.days)
+
+    summary["is_trial"] = is_trial
+    summary["trial_ends_at"] = trial_ends_at.isoformat() if trial_ends_at else None
+    summary["trial_days_left"] = trial_days_left
+
+    # Messages reçus aujourd'hui (début du jour UTC)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_count = (
+        db.query(func.count(Message.id))
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .filter(
+            Conversation.tenant_id == tenant_id,
+            Message.created_at >= today_start,
+        )
+        .scalar() or 0
+    )
+    summary["today_messages"] = today_count
+
+    # Conversations actives (status='active')
+    active_count = (
+        db.query(func.count(Conversation.id))
+        .filter(
+            Conversation.tenant_id == tenant_id,
+            Conversation.status == "active",
+        )
+        .scalar() or 0
+    )
+    summary["active_conversations"] = active_count
+
     return summary
+
+@router.get("/{tenant_id}/dashboard/stats")
+async def get_dashboard_stats(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
+):
+    """
+    Stats consolidées pour le dashboard : usage + outcomes du bot.
+    Retourne les métriques du jour et du mois courant.
+    """
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant non trouvé")
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Messages du jour (tous)
+    today_messages = (
+        db.query(func.count(Message.id))
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .filter(Conversation.tenant_id == tenant_id, Message.created_at >= today_start)
+        .scalar() or 0
+    )
+
+    # Conversations actives en ce moment
+    active_conversations = (
+        db.query(func.count(Conversation.id))
+        .filter(Conversation.tenant_id == tenant_id, Conversation.status == "active")
+        .scalar() or 0
+    )
+
+    # Outcomes détectés ce mois — comptés par type
+    outcome_rows = (
+        db.query(Conversation.outcome_type, func.count(Conversation.id))
+        .filter(
+            Conversation.tenant_id == tenant_id,
+            Conversation.outcome_type.isnot(None),
+            Conversation.outcome_detected_at >= month_start,
+        )
+        .group_by(Conversation.outcome_type)
+        .all()
+    )
+    outcomes_month = {row[0]: row[1] for row in outcome_rows}
+
+    # Outcomes détectés aujourd'hui
+    outcome_today_rows = (
+        db.query(Conversation.outcome_type, func.count(Conversation.id))
+        .filter(
+            Conversation.tenant_id == tenant_id,
+            Conversation.outcome_type.isnot(None),
+            Conversation.outcome_detected_at >= today_start,
+        )
+        .group_by(Conversation.outcome_type)
+        .all()
+    )
+    outcomes_today = {row[0]: row[1] for row in outcome_today_rows}
+
+    # 5 dernières conversations avec outcome (pour le fil d'activité)
+    recent_outcomes = (
+        db.query(Conversation)
+        .filter(
+            Conversation.tenant_id == tenant_id,
+            Conversation.outcome_type.isnot(None),
+        )
+        .order_by(Conversation.outcome_detected_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_list = [
+        {
+            "customer_name": c.customer_name or c.customer_phone,
+            "outcome_type": c.outcome_type,
+            "detected_at": c.outcome_detected_at.isoformat() if c.outcome_detected_at else None,
+        }
+        for c in recent_outcomes
+    ]
+
+    return {
+        "today_messages": today_messages,
+        "active_conversations": active_conversations,
+        "outcomes_month": outcomes_month,
+        "outcomes_today": outcomes_today,
+        "recent_outcomes": recent_list,
+    }
 
 @router.get("/{tenant_id}/usage/history")
 async def get_usage_history(
     tenant_id: int,
     months: int = 12,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
     """
     Récupère l'historique d'utilisation sur les N derniers mois
@@ -119,6 +254,7 @@ async def get_usage_history(
 async def check_quota_status(
     tenant_id: int,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
     """
     Vérifie si le quota du tenant est dépassé

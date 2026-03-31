@@ -3,9 +3,11 @@ Router pour les endpoints d'analytique.
 Fournit les statistiques et données pour le tableau de bord.
 """
 
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
+from ..dependencies import verify_tenant_access
 from ..services.analytics_service import AnalyticsService
 import logging
 
@@ -17,7 +19,8 @@ router = APIRouter(prefix="/api/tenants", tags=["analytics"])
 @router.get("/{tenant_id}/analytics/dashboard")
 async def get_analytics_dashboard(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère le tableau de bord analytique complet.
@@ -61,7 +64,8 @@ async def get_analytics_dashboard(
 async def get_message_stats(
     tenant_id: int,
     days: int = 30,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les stats de messages pour les N derniers jours.
@@ -96,7 +100,8 @@ async def get_message_stats(
 @router.get("/{tenant_id}/analytics/conversations")
 async def get_conversation_stats(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les stats de conversations.
@@ -127,7 +132,8 @@ async def get_conversation_stats(
 async def get_revenue_stats(
     tenant_id: int,
     months: int = 12,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les stats de revenus (dépassements).
@@ -164,7 +170,8 @@ async def get_revenue_stats(
 async def get_message_chart(
     tenant_id: int,
     days: int = 30,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les messages par jour pour un graphique.
@@ -196,7 +203,8 @@ async def get_message_chart(
 async def get_top_clients(
     tenant_id: int,
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les N clients les plus actifs.
@@ -228,7 +236,8 @@ async def get_top_clients(
 async def get_response_time_stats(
     tenant_id: int,
     days: int = 30,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les stats de temps de réponse IA.
@@ -264,7 +273,8 @@ async def get_response_time_stats(
 async def get_escalations_metrics(
     tenant_id: int,
     days: int = 30,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère les métriques d'escalade
@@ -295,7 +305,8 @@ async def get_escalations_metrics(
 async def get_conversion_funnel(
     tenant_id: int,
     days: int = 30,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère le funnel de conversion (vues -> conversion)
@@ -327,7 +338,8 @@ async def get_conversion_funnel(
 @router.get("/{tenant_id}/analytics/weekly-trend")
 async def get_weekly_trend(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère la tendance semaine vs semaine précédente
@@ -357,7 +369,8 @@ async def get_weekly_trend(
 @router.get("/{tenant_id}/analytics/report/text")
 async def get_text_report(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Génère un rapport texte pour email ou PDF
@@ -385,7 +398,7 @@ async def get_text_report(
         return {
             "status": "success",
             "report": report,
-            "generated_at": str(__import__("datetime").datetime.now().isoformat())
+            "generated_at": datetime.now().isoformat()
         }
     except Exception as e:
         logger.error(f"❌ Erreur text report: {e}")
@@ -398,7 +411,8 @@ async def get_text_report(
 @router.get("/{tenant_id}/analytics/report/dashboard-html")
 async def get_dashboard_html(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère le dashboard HTML interactif (peut être ouvert dans un navigateur)
@@ -426,7 +440,7 @@ async def get_dashboard_html(
         return {
             "status": "success",
             "html": html,
-            "generated_at": str(__import__("datetime").datetime.now().isoformat())
+            "generated_at": datetime.now().isoformat()
         }
     except Exception as e:
         logger.error(f"❌ Erreur dashboard HTML: {e}")

@@ -4,8 +4,8 @@
   "type": "module",
   "main": "whatsapp-production.js",
   "scripts": {
-    "start": "node whatsapp-production.js",
-    "dev": "node --watch whatsapp-production.js",
+    "start": "node --import ./instrument.js whatsapp-production.js",
+    "dev": "node --import ./instrument.js --watch whatsapp-production.js",
     "pro": "node whatsapp-service-v7-professional.js",
     "pro:watch": "node --watch whatsapp-service-v7-professional.js",
     "dashboard": "node dashboard-cli.js",
@@ -19,15 +19,17 @@
     "logs": "curl http://localhost:3001/logs?limit=50"
   },
   "dependencies": {
+    "@sentry/node": "^10.45.0",
     "@whiskeysockets/baileys": "^6.7.21",
-    "pino": "^8.17.2",
     "axios": "^1.13.6",
+    "blessed": "^0.1.81",
+    "chalk": "^5.3.0",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
-    "qrcode-terminal": "^0.12.0",
+    "pino": "^8.17.2",
     "qrcode": "^1.5.3",
-    "chalk": "^5.3.0",
-    "blessed": "^0.1.81"
+    "qrcode-terminal": "^0.12.0",
+    "pg": "^8.13.3"
   },
   "engines": {
     "node": ">=18.0.0"

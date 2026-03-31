@@ -239,11 +239,11 @@ def build_agent_system_prompt(agent: AgentTemplate, db: Session) -> str:
     ).all()
 
     if sources:
-        knowledge_block = "\n\n=== BASE DE CONNAISSANCE ===\n"
+        knowledge_block = "\n\n=== BASE DE CONNAISSANCE (UTILISE CES INFORMATIONS EN PRIORITÉ) ===\n"
         for source in sources:
             knowledge_block += f"\n--- {source.name or source.source_type} ---\n"
-            # Limiter à 2000 chars par source pour ne pas exploser le context
-            content = (source.content_extracted or "")[:2000]
+            # 8000 chars par source — suffisant pour toute la KB NéoBot
+            content = (source.content_extracted or source.content_text or "")[:8000]
             knowledge_block += content + "\n"
         base_prompt += knowledge_block
 
@@ -259,6 +259,15 @@ def build_agent_system_prompt(agent: AgentTemplate, db: Session) -> str:
 
 
 # =============================================================================
+# TENANT NéoBot — VERROUILLÉ
+# Le tenant 1 est réservé exclusivement à NéoBot (démo / vente du SaaS).
+# Son agent ne peut pas être remplacé ni désactivé via l'API.
+# =============================================================================
+NEOBOT_TENANT_ID = 1
+NEOBOT_AGENT_ID  = 1  # Agent "NéoBot Commercial" (type=vente)
+
+
+# =============================================================================
 # CRUD AGENTS
 # =============================================================================
 
@@ -266,7 +275,21 @@ class AgentService:
 
     @staticmethod
     def get_active_agent(tenant_id: int, db: Session) -> Optional[AgentTemplate]:
-        """Retourne l'agent actif du tenant, ou None."""
+        """Retourne l'agent actif du tenant.
+        Pour le tenant NéoBot (id=1), retourne toujours l'agent NéoBot Commercial
+        quel que soit son flag is_active (protection contre les désactivations accidentelles).
+        """
+        if tenant_id == NEOBOT_TENANT_ID:
+            agent = db.query(AgentTemplate).filter(
+                AgentTemplate.id == NEOBOT_AGENT_ID,
+                AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
+            ).first()
+            if agent:
+                # S'assurer qu'il est toujours actif en DB
+                if not agent.is_active:
+                    agent.is_active = True
+                    db.commit()
+                return agent
         return db.query(AgentTemplate).filter(
             AgentTemplate.tenant_id == tenant_id,
             AgentTemplate.is_active == True
@@ -295,7 +318,11 @@ class AgentService:
         off_hours_message: str = None,
         activate: bool = False,
     ) -> AgentTemplate:
-        """Crée un nouvel agent pour le tenant."""
+        """Crée un nouvel agent pour le tenant.
+        Le tenant NéoBot (id=1) est verrouillé — création bloquée via cette méthode.
+        """
+        if tenant_id == NEOBOT_TENANT_ID:
+            raise ValueError("Le tenant NéoBot est verrouillé. Modifie directement l'agent existant.")
         # Si on active ce nouvel agent, désactiver les autres
         if activate:
             db.query(AgentTemplate).filter(
@@ -344,7 +371,7 @@ class AgentService:
         allowed = {
             "name", "description", "custom_prompt_override", "tone", "language",
             "emoji_enabled", "max_response_length", "availability_start",
-            "availability_end", "off_hours_message",
+            "availability_end", "off_hours_message", "response_delay", "typing_indicator",
         }
         for key, value in kwargs.items():
             if key in allowed:
@@ -358,7 +385,12 @@ class AgentService:
 
     @staticmethod
     def activate_agent(agent_id: int, tenant_id: int, db: Session) -> Optional[AgentTemplate]:
-        """Active un agent et désactive tous les autres du tenant."""
+        """Active un agent et désactive tous les autres du tenant.
+        Sur le tenant NéoBot (id=1) : seul NEOBOT_AGENT_ID peut être activé.
+        """
+        if tenant_id == NEOBOT_TENANT_ID and agent_id != NEOBOT_AGENT_ID:
+            raise ValueError("Le tenant NéoBot est verrouillé. Seul l'agent NéoBot Commercial peut être actif.")
+
         db.query(AgentTemplate).filter(
             AgentTemplate.tenant_id == tenant_id
         ).update({"is_active": False})

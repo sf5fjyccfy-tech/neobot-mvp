@@ -31,7 +31,7 @@ engine = create_engine(
     pool_size=POOL_SIZE,
     max_overflow=MAX_OVERFLOW,
     pool_timeout=POOL_TIMEOUT,
-    pool_pre_ping=False,  # Désactiver les pings pour la performance
+    pool_pre_ping=True,   # Détection des connexions périmées (prévient les erreurs silencieuses)
     pool_recycle=3600,   # Recycler les connexions chaque heure
     echo=False,  # TOUJOURS désactiver en production (SQLAlchemy logging = lent!)
 )
@@ -55,7 +55,10 @@ def get_db():
         yield db
     except Exception as e:
         db.rollback()
-        logger.error(f"Database error: {e}")
+        # On ne logge que les vraies erreurs DB, pas les HTTPException (401, 403…)
+        from fastapi import HTTPException as _HTTPException
+        if not isinstance(e, _HTTPException):
+            logger.error(f"Database error: {e}")
         raise
     finally:
         db.close()

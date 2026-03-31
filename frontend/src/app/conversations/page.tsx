@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { buildApiUrl } from '@/lib/api';
+import { buildApiUrl, getTenantId, getToken, clearToken } from '@/lib/api';
+import AppShell from '@/components/ui/AppShell';
 
-const NEON = '#00FFB2';
-const BG = '#05050F';
-const SURFACE = '#0D0D1A';
-const BORDER = '#1A1A2E';
-const MUTED = '#4A4A6A';
+const NEON = '#FF4D00';
+const BG = '#06040E';
+const SURFACE = '#0C0916';
+const BORDER = '#1C1428';
+const MUTED = '#5C4E7A';
 const TEXT = '#E0E0FF';
 
 interface Conversation {
@@ -15,6 +16,8 @@ interface Conversation {
   customer_phone: string;
   customer_name: string;
   last_message: string;
+  last_message_direction?: 'incoming' | 'outgoing';
+  last_message_is_ai?: boolean;
   last_message_at: string;
   message_count: number;
   unread: boolean;
@@ -29,32 +32,9 @@ interface Message {
   created_at: string;
 }
 
-const MOCK_CONVERSATIONS: Conversation[] = [
-  {
-    id: 1,
-    customer_phone: '+237 6XX XXX XXX',
-    customer_name: 'Jean Dupont',
-    last_message: 'Bonjour, vous avez le menu du jour ?',
-    last_message_at: new Date(Date.now() - 30 * 60000).toISOString(),
-    message_count: 5,
-    unread: false,
-    status: 'active',
-  },
-  {
-    id: 2,
-    customer_phone: '+237 6YY YYY YYY',
-    customer_name: 'Marie Nguesso',
-    last_message: 'Combien coûte le Poulet DG ?',
-    last_message_at: new Date(Date.now() - 90 * 60000).toISOString(),
-    message_count: 3,
-    unread: true,
-    status: 'active',
-  },
-];
-
 const STATUS_COLORS: Record<string, string> = {
   active: NEON,
-  resolved: '#7B61FF',
+  resolved: '#00E5CC',
   escalated: '#FF6B35',
 };
 
@@ -65,18 +45,33 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function formatTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  // Le backend stocke en UTC sans suffixe Z — on l'ajoute pour que le navigateur convertisse correctement
+  const utcIso = iso && !iso.endsWith('Z') && !iso.includes('+') ? iso + 'Z' : iso;
+  const d = new Date(utcIso);
+  const now = new Date();
+
+  const startOfToday    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+  const startOf2DaysAgo  = new Date(startOfToday.getTime() - 2 * 86400000);
+
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  if (d >= startOfToday)    return time;                    // aujourd'hui : juste l'heure
+  if (d >= startOfYesterday) return `Hier à ${time}`;       // hier
+  if (d >= startOf2DaysAgo) return `Avant-hier à ${time}`;  // avant-hier
+  // Plus ancien : date courte + heure
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) + ` à ${time}`;
 }
 
 export default function ConversationsPage() {
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'resolved' | 'escalated'>('all');
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
+  const [loadingConvs, setLoadingConvs] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const filtered = conversations.filter(c => {
@@ -90,9 +85,53 @@ export default function ConversationsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Charger les messages quand on sélectionne une conversation
+  useEffect(() => {
+    if (!selected) return;
+    const tid = getTenantId();
+    const token = getToken();
+    if (!tid) return;
+    const controller = new AbortController();
+    fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/messages`), {
+      headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
+      signal: controller.signal,
+    })
+      .then(r => {
+        if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
+        return r.ok ? r.json() : null;
+      })
+      .then(data => {
+        if (data && Array.isArray(data.messages)) setMessages(data.messages);
+      })
+      .catch(err => { if (err.name !== 'AbortError') console.error('fetch messages:', err); });
+    return () => controller.abort();
+  }, [selected]);
+
+  useEffect(() => {
+    const tid = getTenantId();
+    const token = getToken();
+    if (!tid) { setLoadingConvs(false); return; }
+    const controller = new AbortController();
+    fetch(buildApiUrl(`/api/tenants/${tid}/conversations`), {
+      headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
+      signal: controller.signal,
+    })
+      .then(r => {
+        if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
+        return r.ok ? r.json() : null;
+      })
+      .then(data => {
+        if (data && Array.isArray(data.conversations)) setConversations(data.conversations);
+        else if (data && Array.isArray(data)) setConversations(data);
+      })
+      .catch(err => { if (err.name !== 'AbortError') console.error('fetch conversations:', err); })
+      .finally(() => setLoadingConvs(false));
+    return () => controller.abort();
+  }, []);
+
   async function sendMessage() {
     if (!input.trim() || !selected) return;
-    setSending(true);
+
     const msg: Message = {
       id: Date.now(),
       content: input,
@@ -100,29 +139,44 @@ export default function ConversationsPage() {
       is_ai: false,
       created_at: new Date().toISOString(),
     };
+    const optimisticId = msg.id;
     setMessages(prev => [...prev, msg]);
     setInput('');
+    setSending(true);
     try {
-      await fetch(buildApiUrl('/api/tenants/1/whatsapp/message'), {
+      const tid = getTenantId();
+      const token = getToken();
+      if (!tid) return;
+      const res = await fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/message`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
         body: JSON.stringify({ phone: selected.customer_phone, message: msg.content }),
       });
-    } catch (_) {}
-    setSending(false);
+      if (!res.ok) {
+        // Rollback : retire le message optimiste si l'envoi échoue
+        setMessages(prev => prev.filter(m => m.id !== optimisticId));
+      }
+    } catch (_) {
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
+    <AppShell>
     <div style={{
       height: '100vh',
       display: 'flex',
-      background: BG,
       fontFamily: '"DM Sans", sans-serif',
       color: TEXT,
       overflow: 'hidden',
     }}>
       {/* Sidebar */}
-      <div style={{
+      <div id="neo-conv-list" style={{
         width: 320,
         borderRight: `1px solid ${BORDER}`,
         display: 'flex',
@@ -151,7 +205,6 @@ export default function ConversationsPage() {
             style={{
               width: '100%',
               padding: '8px 12px',
-              background: BG,
               border: `1px solid ${BORDER}`,
               borderRadius: 8,
               color: TEXT,
@@ -186,9 +239,15 @@ export default function ConversationsPage() {
 
         {/* Conversations list */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {filtered.length === 0 ? (
+          {loadingConvs ? (
+            <div style={{ padding: 32, textAlign: 'center', color: MUTED, fontSize: 13 }}>
+              Chargement...
+            </div>
+          ) : filtered.length === 0 ? (
             <div style={{ padding: 24, textAlign: 'center', color: MUTED, fontSize: 13 }}>
-              Aucune conversation
+              {conversations.length === 0
+                ? 'Aucune conversation pour le moment. Les messages WhatsApp apparaîtront ici.'
+                : 'Aucune conversation correspondante'}
             </div>
           ) : (
             filtered.map(conv => (
@@ -231,6 +290,9 @@ export default function ConversationsPage() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}>
+                  {conv.last_message_direction === 'outgoing'
+                    ? (conv.last_message_is_ai ? '🤖 ' : '✍️ ')
+                    : '👤 '}
                   {conv.last_message}
                 </p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -256,7 +318,7 @@ export default function ConversationsPage() {
       </div>
 
       {/* Chat area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div id="neo-conv-detail" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {selected ? (
           <>
             {/* Chat header */}
@@ -291,7 +353,7 @@ export default function ConversationsPage() {
                   padding: '5px 12px',
                   background: '#7B61FF15',
                   border: '1px solid #7B61FF30',
-                  color: '#7B61FF',
+                  color: '#00E5CC',
                   borderRadius: 6,
                   fontSize: 12,
                   fontWeight: 600,
@@ -309,7 +371,6 @@ export default function ConversationsPage() {
               display: 'flex',
               flexDirection: 'column',
               gap: 12,
-              background: BG,
             }}>
               {/* Demo messages */}
               <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
@@ -360,7 +421,11 @@ export default function ConversationsPage() {
                       {msg.content}
                     </p>
                     <span style={{ fontSize: 10, color: MUTED }}>
-                      {formatTime(msg.created_at)} · {msg.is_ai ? '🤖 IA' : '👤 Vous'}
+                      {formatTime(msg.created_at)} · {
+                        msg.direction === 'incoming'
+                          ? `👤 ${selected?.customer_name || selected?.customer_phone || 'Client'}`
+                          : msg.is_ai ? '🤖 IA' : '✍️ Manuel'
+                      }
                     </span>
                   </div>
                 </div>
@@ -403,7 +468,7 @@ export default function ConversationsPage() {
                     background: input.trim() ? NEON : `${NEON}30`,
                     border: 'none',
                     borderRadius: 10,
-                    color: input.trim() ? '#05050F' : MUTED,
+                    color: input.trim() ? '#06040E' : MUTED,
                     fontSize: 14,
                     fontWeight: 700,
                     cursor: input.trim() ? 'pointer' : 'not-allowed',
@@ -451,5 +516,6 @@ export default function ConversationsPage() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

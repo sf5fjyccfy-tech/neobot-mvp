@@ -20,11 +20,20 @@ HTTPX_LIMITS = httpx.Limits(
     keepalive_expiry=30.0          # Garder les connexions 30s
 )
 
+# Timeout courts : appels internes, service WhatsApp, webhooks
 HTTPX_TIMEOUT = httpx.Timeout(
-    timeout=5.0,        # Total timeout: 5 secondes
-    connect=2.0,        # Connection timeout: 2 secondes
-    read=4.0,           # Read timeout: 4 secondes
-    write=2.0           # Write timeout: 2 secondes
+    timeout=10.0,       # Total timeout: 10 secondes
+    connect=3.0,        # Connection timeout: 3 secondes
+    read=8.0,           # Read timeout: 8 secondes
+    write=3.0           # Write timeout: 3 secondes
+)
+
+# Timeout longs : appels LLM (génération, chat IA) — DeepSeek peut mettre 15-30s
+HTTPX_TIMEOUT_AI = httpx.Timeout(
+    timeout=60.0,       # Total timeout: 60 secondes
+    connect=5.0,        # Connection timeout: 5 secondes
+    read=55.0,          # Read timeout: 55 secondes (stream de tokens)
+    write=5.0           # Write timeout: 5 secondes
 )
 
 # Client global singleton
@@ -42,7 +51,7 @@ def get_http_client() -> httpx.AsyncClient:
         _http_client = httpx.AsyncClient(
             limits=HTTPX_LIMITS,
             timeout=HTTPX_TIMEOUT,
-            http2=True,  # Utiliser HTTP/2 si possible (plus rapide)
+            http2=False,  # h2 non installé dans le venv — HTTP/1.1 suffisant
         )
         logger.info("✅ Global HTTP client initialized with connection pooling")
     
@@ -93,7 +102,8 @@ class DeepSeekClient:
                     "temperature": temperature,
                     "max_tokens": max_tokens,
                     "stream": False
-                }
+                },
+                timeout=HTTPX_TIMEOUT_AI,  # Override : LLM peut prendre jusqu'à 60s
             )
             
             if response.status_code == 200:
@@ -103,7 +113,7 @@ class DeepSeekClient:
                 return {"error": f"API returned {response.status_code}"}
                 
         except httpx.TimeoutException:
-            logger.warning("DeepSeek API timeout (>5s)")
+            logger.warning("DeepSeek API timeout (>60s)")
             return {"error": "API timeout"}
         except Exception as e:
             logger.error(f"DeepSeek API error: {e}")

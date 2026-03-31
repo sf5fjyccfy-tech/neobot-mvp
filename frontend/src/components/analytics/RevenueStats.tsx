@@ -108,9 +108,9 @@ export default function RevenueStats({ tenantId }: RevenueStatsProps) {
           </p>
         </div>
         
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded p-4">
-          <p className="text-sm text-purple-700 font-medium">Moyenne/mois</p>
-          <p className="text-2xl font-bold text-purple-900 mt-1">
+        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded p-4">
+          <p className="text-sm text-teal-700 font-medium">Moyenne/mois</p>
+          <p className="text-2xl font-bold text-teal-900 mt-1">
             {data?.average_monthly.toLocaleString('fr-FR')} F
           </p>
         </div>

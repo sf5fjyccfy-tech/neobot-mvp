@@ -2,353 +2,456 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Bot, Zap } from 'lucide-react';
+
+const BG = '#06040E';
+const SURFACE = '#0D0021';
+const BORDER = '#1A0035';
+const MUTED = '#6B21A8';
+const TEXT = '#FFF0E8';
+const VIOLET = '#FF4D00';
+const CYAN = '#0891B2';
+const VIOLET_LIGHT = '#FF9A6C';
+const CYAN_LIGHT = '#00E5CC';
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
   const plans = [
     {
-      name: "Plan Basique",
-      slug: "basique",
+      name: 'Essential',
+      slug: 'essential',
       monthlyPrice: 20000,
-      annualPrice: 240000,
-      messages: 2000,
-      overage: "7,000 FCFA par 1,000 messages",
-      description: "Parfait pour les petites entreprises et startups",
-      cta: "Essayer gratuitement",
-      features: [
-        { text: "2,000 messages/mois", included: true },
-        { text: "WhatsApp bot illimité", included: true },
-        { text: "Gestion de 1 entreprise", included: true },
-        { text: "Analytics basiques", included: true },
-        { text: "Support par email", included: true },
-        { text: "1 persona customisé", included: true },
-        { text: "Configuration gratuite", included: false },
-        { text: "Support prioritaire", included: false },
-        { text: "API access", included: false },
-        { text: "Intégrations avancées", included: false },
-      ]
-    },
-    {
-      name: "Plan Standard",
-      slug: "standard",
-      monthlyPrice: 50000,
-      annualPrice: 600000,
+      annualPrice: 204000,
       messages: 2500,
-      overage: "7,000 FCFA par 1,000 messages",
-      description: "Pour les entreprises en croissance",
-      cta: "Essayer gratuitement",
-      highlighted: true,
+      overage: '7 000 FCFA / 1 000 messages',
+      description: 'Parfait pour démarrer et tester',
+      cta: 'Essayer gratuitement',
+      accentColor: VIOLET_LIGHT,
       features: [
-        { text: "2,500 messages/mois", included: true },
-        { text: "WhatsApp + SMS/Email", included: true },
-        { text: "Gestion illimitée d'entreprises", included: true },
-        { text: "Analytics avancées", included: true },
-        { text: "Support prioritaire par email", included: true },
-        { text: "5 personas différents", included: true },
-        { text: "Configuration gratuite", included: true },
-        { text: "Formation de 2h incluse", included: true },
-        { text: "API basique", included: false },
-        { text: "Intégrations avancées", included: false },
-      ]
+        { text: '2 500 messages/mois', included: true },
+        { text: '1 agent WhatsApp', included: true },
+        { text: 'Analytics 30 jours', included: true },
+        { text: 'Upload documents PDF', included: true },
+        { text: 'Support par email', included: true },
+        { text: 'Personas multiples', included: false },
+        { text: 'Configuration premium', included: false },
+        { text: 'Support prioritaire', included: false },
+        { text: 'API access', included: false },
+      ],
     },
     {
-      name: "Plan Pro",
-      slug: "pro",
-      monthlyPrice: 90000,
-      annualPrice: 1080000,
-      messages: 40000,
-      overage: "7,000 FCFA par 1,000 messages",
-      description: "Pour les grandes opérations",
-      cta: "Essayer gratuitement",
+      name: 'Business',
+      slug: 'business',
+      monthlyPrice: 50000,
+      annualPrice: 510000,
+      messages: 10000,
+      overage: '7 000 FCFA / 1 000 messages',
+      description: 'Pour les entreprises en croissance',
+      cta: 'Bientôt disponible',
+      highlighted: true,
+      locked: true,
+      accentColor: CYAN_LIGHT,
       features: [
-        { text: "40,000 messages/mois", included: true },
-        { text: "Tous les canaux (WhatsApp, SMS, Email, etc)", included: true },
-        { text: "Gestion illimitée d'entreprises", included: true },
-        { text: "Analytics en temps réel + rapports", included: true },
-        { text: "Support prioritaire 24/7", included: true },
-        { text: "Personas illimités", included: true },
-        { text: "Configuration + optimisation", included: true },
-        { text: "Formation complète + coaching", included: true },
-        { text: "API complète", included: true },
-        { text: "Intégrations CRM/ERP avancées", included: true },
-      ]
-    }
+        { text: '10 000 messages/mois', included: true },
+        { text: '3 agents WhatsApp', included: true },
+        { text: 'Analytics 90 jours', included: true },
+        { text: 'Upload documents PDF', included: true },
+        { text: 'Support prioritaire', included: true },
+        { text: '5 personas customisés', included: true },
+        { text: 'Configuration + formation 2h', included: true },
+        { text: 'API basique', included: false },
+        { text: 'Intégrations CRM/ERP', included: false },
+      ],
+    },
+    {
+      name: 'Enterprise',
+      slug: 'enterprise',
+      monthlyPrice: 100000,
+      annualPrice: 1020000,
+      messages: 40000,
+      overage: '7 000 FCFA / 1 000 messages',
+      description: 'Pour les grandes opérations',
+      cta: 'Bientôt disponible',
+      locked: true,
+      accentColor: '#F59E0B',
+      features: [
+        { text: '40 000 messages/mois', included: true },
+        { text: 'Agents illimités', included: true },
+        { text: 'Analytics en temps réel', included: true },
+        { text: 'Upload documents illimité', included: true },
+        { text: 'Support 24/7', included: true },
+        { text: 'Personas illimités', included: true },
+        { text: 'Configuration + coaching', included: true },
+        { text: 'API complète', included: true },
+        { text: 'Intégrations CRM/ERP', included: true },
+      ],
+    },
   ];
 
+  const inputStyle: React.CSSProperties = {
+    fontFamily: '"DM Sans", sans-serif',
+  };
+
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="border-b border-gray-200 sticky top-0 z-50 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold text-blue-600">
-            🤖 NéoBot
-          </Link>
-          <div className="flex space-x-3">
-            <Link href="/login" className="px-4 py-2 text-gray-700 hover:text-blue-600 font-medium">
-              Connexion
-            </Link>
-            <Link
-              href="/signup"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            >
-              Essayer gratuitement
-            </Link>
+    <div style={{ minHeight: '100vh', background: BG, fontFamily: '"DM Sans", sans-serif', color: TEXT }}>
+
+      {/* Nav */}
+      <nav style={{
+        borderBottom: `1px solid ${BORDER}`,
+        background: `${SURFACE}CC`,
+        backdropFilter: 'blur(12px)',
+        padding: '16px 32px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+      }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${VIOLET}, ${CYAN})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Bot style={{ width: 20, height: 20, color: '#fff' }} />
           </div>
+          <span style={{ color: '#fff', fontFamily: '"Syne", sans-serif', fontWeight: 800, fontSize: 18 }}>NéoBot</span>
+        </Link>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Link href="/login" style={{ textDecoration: 'none', color: TEXT, fontSize: 14, padding: '8px 16px' }}>
+            Connexion
+          </Link>
+          <Link href="/signup" style={{ textDecoration: 'none' }}>
+            <button style={{
+              padding: '8px 20px',
+              background: `linear-gradient(135deg, ${VIOLET}, ${CYAN})`,
+              border: 'none',
+              borderRadius: 8,
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}>
+              Essai gratuit →
+            </button>
+          </Link>
         </div>
       </nav>
 
       {/* Header */}
-      <section className="bg-gradient-to-br from-blue-50 to-indigo-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            Tarification Transparente et Simple
+      <section style={{ padding: '80px 24px 60px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        {/* Nébuleuse centre */}
+        <div style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: '60%', height: '300px', background: `radial-gradient(ellipse, ${VIOLET}18 0%, transparent 70%)`, borderRadius: '50%', pointerEvents: 'none' }} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: `${VIOLET}20`,
+            border: `1px solid ${VIOLET}40`,
+            borderRadius: 20,
+            padding: '6px 16px',
+            marginBottom: 24,
+          }}>
+            <Zap style={{ width: 14, height: 14, color: VIOLET_LIGHT }} />
+            <span style={{ color: VIOLET_LIGHT, fontSize: 12, fontWeight: 700 }}>Tarification transparente</span>
+          </div>
+
+          <h1 style={{
+            fontFamily: '"Syne", sans-serif',
+            fontSize: 'clamp(32px, 5vw, 52px)',
+            fontWeight: 900,
+            color: '#fff',
+            margin: '0 0 16px',
+            lineHeight: 1.1,
+          }}>
+            Choisissez votre plan<br />
+            <span style={{ background: `linear-gradient(90deg, ${VIOLET_LIGHT}, ${CYAN_LIGHT})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              sans engagement
+            </span>
           </h1>
-          <p className="text-xl text-gray-600 mb-8">
+          <p style={{ color: `${TEXT}80`, fontSize: 18, margin: '0 0 40px', maxWidth: 600, marginLeft: 'auto', marginRight: 'auto' }}>
             Pas de frais cachés. Pas de contrat long terme. 7 jours gratuits pour tous.
           </p>
 
           {/* Billing Toggle */}
-          <div className="flex justify-center mb-8">
-            <div className="inline-flex rounded-lg border border-gray-300 bg-white">
+          <div style={{ display: 'inline-flex', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
+            {(['monthly', 'annual'] as const).map(cycle => (
               <button
-                onClick={() => setBillingCycle('monthly')}
-                className={`px-6 py-3 font-semibold transition ${
-                  billingCycle === 'monthly'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-700 hover:text-blue-600'
-                }`}
+                key={cycle}
+                onClick={() => setBillingCycle(cycle)}
+                style={{
+                  padding: '10px 24px',
+                  background: billingCycle === cycle ? `linear-gradient(135deg, ${VIOLET}, ${CYAN})` : 'transparent',
+                  border: 'none',
+                  color: billingCycle === cycle ? '#fff' : `${TEXT}60`,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
               >
-                Mensuel
+                {cycle === 'monthly' ? 'Mensuel' : 'Annuel — 15% off'}
               </button>
-              <button
-                onClick={() => setBillingCycle('annual')}
-                className={`px-6 py-3 font-semibold transition ${
-                  billingCycle === 'annual'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-700 hover:text-blue-600'
-                }`}
-              >
-                Annuel (15% économies)
-              </button>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Pricing Cards */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {plans.map((plan, idx) => (
-              <div
-                key={idx}
-                className={`rounded-2xl transition transform hover:scale-105 overflow-hidden ${
-                  plan.highlighted
-                    ? 'border-2 border-blue-600 bg-white shadow-2xl md:scale-105'
-                    : 'border border-gray-200 bg-white shadow-lg'
-                }`}
-              >
-                {/* Badge */}
-                {plan.highlighted && (
-                  <div className="bg-blue-600 text-white text-center py-3 font-bold">
-                    ⭐ PLUS POPULAIRE
+      <section style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 80px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+          {plans.map((plan, idx) => (
+            <div key={idx} style={{ position: 'relative' }}>
+            <div
+              style={{
+                background: plan.highlighted ? `linear-gradient(180deg, ${VIOLET}18, ${SURFACE})` : SURFACE,
+                border: plan.highlighted ? `2px solid ${CYAN}60` : `1px solid ${BORDER}`,
+                borderRadius: 20,
+                overflow: 'hidden',
+                position: 'relative',
+                transform: plan.highlighted ? 'scale(1.03)' : 'scale(1)',
+                transition: 'transform 0.2s',
+                filter: (plan as { locked?: boolean }).locked ? 'blur(2.5px)' : 'none',
+                pointerEvents: (plan as { locked?: boolean }).locked ? 'none' : 'auto',
+              }}
+            >
+              {plan.highlighted && (
+                <div style={{
+                  background: `linear-gradient(90deg, ${VIOLET}, ${CYAN})`,
+                  padding: '8px',
+                  textAlign: 'center',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: '#fff',
+                  letterSpacing: 1,
+                }}>
+                  ⭐ PLUS POPULAIRE
+                </div>
+              )}
+
+              <div style={{ padding: 28 }}>
+                {/* Top accent */}
+                <div style={{ height: 3, background: `linear-gradient(90deg, transparent, ${plan.accentColor}, transparent)`, marginBottom: 24, borderRadius: 2 }} />
+
+                <h3 style={{ fontFamily: '"Syne", sans-serif', fontSize: 22, fontWeight: 800, color: '#fff', margin: '0 0 6px' }}>
+                  {plan.name}
+                </h3>
+                <p style={{ color: `${TEXT}50`, fontSize: 13, margin: '0 0 24px' }}>{plan.description}</p>
+
+                {/* Price */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span style={{ fontFamily: '"Syne", sans-serif', fontSize: 42, fontWeight: 900, color: plan.accentColor }}>
+                      {(billingCycle === 'monthly' ? plan.monthlyPrice : plan.annualPrice).toLocaleString('fr-FR')}
+                    </span>
+                    <span style={{ color: `${TEXT}60`, fontSize: 13 }}>
+                      {billingCycle === 'monthly' ? 'FCFA/mois' : 'FCFA/an'}
+                    </span>
                   </div>
+                  {billingCycle === 'annual' && (
+                    <p style={{ color: '#00E5CC', fontSize: 12, fontWeight: 600, margin: '4px 0 0' }}>
+                      💰 Économie : {(plan.monthlyPrice * 12 - plan.annualPrice).toLocaleString('fr-FR')} FCFA
+                    </p>
+                  )}
+                </div>
+
+                {/* Messages limit */}
+                <div style={{
+                  background: `${plan.accentColor}10`,
+                  border: `1px solid ${plan.accentColor}25`,
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  marginBottom: 24,
+                }}>
+                  <p style={{ color: plan.accentColor, fontSize: 13, fontWeight: 700, margin: '0 0 2px' }}>
+                    📨 {plan.messages.toLocaleString('fr-FR')} messages/mois
+                  </p>
+                  <p style={{ color: `${TEXT}40`, fontSize: 11, margin: 0 }}>Dépassement : {plan.overage}</p>
+                </div>
+
+                {/* CTA */}
+                {(plan as { locked?: boolean }).locked ? (
+                  <button disabled style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: `1px solid rgba(255,255,255,0.1)`,
+                    borderRadius: 10,
+                    color: 'rgba(255,255,255,0.3)',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'not-allowed',
+                    marginBottom: 24,
+                  }}>
+                    {plan.cta}
+                  </button>
+                ) : (
+                <Link href="/signup" style={{ textDecoration: 'none' }}>
+                  <button style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: plan.highlighted ? `linear-gradient(135deg, ${VIOLET}, ${CYAN})` : 'transparent',
+                    border: plan.highlighted ? 'none' : `1px solid ${plan.accentColor}60`,
+                    borderRadius: 10,
+                    color: plan.highlighted ? '#fff' : plan.accentColor,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    marginBottom: 24,
+                    transition: 'all 0.2s',
+                  }}>
+                    {plan.cta}
+                  </button>
+                </Link>
                 )}
 
-                {/* Plan Info */}
-                <div className="p-8">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                  <p className="text-gray-600 mb-6 h-12">{plan.description}</p>
-
-                  {/* Pricing */}
-                  <div className="mb-8">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-5xl font-bold text-gray-900">
-                        {(billingCycle === 'monthly' ? plan.monthlyPrice : plan.annualPrice).toLocaleString()}
-                      </span>
-                      <span className="text-gray-600 font-semibold">
-                        {billingCycle === 'monthly' ? 'FCFA/mois' : 'FCFA/an'}
-                      </span>
-                    </div>
-                    {billingCycle === 'annual' && (
-                      <p className="text-sm text-green-600 font-semibold mt-2">
-                        💰 Économies annuelles: {(plan.monthlyPrice * 12 - plan.annualPrice).toLocaleString()} FCFA
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Messages Limit */}
-                  <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-sm font-semibold text-gray-900 mb-2">
-                      📨 {plan.messages.toLocaleString()} messages/mois
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      Puis: {plan.overage}
-                    </p>
-                  </div>
-
-                  {/* CTA Button */}
-                  <Link
-                    href="/signup"
-                    className={`w-full py-3 rounded-lg font-bold text-center block mb-8 transition text-lg ${
-                      plan.highlighted
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'border-2 border-blue-600 text-blue-600 hover:bg-blue-50'
-                    }`}
-                  >
-                    {plan.cta}
-                  </Link>
-
-                  {/* Features List */}
-                  <div className="space-y-4">
-                    <p className="font-semibold text-gray-900 text-sm uppercase tracking-wide">
-                      Inclus:
-                    </p>
-                    {plan.features.map((feature, i) => (
-                      <div key={i} className="flex items-start gap-3">
-                        <CheckCircle
-                          className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                            feature.included
-                              ? 'text-green-500'
-                              : 'text-gray-300'
-                          }`}
-                        />
-                        <span
-                          className={`text-sm ${
-                            feature.included
-                              ? 'text-gray-700'
-                              : 'text-gray-400 line-through'
-                          }`}
-                        >
-                          {feature.text}
+                {/* Features */}
+                <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 20 }}>
+                  <p style={{ color: `${TEXT}50`, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 14px' }}>Inclus :</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {plan.features.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {f.included
+                          ? <CheckCircle style={{ width: 16, height: 16, color: plan.accentColor, flexShrink: 0 }} />
+                          : <XCircle style={{ width: 16, height: 16, color: MUTED, flexShrink: 0 }} />
+                        }
+                        <span style={{ fontSize: 12, color: f.included ? TEXT : `${TEXT}35`, textDecoration: f.included ? 'none' : 'line-through' }}>
+                          {f.text}
                         </span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+            {/* Overlay pour plans verrouillés */}
+            {(plan as { locked?: boolean }).locked && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                borderRadius: 20,
+                background: 'rgba(6,4,14,0.55)',
+                backdropFilter: 'blur(1px)',
+              }}>
+                <div style={{
+                  background: 'rgba(12,9,22,0.95)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 14,
+                  padding: '18px 28px',
+                  textAlign: 'center',
+                }}>
+                  <p style={{ fontSize: 28, margin: '0 0 8px' }}>🔒</p>
+                  <p style={{ color: '#fff', fontFamily: '"Syne", sans-serif', fontWeight: 800, fontSize: 16, margin: '0 0 4px' }}>Bientôt disponible</p>
+                  <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: 0 }}>En cours de déploiement</p>
+                </div>
+              </div>
+            )}
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Overage Details */}
-      <section className="bg-blue-50 border-t border-b border-blue-200 py-12">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="flex gap-4 items-start">
-            <AlertCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">💬 Qu'est-ce qui se passe si je dépasse mon quota?</h3>
-              <p className="text-gray-700 mb-4">
-                Vous ne serez JAMAIS bloqué ou déconnecté. Si vous dépassez votre limite mensuelle:
-              </p>
-              <ul className="space-y-2 text-gray-700">
-                <li>✅ <span className="font-semibold">Votre bot continue de fonctionner</span> – pas d'interruption</li>
-                <li>✅ <span className="font-semibold">On compte vos messages supplémentaires</span> – par tranche de 1,000</li>
-                <li>✅ <span className="font-semibold">7,000 FCFA par tranche</span> – facturé à la fin du mois</li>
-                <li>✅ <span className="font-semibold">Pas de surprise</span> – vous recevez une alerte à 75%, 90%, 100%</li>
-              </ul>
-              <p className="mt-4 text-sm text-gray-600 italic">
-                Exemple: Plan Basique (2,000 msgs) + 3,500 messages supplémentaires = 4 tranches @ 7,000 FCFA = 28,000 FCFA facturé
-              </p>
+      {/* Overage section */}
+      <section style={{ maxWidth: 900, margin: '0 auto 80px', padding: '0 24px' }}>
+        <div style={{
+          background: SURFACE,
+          border: `1px solid ${BORDER}`,
+          borderRadius: 16,
+          padding: 28,
+          display: 'flex',
+          gap: 20,
+        }}>
+          <AlertCircle style={{ width: 22, height: 22, color: CYAN_LIGHT, flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <h3 style={{ fontFamily: '"Syne", sans-serif', fontSize: 16, fontWeight: 700, color: '#fff', margin: '0 0 10px' }}>
+              💬 Que se passe-t-il si je dépasse mon quota ?
+            </h3>
+            <p style={{ color: `${TEXT}60`, fontSize: 13, margin: '0 0 14px' }}>
+              Vous ne serez <strong style={{ color: TEXT }}>jamais bloqué</strong>. Votre bot continue de fonctionner.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                'Votre bot continue de fonctionner — pas d\'interruption',
+                'Messages supplémentaires comptés par tranche de 1 000',
+                '7 000 FCFA par tranche — facturé en fin de mois',
+                'Alertes à 75%, 90%, 100% de votre quota',
+              ].map((item, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CheckCircle style={{ width: 14, height: 14, color: CYAN_LIGHT, flexShrink: 0 }} />
+                  <span style={{ color: `${TEXT}70`, fontSize: 13 }}>{item}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Comparison Table */}
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            Comparaison Complète
-          </h2>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b-2 border-gray-300">
-                  <th className="text-left py-4 px-4 font-bold text-gray-900">Fonctionnalité</th>
-                  <th className="text-center py-4 px-4 font-bold text-gray-900">Basique</th>
-                  <th className="text-center py-4 px-4 font-bold text-blue-600">Standard</th>
-                  <th className="text-center py-4 px-4 font-bold text-gray-900">Pro</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { feature: "Messages/mois", basique: "2,000", standard: "2,500", pro: "40,000" },
-                  { feature: "Changer de plan", basique: "✓", standard: "✓", pro: "✓" },
-                  { feature: "WhatsApp Automation", basique: "✓", standard: "✓", pro: "✓" },
-                  { feature: "SMS/Email", basique: "✗", standard: "✓", pro: "✓" },
-                  { feature: "Nombre de bots", basique: "1", standard: "Illimité", pro: "Illimité" },
-                  { feature: "Analytics", basique: "Basique", standard: "Avancée", pro: "Temps réel" },
-                  { feature: "Personas customisés", basique: "1", standard: "5", pro: "Illimité" },
-                  { feature: "Support", basique: "Email", standard: "Email prioritaire", pro: "24/7" },
-                  { feature: "Configuration incluse", basique: "✗", standard: "✓", pro: "✓" },
-                  { feature: "Formation", basique: "✗", standard: "2h", pro: "Complète" },
-                  { feature: "API Access", basique: "✗", standard: "Basique", pro: "Complète" },
-                  { feature: "Intégrations", basique: "Standard", standard: "Avancées", pro: "CRM/ERP" },
-                ].map((row, idx) => (
-                  <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-4 px-4 text-gray-900 font-semibold">{row.feature}</td>
-                    <td className="py-4 px-4 text-center text-gray-700">{row.basique}</td>
-                    <td className="py-4 px-4 text-center text-gray-700 bg-blue-50 font-semibold">{row.standard}</td>
-                    <td className="py-4 px-4 text-center text-gray-700">{row.pro}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="bg-gray-50 py-20">
-        <div className="max-w-3xl mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Questions Fréquentes</h2>
-
-          <div className="space-y-6">
-            {[
-              { q: "Puis-je upgrade ou downgrade mon plan?", a: "Oui, à tout moment. Les changements prennent effet immédiatement et les facturation est ajustée proportionnellement." },
-              { q: "Quid après les 7 jours d'essai gratuit?", a: "Après 7 jours, vous choisissez un plan. Si vous ne sélectionnez rien, le bot arrête de fonctionner, mais vous n'êtes jamais facturé." },
-              { q: "Acceptez-vous les paiements locals?", a: "Oui! Orange Money, MTN Mobile Money, Wave sont acceptés. Stripe pour les cartes bancaires." },
-              { q: "Y a-t-il des frais de mise en place?", a: "Non. La setup est gratuite pour tous les plans. Pas de frais cachés." },
-              { q: "Quel est le contrat minimum?", a: "Aucun. Vous pouvez annuler n'importe quand, sans préavis, sans pénalté." },
-              { q: "Comment fonctionnent les dépassements?", a: "Si vous dépassez votre limite, chaque tranche de 1,000 messages = 7,000 FCFA. Facturé à la fin du mois, mais votre service continue." },
-            ].map((item, idx) => (
-              <div key={idx} className="bg-white p-6 rounded-lg border border-gray-200">
-                <h3 className="font-bold text-gray-900 mb-3">{item.q}</h3>
-                <p className="text-gray-600">{item.a}</p>
-              </div>
-            ))}
-          </div>
+      {/* FAQ */}
+      <section style={{ maxWidth: 760, margin: '0 auto 80px', padding: '0 24px' }}>
+        <h2 style={{ fontFamily: '"Syne", sans-serif', fontSize: 28, fontWeight: 800, color: '#fff', textAlign: 'center', margin: '0 0 40px' }}>
+          Questions fréquentes
+        </h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[
+            { q: 'Puis-je changer de plan ?', a: 'Oui, à tout moment. Changements effectifs immédiatement, facturation ajustée.' },
+            { q: 'Que se passe-t-il après les 7 jours gratuits ?', a: 'Vous choisissez un plan. Sans sélection, le bot s\'arrête — vous n\'êtes jamais facturé automatiquement.' },
+            { q: 'Quels modes de paiement ?', a: 'Orange Money, MTN Mobile Money, Wave, et Stripe pour les cartes bancaires.' },
+            { q: 'Y a-t-il des frais de mise en place ?', a: 'Non. Setup gratuite pour tous les plans. Aucun frais caché.' },
+            { q: 'Quel est le délai d\'engagement minimum ?', a: 'Aucun. Annulation sans préavis, sans pénalité.' },
+          ].map((item, i) => (
+            <div key={i} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 20px' }}>
+              <h3 style={{ color: '#fff', fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>{item.q}</h3>
+              <p style={{ color: `${TEXT}55`, fontSize: 13, margin: 0 }}>{item.a}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="bg-gradient-to-r from-blue-600 to-indigo-600 py-16 text-white text-center">
-        <div className="max-w-2xl mx-auto px-4">
-          <h2 className="text-4xl font-bold mb-4">Prêt à commencer?</h2>
-          <p className="text-xl mb-8 opacity-90">
-            Essayez NéoBot gratuitement pendant 7 jours. Sans carte de crédit.
+      <section style={{ textAlign: 'center', padding: '80px 24px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '60%', height: '300px', background: `radial-gradient(ellipse, ${VIOLET}20 0%, transparent 70%)`, pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <h2 style={{ fontFamily: '"Syne", sans-serif', fontSize: 36, fontWeight: 900, color: '#fff', margin: '0 0 16px' }}>
+            Prêt à commencer ?
+          </h2>
+          <p style={{ color: `${TEXT}60`, fontSize: 18, margin: '0 0 32px' }}>
+            7 jours gratuits. Sans carte de crédit. Sans engagement.
           </p>
-          <Link
-            href="/signup"
-            className="inline-block px-8 py-4 bg-white text-blue-600 rounded-lg hover:bg-gray-100 font-bold text-lg transition"
-          >
-            Commencer l'essai gratuit →
+          <Link href="/signup" style={{ textDecoration: 'none' }}>
+            <button style={{
+              padding: '14px 40px',
+              background: `linear-gradient(135deg, ${VIOLET}, ${CYAN})`,
+              border: 'none',
+              borderRadius: 12,
+              color: '#fff',
+              fontSize: 16,
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: `0 0 40px ${VIOLET}40`,
+            }}>
+              Commencer l'essai gratuit →
+            </button>
           </Link>
-          <p className="mt-6 text-sm opacity-75">Protection des données RGPD • Annulation immédiate • Pas de frais</p>
+          <p style={{ color: `${VIOLET}60`, fontSize: 12, marginTop: 16 }}>
+            Protection des données RGPD • Annulation immédiate • Pas de frais
+          </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 text-center text-gray-400">
-          <p>&copy; 2026 NéoBot. Tous droits réservés. Made in Cameroon 🇨🇲</p>
-        </div>
+      <footer style={{ borderTop: `1px solid ${BORDER}`, background: SURFACE, padding: '24px', textAlign: 'center' }}>
+        <p style={{ color: `${MUTED}`, fontSize: 13, margin: 0 }}>
+          © 2026 NéoBot. Tous droits réservés. Made in Cameroon 🇨🇲
+        </p>
       </footer>
     </div>
   );
 }
+
+

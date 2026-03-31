@@ -11,9 +11,9 @@ import asyncio
 import logging
 
 from ..database import SessionLocal, get_db
-from ..models import WhatsAppSessionQR
+from ..models import WhatsAppSessionQR, User
 from ..services.session_expiration_checker import SessionExpirationChecker
-from ..dependencies import verify_tenant
+from ..dependencies import verify_tenant, verify_tenant_access, get_current_user, get_superadmin_user
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ router = APIRouter(prefix="/api/whatsapp", tags=["whatsapp"])
 async def generate_qr_code(
     tenant_id: int,
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Génère un nouveau QR code pour authentification Baileys
@@ -76,7 +77,8 @@ async def generate_qr_code(
 @router.get("/session/{session_id}/status")
 async def get_session_status(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
 ):
     """
     Récupère le statut d'une session
@@ -102,7 +104,8 @@ async def get_session_status(
 @router.get("/qr-display/{session_id}")
 async def get_qr_display(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
 ):
     """
     Récupère le QR code pour affichage (ne le fait pas expirer)
@@ -134,7 +137,8 @@ async def get_qr_display(
 @router.post("/qr-regenerate")
 async def regenerate_qr_code(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
 ):
     """
     Régénère un QR code si expiré
@@ -156,7 +160,8 @@ async def regenerate_qr_code(
 @router.post("/disconnect-reconnect")
 async def disconnect_and_regenerate(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Déconnecte session actuelle et crée nouveau QR
@@ -176,7 +181,8 @@ async def disconnect_and_regenerate(
 @router.get("/session/status/{tenant_id}")
 async def get_tenant_session_status(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Récupère le statut de session du tenant
@@ -194,7 +200,8 @@ async def get_tenant_session_status(
 @router.post("/disconnect")
 async def disconnect_whatsapp(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Déconnecte WhatsApp pour ce tenant
@@ -225,7 +232,10 @@ async def disconnect_whatsapp(
 # ========== HEALTH & MONITORING ==========
 
 @router.get("/health")
-async def whatsapp_health(db: Session = Depends(get_db)):
+async def whatsapp_health(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user)
+):
     """
     Récupère santé du service WhatsApp
     """
@@ -263,7 +273,8 @@ async def whatsapp_health(db: Session = Depends(get_db)):
 
 @router.get("/sessions")
 async def list_all_sessions(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user)
 ):
     """
     Liste toutes les sessions WhatsApp

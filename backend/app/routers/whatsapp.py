@@ -1,7 +1,7 @@
 """
 WhatsApp Router - Gestion des sessions et QR codes
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
@@ -10,6 +10,7 @@ import os
 import httpx
 
 from app.database import get_db
+from app.dependencies import verify_tenant_access
 from app.models import WhatsAppSession, Tenant, User
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,9 @@ class WhatsAppQRResponse(BaseModel):
     qr_code: str | None  # Base64 encoded QR code image or empty
     phone: str | None
     message: str
+
+class CreateSessionRequest(BaseModel):
+    whatsapp_phone: str
 
 # ========== UTILITY FUNCTIONS ==========
 
@@ -73,10 +77,9 @@ def get_tenant_phone(tenant_id: int, db: Session) -> str | None:
 async def get_whatsapp_session(
     tenant_id: int,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
-    """
-    Récupère la session WhatsApp actuelle du tenant
-    """
+    """Récupère la session WhatsApp actuelle du tenant."""
     session = db.query(WhatsAppSession).filter(
         WhatsAppSession.tenant_id == tenant_id
     ).first()
@@ -92,12 +95,14 @@ async def get_whatsapp_session(
 @router.post("/{tenant_id}/whatsapp/session")
 async def create_whatsapp_session(
     tenant_id: int,
-    whatsapp_phone: str,
+    body: CreateSessionRequest,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
     """
     Crée une nouvelle session WhatsApp pour un tenant
     """
+    whatsapp_phone = body.whatsapp_phone
     # Vérifier que le tenant existe
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
@@ -153,6 +158,7 @@ async def create_whatsapp_session(
 async def get_whatsapp_qr(
     tenant_id: int,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
     """
     Récupère le QR code pour authentifier WhatsApp
@@ -274,15 +280,71 @@ async def get_whatsapp_qr(
             detail="Impossible de joindre le service WhatsApp"
         )
 
+
+class PairingCodeRequest(BaseModel):
+    phone_number: str  # ex: "22612345678" — format international sans +
+
+
+@router.post("/{tenant_id}/whatsapp/request-pairing-code")
+async def request_pairing_code(
+    tenant_id: int,
+    body: PairingCodeRequest,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
+):
+    """
+    Alternative au QR : génère un code à 8 chiffres à entrer dans l'app WhatsApp.
+    Meilleur quand le QR est inaccessible (rate-limit, pas de caméra, connexion distante).
+    Instructions: WA > ⋮ > Appareils connectés > Associer un appareil > Associer avec un numéro
+    """
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+
+    phone = body.phone_number.replace("+", "").replace(" ", "").replace("-", "")
+    if not phone.isdigit() or not (7 <= len(phone) <= 15):
+        raise HTTPException(status_code=422, detail="Numéro invalide — format international sans +, ex: 22612345678")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
+                json={"phone_number": phone},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        if data.get("status") == "already_connected":
+            return {"status": "already_connected", "message": "WhatsApp déjà connecté"}
+
+        return {
+            "status": "code_generated",
+            "code": data.get("code"),
+            "instructions": data.get("instructions"),
+            "phone": phone,
+        }
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail="Service WhatsApp inaccessible")
+
+
+class MarkConnectedBody(BaseModel):
+    phone: str | None = None
+
+
 @router.post("/{tenant_id}/whatsapp/session/mark-connected")
 async def mark_whatsapp_connected(
     tenant_id: int,
+    body: MarkConnectedBody = MarkConnectedBody(),
     db: Session = Depends(get_db),
+    x_internal_token: str | None = Header(default=None),
 ):
-    """
-    Marquer une session WhatsApp comme connectée
-    Appelé par: webhook Baileys après authentification réussie
-    """
+    """Appelé par le service WhatsApp interne après authentification Baileys."""
+    _key = os.getenv("INTERNAL_API_KEY", "")
+    if not _key or x_internal_token != _key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
     session = db.query(WhatsAppSession).filter(
         WhatsAppSession.tenant_id == tenant_id
     ).first()
@@ -296,11 +358,14 @@ async def mark_whatsapp_connected(
     session.is_connected = True
     session.last_connected_at = datetime.utcnow()
     session.failed_attempts = 0
+    # Mettre à jour le numéro si Baileys le fournit (vrai JID extrait des creds)
+    if body.phone and body.phone.strip():
+        session.whatsapp_phone = body.phone.strip()
     
     db.commit()
     db.refresh(session)
     
-    logger.info(f"✅ WhatsApp session marked as connected for tenant {tenant_id}")
+    logger.info(f"✅ WhatsApp session marked as connected for tenant {tenant_id}: {session.whatsapp_phone}")
     
     return {
         "status": "success",
@@ -311,11 +376,13 @@ async def mark_whatsapp_connected(
 async def mark_whatsapp_disconnected(
     tenant_id: int,
     db: Session = Depends(get_db),
+    x_internal_token: str | None = Header(default=None),
 ):
-    """
-    Marquer une session WhatsApp comme déconnectée
-    Appelé par: webhook Baileys quand connexion perdue
-    """
+    """Appelé par le service WhatsApp interne quand connexion perdue."""
+    _key = os.getenv("INTERNAL_API_KEY", "")
+    if not _key or x_internal_token != _key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
     session = db.query(WhatsAppSession).filter(
         WhatsAppSession.tenant_id == tenant_id
     ).first()
@@ -342,10 +409,8 @@ async def mark_whatsapp_disconnected(
 async def delete_whatsapp_session(
     tenant_id: int,
     db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
 ):
-    """
-    Supprime la session WhatsApp d'un tenant
-    """
     session = db.query(WhatsAppSession).filter(
         WhatsAppSession.tenant_id == tenant_id
     ).first()
@@ -365,3 +430,40 @@ async def delete_whatsapp_session(
         "status": "deleted",
         "message": f"Session WhatsApp supprimée pour le tenant {tenant_id}"
     }
+
+
+@router.post("/{tenant_id}/whatsapp/disconnect")
+async def disconnect_whatsapp(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access),
+):
+    """
+    Déconnecter WhatsApp — ferme le socket Baileys sans supprimer les creds.
+    L'utilisateur peut se reconnecter via QR ou code de couplage.
+    """
+    session = db.query(WhatsAppSession).filter(
+        WhatsAppSession.tenant_id == tenant_id
+    ).first()
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session WhatsApp non trouvée"
+        )
+
+    # Notifier le service Baileys
+    service_disconnect_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/disconnect"
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            await client.post(service_disconnect_url)
+    except Exception as e:
+        logger.warning(f"Baileys disconnect call failed for tenant {tenant_id}: {e}")
+
+    # Marquer comme déconnecté en DB
+    session.is_connected = False
+    db.commit()
+
+    logger.info(f"🔴 WhatsApp disconnected for tenant {tenant_id}")
+
+    return {"status": "disconnected", "tenant_id": tenant_id}

@@ -1,0 +1,5 @@
+ id |          email          |  full_name  | tenant_id | is_active | is_superadmin | role  
+----+-------------------------+-------------+-----------+-----------+---------------+-------
+  9 | timpatrick561@gmail.com | Tim Patrick |         1 | t         | t             | admin
+(1 row)
+

@@ -32,7 +32,7 @@ class SalesPromptGenerator:
             "Quelle est votre priorité: coût ou fonctionnalités?"
         ],
         "how_it_works": [
-            "Êtes-vous intéressé pour tester gratuitement pendant 7 jours?",
+            "Êtes-vous intéressé pour tester gratuitement pendant 14 jours?",
             "Avez-vous des questions sur l'installation ou la configuration?",
             "Quel est votre cas d'usage principal? (Support client, ventes, notifications?)",
             "Souhaiteriez-vous une démo personn alisée?"
@@ -76,10 +76,10 @@ class SalesPromptGenerator:
     
     # CTAs (Call-To-Action) par type
     CTAS_BY_INTENT = {
-        "pricing_inquiry": "Commencer mon essai gratuit de 7 jours →",
-        "plan_inquiry": "Voir tous les plans →",
+        "pricing_inquiry": "Démarrer mon essai gratuit 14 jours →",
+        "plan_inquiry": "Découvrir le plan Essential →",
         "how_it_works": "Réserver une démo gratuite →",
-        "trial_request": "S'inscrire pour l'essai gratuit →",
+        "trial_request": "S'inscrire pour l'essai gratuit 14 jours →",
         "features_inquiry": "Découvrir plus de fonctionnalités →",
         "support_request": "Contacter notre support →",
         "demo_request": "Réserver mon créneau démo →",
@@ -145,18 +145,18 @@ Message de l'utilisateur: "{message}"
 === OFFRE ACTUELLE (SEUL PLAN DISPONIBLE) ===
 {products_str}
 
-⚠️ IMPORTANT: Pour le moment, SEUL le plan BASIQUE existe!
-- Si l'utilisateur demande les autres plans, dis simplement qu'ils seront disponibles bientôt
-- N'ÉNUMÈRE JAMAIS les autres plans par leur nom (ne dis pas "Standard", "Pro", etc.)
-- Ne JAMAIS inventer d'autres plans ou tarifs
-- N'OCCUPE PAS l'utilisateur avec des plans inexistants
-- FOCUS UNIQUEMENT sur le plan BASIQUE à 20,000 FCFA et ses avantages
+⚠️ RÈGLES ABSOLUES SUR LES PLANS :
+- SEUL le plan Essential (20 000 FCFA/mois) est disponible aujourd'hui
+- Si l'utilisateur demande d'autres plans, réponds : "D'autres formules arrivent bientôt. Pour l'instant, notre plan Essential couvre tous vos besoins."
+- Ne JAMAIS mentionner Business, Enterprise, Standard, Pro, Starter ou tout autre nom de plan
+- Ne JAMAIS inventer de prix ou fonctionnalités absents de la base
+- Plan Essential : 20 000 FCFA/mois — 2 500 messages/mois — 1 agent IA — essai 14 jours GRATUIT
 
 === INSTRUCTIONS ===
 1. Réponds UNIQUEMENT aux questions liées à {company_name} et nos services
-2. Si tu ne sais pas la réponse, admets-le honnêtement
-3. Mentionne UNIQUEMENT le plan BASIQUE et ses tarifs (20,000 FCFA)
-4. Si l'utilisateur demande d'autres plans, dis que seul le BASIQUE est actif pour le moment
+2. Si tu ne sais pas la réponse, dis-le honnêtement
+3. Parle UNIQUEMENT du plan Essential (20 000 FCFA/mois, 2 500 msgs, essai 14j gratuit)
+4. Si l'utilisateur demande d'autres plans, oriente vers Essential et annonce qu'autres formules arrivent bientôt
 5. Sois persuasif mais honnête - pas de mensonges
 6. Chaque réponse DOIT finir par cette question EXACTE (sur une nouvelle ligne):
 

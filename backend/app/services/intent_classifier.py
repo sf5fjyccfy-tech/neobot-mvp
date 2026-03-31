@@ -123,7 +123,7 @@ class IntentClassifier:
             return (
                 f"Bonjour! 👋 Je suis {business_name}.\n\n"
                 f"Je suis ici pour répondre à vos questions sur:\n"
-                f"💰 Nos tarifs (Plan BASIQUE: 20,000 FCFA)\n"
+                f"💰 Plan Essential : 20 000 FCFA/mois\n"
                 f"🚀 Comment automatiser votre WhatsApp\n"
                 f"✨ Les avantages de notre solution\n\n"
                 f"👉 **Par quoi voulez-vous commencer?**"

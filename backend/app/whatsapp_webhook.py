@@ -4,21 +4,27 @@ Receives messages from WhatsApp service and processes them
 """
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 from typing import Optional
+import random
 import httpx
 import os
 import logging
+from app.services.http_client import get_http_client
 import hmac
 import hashlib
+import sentry_sdk
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 # Imports locaux
+import asyncio
 from app.database import get_db
 from app.models import Conversation, Message
 from app.services.business_kb_service import BusinessKBService
+from app.services.contact_filter_service import ContactFilterService
+from app.services.agent_service import AgentService
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -27,6 +33,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webhooks"])
 
 WEBHOOK_SECRET = os.getenv("WHATSAPP_WEBHOOK_SECRET") or os.getenv("WHATSAPP_SECRET_KEY") or ""
+APP_ENV = os.getenv("APP_ENV", "development")
 
 
 def _compute_webhook_signature(message: "WhatsAppMessage", secret: str) -> str:
@@ -36,8 +43,16 @@ def _compute_webhook_signature(message: "WhatsAppMessage", secret: str) -> str:
 
 
 def _is_valid_webhook_signature(request: Request, message: "WhatsAppMessage") -> bool:
-    """Validate HMAC signature when secret is configured."""
+    """Validate HMAC signature.
+    - Si WEBHOOK_SECRET est défini : signature obligatoire (dev + prod).
+    - Si WEBHOOK_SECRET absent ET env=development : permissif (service interne).
+    - Si WEBHOOK_SECRET absent ET env=production : rejette tout — configuration requise.
+    """
     if not WEBHOOK_SECRET:
+        if APP_ENV == "production":
+            logger.error("CRITIQUE: WHATSAPP_WEBHOOK_SECRET non défini en production — toutes les requêtes rejetées")
+            return False
+        # Dev sans secret configuré : permissif (Baileys local ne signe pas)
         return True
 
     signature = request.headers.get("x-webhook-signature")
@@ -60,6 +75,14 @@ class WhatsAppMessage(BaseModel):
     messageKey: dict
     timestamp: int
     isMedia: bool = False
+
+    @field_validator('text', mode='before')
+    @classmethod
+    def truncate_text(cls, v: str) -> str:
+        """Limiter le texte entrant à 4096 chars — prévient les injections massives."""
+        if v and len(v) > 4096:
+            return v[:4096]
+        return v
 
 
 class WhatsAppResponse(BaseModel):
@@ -117,14 +140,17 @@ class BrainOrchestrator:
     
     def _handle_pricing(self, sender_name: str) -> str:
         """Handle pricing inquiry"""
-        return """💰 *Tarifs NéoBot*
+        return """💰 *Plan Essential — NéoBot*
 
-📱 Plan Starter: 20,000 FCFA/mois
-   • 500 messages illimités
-   • Support manuel
-   • Statistiques de base
+✅ 20 000 FCFA/mois
+   • 2 500 messages WhatsApp/mois
+   • 1 agent IA actif
+   • Sources Texte + PDF
+   • Dashboard Analytics 30 jours
+   • Support par email
 
-🚀 Plus tard: plans supérieurs
+🎁 Essai gratuit 14 jours — aucune carte requise
+D'autres formules arrivent bientôt.
 
 Voulez-vous activer? Répondez "ACTIVER"
 """
@@ -367,6 +393,11 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
     try:
         if not _is_valid_webhook_signature(request, message):
             logger.warning("Invalid webhook signature", extra={"path": str(request.url.path)})
+            sentry_sdk.capture_message(
+                "Webhook signature invalide détectée — possible attaque",
+                level="warning",
+                extras={"path": str(request.url.path), "ip": request.client.host if request.client else "unknown"},
+            )
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
         logger.info(f"📨 Received message from {message.senderName}: {message.text}")
@@ -427,6 +458,16 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             is_ai=False,
         )
         logger.info(f"✅ Saved incoming message {incoming_msg.id}")
+
+        # Check contact blacklist — AI disabled for this contact?
+        if not ContactFilterService.is_ai_enabled_for_contact(tenant_id, phone, db):
+            logger.info(f"🚫 IA désactivée pour {phone} (tenant {tenant_id}) — réponse ignorée")
+            return {"status": "skipped", "reason": "ai_disabled_for_contact"}
+
+        # Fetch agent settings (delay + typing) before generating response
+        active_agent = AgentService.get_active_agent(tenant_id, db)
+        response_delay = active_agent.response_delay if active_agent else "natural"
+        typing_indicator = active_agent.typing_indicator if active_agent else True
         
         # Process message with brain (now with business context)
         response_text = await brain.process(
@@ -449,6 +490,16 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         )
         logger.info(f"✅ Saved outgoing message {outgoing_msg.id}")
         
+        # DETECT OUTCOME: analyser la réponse IA pour détecter un résultat métier
+        if active_agent:
+            from .services.outcome_detector import update_conversation_outcome
+            update_conversation_outcome(
+                conversation_id=conversation.id,
+                agent_type=str(active_agent.agent_type),
+                ai_response=response_text,
+                db=db,
+            )
+
         # INCREMENT USAGE: 1 for incoming message + 1 for outgoing message = 2 total
         UsageTrackingService.increment_whatsapp_usage(tenant_id, 2, db)
         
@@ -461,7 +512,9 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             send_whatsapp_response,
             tenant_id=tenant_id,
             phone=message.reply_jid or phone,
-            text=response_text
+            text=response_text,
+            response_delay=response_delay,
+            typing_indicator=typing_indicator,
         )
         
         return {
@@ -482,43 +535,85 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
 
 # ===== Background Task =====
 
-async def send_whatsapp_response(tenant_id: int, phone: str, text: str):
+# Mapping délai de réponse → plage (min, max) en secondes.
+# Délai variable = pattern humain. Délai fixe = pattern bot détectable par WA.
+_DELAY_MAP = {
+    "immediate": (0, 0),
+    "instant":   (0, 0),
+    "natural":   (2, 5),
+    "human":     (4, 9),
+    "slow":      (9, 16),
+}
+
+
+def _compute_delay(response_delay: Optional[str], response_text: str) -> float:
     """
-    Send response via WhatsApp service
-    Runs in background (non-blocking)
+    Calcule un délai de réponse humain :
+    - Plage de base selon le mode configuré (natural/human/slow)
+    - Jitter proportionnel à la longueur du texte (lire + taper prend plus de temps)
+    - Variation aléatoire pour éviter tout pattern détectable
+    """
+    mode = response_delay or "natural"
+    min_s, max_s = _DELAY_MAP.get(mode, (2, 5))
+    if min_s == 0 and max_s == 0:
+        return 0.0
+    # +0.5s par tranche de 100 caractères, plafonné à +4s
+    length_bonus = min(len(response_text) / 100 * 0.5, 4.0)
+    base = random.uniform(min_s, max_s)
+    return round(base + length_bonus, 2)
+
+
+async def send_whatsapp_response(
+    tenant_id: int,
+    phone: str,
+    text: str,
+    response_delay: Optional[str] = "natural",
+    typing_indicator: bool = True,
+):
+    """
+    Send response via WhatsApp service.
+    Simulates typing delay before sending if configured.
+    Delay is randomized (human jitter) to avoid bot detection by WhatsApp.
+    Runs in background (non-blocking).
     """
     try:
-        whatsapp_service_url = os.getenv(
-            'WHATSAPP_SERVICE_URL',
-            'http://localhost:3001'
+        whatsapp_service_url = os.getenv('WHATSAPP_SERVICE_URL', 'http://localhost:3001')
+        delay_secs = _compute_delay(response_delay, text)
+        # Réutiliser le client HTTP global poolé — pas de nouvelle connexion TCP à chaque message
+        client = get_http_client()
+
+        # Envoyer l'indicateur de frappe puis attendre le délai configuré
+        if typing_indicator and delay_secs > 0:
+            try:
+                await client.post(
+                    f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/typing",
+                    json={"to": phone},
+                    timeout=5,
+                )
+            except Exception as typing_err:
+                # Non bloquant — le message s'envoie quand même
+                logger.debug(f"Typing indicator failed (non-blocking): {typing_err}")
+            await asyncio.sleep(delay_secs)
+
+        response = await client.post(
+            f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
+            json={"to": phone, "message": text},
+            timeout=10,
         )
-        
-        tenant_payload = {
-            "to": phone,
-            "message": text,
-        }
-        
-        async with httpx.AsyncClient() as client:
+
+        # Backward compatibility with older service contracts.
+        if response.status_code == 404:
             response = await client.post(
-                f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
-                json=tenant_payload,
+                f"{whatsapp_service_url}/send",
+                json={"to": phone, "text": text},
                 timeout=10,
             )
 
-            # Backward compatibility with older service contracts.
-            if response.status_code == 404:
-                response = await client.post(
-                    f"{whatsapp_service_url}/send",
-                    json={"to": phone, "text": text},
-                    timeout=10,
-                )
-        
         if response.status_code == 200:
-            logger.info(f"✅ Message sent to {phone}")
+            logger.info(f"✅ Message sent to {phone} (delay={delay_secs}s, typing={typing_indicator})")
         else:
-            logger.error(f"Failed to send message: {response.status_code}")
-            logger.error(response.text)
-    
+            logger.error(f"Failed to send message: {response.status_code} — {response.text}")
+
     except Exception as e:
         logger.error(f"Error sending WhatsApp response: {str(e)}")
 

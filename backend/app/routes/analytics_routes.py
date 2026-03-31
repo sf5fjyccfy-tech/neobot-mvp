@@ -2,6 +2,7 @@
 📊 Analytics Routes
 Endpoints pour les dashboards et rapports d'analytics
 """
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict
@@ -121,7 +122,7 @@ async def get_summary_report(tenant_id: int, db: Session = Depends(get_db)) -> D
         return {
             "status": "success",
             "report": report,
-            "generated_at": str(__import__("datetime").datetime.now().isoformat())
+            "generated_at": datetime.now().isoformat()
         }
         
     except Exception as e:
@@ -148,7 +149,7 @@ async def get_html_dashboard(tenant_id: int, db: Session = Depends(get_db)):
         return {
             "status": "success",
             "html": html,
-            "generated_at": str(__import__("datetime").datetime.now().isoformat())
+            "generated_at": datetime.now().isoformat()
         }
         
     except Exception as e:

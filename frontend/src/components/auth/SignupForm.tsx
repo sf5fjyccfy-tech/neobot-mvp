@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiCall, setToken } from '@/lib/api';
+import { apiCall, buildApiUrl, setToken, setTenantId, setBusinessInfo, setIsSuperadmin } from '@/lib/api';
 import { Eye, EyeOff, User, Mail, Lock, Building2, Briefcase, ArrowRight, Check } from 'lucide-react';
 
 interface SignupFormData {
@@ -36,6 +36,7 @@ export default function SignupForm() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState(1);
+  const [showTrialModal, setShowTrialModal] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -48,7 +49,7 @@ export default function SignupForm() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/register`, {
+      const response = await fetch(buildApiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -62,7 +63,10 @@ export default function SignupForm() {
       }
 
       setToken(data.access_token);
-      router.push('/dashboard');
+      setTenantId(data.tenant_id);
+      setIsSuperadmin(data.is_superadmin ?? false);
+      setBusinessInfo({ tenant_name: formData.tenant_name, business_type: formData.business_type });
+      setShowTrialModal(true);
     } catch {
       setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
     } finally {
@@ -74,7 +78,89 @@ export default function SignupForm() {
   const labelClass = "block text-sm font-medium text-white/80 mb-1.5";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <>
+      {/* ── Modal essai gratuit ─────────────────────────────────── */}
+      {showTrialModal && (
+        <div style={{
+          position:'fixed', inset:0, zIndex:9999,
+          background:'rgba(5,0,16,.85)', backdropFilter:'blur(16px)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          padding:'24px',
+        }}>
+          <div style={{
+            maxWidth:460, width:'100%',
+            background:'linear-gradient(145deg, rgba(25,10,50,.95), rgba(10,5,30,.98))',
+            border:'1px solid rgba(147,51,234,.35)',
+            borderRadius:24,
+            padding:'40px 36px',
+            boxShadow:'0 0 80px rgba(147,51,234,.2), 0 0 40px rgba(6,182,212,.1)',
+            textAlign:'center',
+          }}>
+            {/* Icône étoile */}
+            <div style={{
+              width:72, height:72, borderRadius:'50%',
+              background:'linear-gradient(135deg, rgba(147,51,234,.2), rgba(6,182,212,.15))',
+              border:'1px solid rgba(147,51,234,.4)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              margin:'0 auto 24px', fontSize:32,
+            }}>🚀</div>
+
+            <h2 style={{
+              fontFamily:'"Syne",sans-serif', fontWeight:900, fontSize:26,
+              color:'#F0E8FF', marginBottom:12, lineHeight:1.2,
+            }}>
+              Votre essai gratuit<br/>
+              <span style={{background:'linear-gradient(to right,#FF9A6C,#00E5CC)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+                démarre maintenant !
+              </span>
+            </h2>
+
+            <p style={{fontSize:14, color:'rgba(230,220,255,.55)', marginBottom:28, lineHeight:1.7}}>
+              Votre compte est prêt. Découvrez NéoBot pendant <strong style={{color:'#FF9A6C'}}>14 jours</strong> sans engagement.
+            </p>
+
+            {/* Avantages */}
+            <div style={{
+              background:'rgba(147,51,234,.07)',
+              border:'1px solid rgba(147,51,234,.18)',
+              borderRadius:14, padding:'18px 20px', marginBottom:28, textAlign:'left',
+            }}>
+              {[
+                ['✓', '2 500 messages inclus'],
+                ['✓', '1 agent IA personnalisable'],
+                ['✓', 'Connexion WhatsApp en 30s'],
+                ['✓', 'Aucune carte bancaire requise'],
+                ['✓', 'Résiliation à tout moment'],
+              ].map(([ic, txt]) => (
+                <div key={txt} style={{display:'flex', alignItems:'center', gap:10, marginBottom:8}}>
+                  <span style={{color:'#00E5CC', fontWeight:700, fontSize:14}}>{ic}</span>
+                  <span style={{color:'rgba(230,220,255,.72)', fontSize:13}}>{txt}</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => router.push('/dashboard')}
+              style={{
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                width:'100%', padding:'14px 24px', borderRadius:12,
+                background:'linear-gradient(135deg, #FF4D00, #0891B2)',
+                color:'#fff', fontWeight:800, fontSize:15,
+                fontFamily:'"Syne",sans-serif', border:'none', cursor:'pointer',
+                boxShadow:'0 0 30px rgba(124,58,237,.4)',
+              }}
+            >
+              Accéder à mon dashboard <span style={{fontSize:18}}>→</span>
+            </button>
+
+            <p style={{fontSize:11, color:'rgba(255,255,255,.18)', marginTop:14}}>
+              Plan Essential · 14 jours gratuits · Aucun engagement
+            </p>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
         <div className="bg-red-500/20 border border-red-400/30 text-red-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
           <span className="text-red-400 mt-0.5">⚠</span>
@@ -190,5 +276,6 @@ export default function SignupForm() {
         </a>
       </p>
     </form>
+    </>
   );
 }

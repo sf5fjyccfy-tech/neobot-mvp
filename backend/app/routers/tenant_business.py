@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from app.database import get_db
+from app.dependencies import verify_tenant_access
 from app.models import (
     Tenant,
     TenantBusinessConfig,
@@ -37,6 +38,14 @@ class BusinessConfigRequest(BaseModel):
     tone: Optional[str] = "professional"
     selling_focus: Optional[str] = "Quality"
 
+
+class BusinessSettingsUpdateRequest(BaseModel):
+    """Modèle léger pour la page Paramètres — pas besoin de business_type_slug"""
+    business_name: Optional[str] = None
+    sector: Optional[str] = None
+    phone: Optional[str] = None
+    greeting_message: Optional[str] = None
+
 class BusinessConfigResponse(BaseModel):
     business_type: str
     company_name: str
@@ -51,7 +60,8 @@ class BusinessConfigResponse(BaseModel):
 async def configure_business(
     tenant_id: int,
     config: BusinessConfigRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """
     Configure le business type et la KB pour un tenant
@@ -95,10 +105,10 @@ async def configure_business(
             TenantBusinessConfig.tenant_id == tenant_id
         ).first()
         
-        # Convertir les produits en JSON
-        products_json = None
+        # Stocker les produits comme liste Python (la colonne est JSON/JSONB)
+        products_list = None
         if config.products_services:
-            products_json = json.dumps([
+            products_list = [
                 {
                     "name": p.name,
                     "price": p.price,
@@ -106,14 +116,14 @@ async def configure_business(
                     "category": p.category
                 }
                 for p in config.products_services
-            ])
+            ]
         
         if existing_config:
             # Mise à jour
             existing_config.business_type_id = business_type.id
             existing_config.company_name = config.company_name
             existing_config.company_description = config.company_description
-            existing_config.products_services = products_json
+            existing_config.products_services = products_list
             existing_config.tone = config.tone
             existing_config.selling_focus = config.selling_focus
             db.commit()
@@ -125,7 +135,7 @@ async def configure_business(
                 business_type_id=business_type.id,
                 company_name=config.company_name,
                 company_description=config.company_description,
-                products_services=products_json,
+                products_services=products_list,
                 tone=config.tone,
                 selling_focus=config.selling_focus
             )
@@ -150,10 +160,57 @@ async def configure_business(
             detail=f"Error configuring business: {str(e)}"
         )
 
+@router.put("/{tenant_id}/business/config", status_code=200)
+async def update_business_settings(
+    tenant_id: int,
+    body: BusinessSettingsUpdateRequest,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
+):
+    """
+    Met à jour les paramètres de base du tenant (page Paramètres).
+    N'écrase pas la config détaillée (produits, tone…).
+    """
+    try:
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        # Mise à jour des champs Tenant
+        if body.business_name is not None:
+            tenant.name = body.business_name
+        if body.sector is not None:
+            tenant.business_type = body.sector
+        if body.phone is not None:
+            tenant.phone = body.phone
+
+        # Mise à jour TenantBusinessConfig si elle existe
+        config = db.query(TenantBusinessConfig).filter(
+            TenantBusinessConfig.tenant_id == tenant_id
+        ).first()
+        if config:
+            if body.business_name is not None:
+                config.company_name = body.business_name
+            if body.greeting_message is not None:
+                config.company_description = body.greeting_message
+
+        db.commit()
+        logger.info(f"✅ Business settings updated for tenant {tenant_id}")
+        return {"status": "success", "message": "Paramètres mis à jour"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error updating business settings: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{tenant_id}/business/config")
 async def get_business_config(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """Récupère la configuration business d'un tenant"""
     
@@ -175,11 +232,18 @@ async def get_business_config(
                 "tenant_id": tenant_id
             }
         
-        # Parser les produits
-        try:
-            products = json.loads(config.products_services) if config.products_services else []
-        except:
-            products = []
+        # products_services est une colonne JSON/JSONB — SQLAlchemy retourne déjà une liste
+        raw = config.products_services
+        if isinstance(raw, str):
+            # ancienne donnée double-encodée : on décode
+            try:
+                import json as _json
+                raw = _json.loads(raw)
+                if isinstance(raw, str):
+                    raw = _json.loads(raw)
+            except Exception:
+                raw = []
+        products = raw if isinstance(raw, list) else []
         
         return {
             "status": "success",
@@ -189,6 +253,12 @@ async def get_business_config(
             "products_services": products,
             "tone": config.tone,
             "selling_focus": config.selling_focus,
+            # Champs compatibles avec la page Paramètres
+            "business_name": config.company_name,
+            "sector": tenant.business_type,
+            "phone": tenant.phone,
+            "email": tenant.email,
+            "greeting_message": config.company_description or "",
             "created_at": config.created_at.isoformat() if config.created_at else None,
             "updated_at": config.updated_at.isoformat() if config.updated_at else None
         }
@@ -202,7 +272,8 @@ async def get_business_config(
 @router.delete("/{tenant_id}/business/config")
 async def delete_business_config(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_tenant_access)
 ):
     """Supprime la configuration business d'un tenant"""
     

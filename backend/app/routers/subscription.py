@@ -23,8 +23,8 @@ async def start_trial(
     current_user = Depends(get_current_user)
 ) -> Dict:
     """
-    Start a 7-day trial for a tenant
-    
+    Démarrer un essai gratuit de 14 jours pour un tenant
+
     - **tenant_id**: Tenant ID
     - Returns trial information with dates
     """
@@ -34,8 +34,8 @@ async def start_trial(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot access another tenant's subscription"
         )
-    
-    result = await SubscriptionService.start_trial(db, tenant_id, trial_days=7)
+
+    result = await SubscriptionService.start_trial(db, tenant_id, trial_days=14)
     
     if not result["success"]:
         raise HTTPException(

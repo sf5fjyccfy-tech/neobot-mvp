@@ -17,6 +17,7 @@ __pycache__/
 
 # Logs
 logs/
+!logs/.gitkeep
 *.log
 
 # Database
@@ -46,6 +47,12 @@ frontend/.eslintrc.json
 *.pid
 whatsapp.pid
 whatsapp-service/auth_info_baileys/
+whatsapp-service/sessions/
+whatsapp-service/session_timeouts.json
+
+# Frontend env (ajouté manuellement — ne pas commiter)
+frontend/.env.local
+frontend/.env.production.local
 
 # Local sensitive env files
 backend/.env.oracle

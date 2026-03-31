@@ -3,6 +3,8 @@
     "next/core-web-vitals"
   ],
   "rules": {
-    "react/no-unescaped-entities": "off"
+    "react/no-unescaped-entities": "off",
+    "react/forbid-component-props": "off",
+    "@next/next/no-inline-styles": "off"
   }
 }

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { buildApiUrl } from '@/lib/api';
+import { buildApiUrl, getToken } from '@/lib/api';
 
 interface WhatsAppStatus {
   connected: boolean;
@@ -18,31 +18,52 @@ const WhatsAppConnect: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Backoff exponentiel : évite de spammer le serveur en cas de panne
+  const failCountRef = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Polling callback intentionally remains stable for mount lifecycle.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchWhatsAppStatus();
-    
-    // Polling pour les mises à jour (plus simple que WebSocket)
-    const interval = setInterval(fetchWhatsAppStatus, 3000);
-    
-    return () => clearInterval(interval);
+    scheduleNextPoll(0);
+    return () => {
+      if (intervalRef.current) clearTimeout(intervalRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const scheduleNextPoll = (failures: number) => {
+    if (intervalRef.current) clearTimeout(intervalRef.current);
+    // Backoff : 3s → 6s → 12s → max 30s
+    const delay = Math.min(3000 * Math.pow(2, failures), 30000);
+    intervalRef.current = setTimeout(() => {
+      fetchWhatsAppStatus();
+    }, delay);
+  };
 
   const fetchWhatsAppStatus = async () => {
     try {
-      const response = await fetch(buildApiUrl('/api/whatsapp/status'));
+      const token = getToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(buildApiUrl('/api/whatsapp/status'), { headers });
       if (response.ok) {
         const data = await response.json();
         setStatus(data);
         setError(null);
+        failCountRef.current = 0;
+      } else if (response.status === 401) {
+        // Non authentifié — ne pas boucler
+        setError('Session expirée — veuillez vous reconnecter');
+        failCountRef.current = 99;
+      } else {
+        failCountRef.current += 1;
       }
       setLoading(false);
     } catch {
+      failCountRef.current += 1;
       setError('Impossible de se connecter au serveur');
       setLoading(false);
     }
+    scheduleNextPoll(failCountRef.current);
   };
 
   const restartConnection = async () => {

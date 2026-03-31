@@ -3,7 +3,7 @@ export interface Tenant {
   name: string;
   email: string;
   phone: string;
-  business_type: 'restaurant' | 'boutique' | 'service' | 'ecommerce';
+  business_type: 'restaurant' | 'ecommerce' | 'travel' | 'salon' | 'fitness' | 'consulting' | 'custom';
   plan: 'basique' | 'standard' | 'pro';
   whatsapp_connected: boolean;
   messages_used: number;

@@ -31,12 +31,17 @@ export const buildApiUrl = (endpoint: string): string => {
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('jwt_token', token);
+    // Cookie de présence lu par le middleware Next.js pour protéger les routes
+    document.cookie = 'auth_session=1; Path=/; SameSite=Strict; Max-Age=86400';
   }
 };
 
 export const getToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('jwt_token');
+    // Impersonation : sessionStorage en priorité (onglet courant), puis localStorage (résiste au refresh)
+    return sessionStorage.getItem('impersonate_token')
+      || localStorage.getItem('impersonate_token')
+      || localStorage.getItem('jwt_token');
   }
   return null;
 };
@@ -44,11 +49,48 @@ export const getToken = (): string | null => {
 export const clearToken = (): void => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('jwt_token');
+    localStorage.removeItem('tenant_id');
+    localStorage.removeItem('is_superadmin');
+    localStorage.removeItem('business_info');
+    localStorage.removeItem('impersonate_token');
+    localStorage.removeItem('impersonate_tenant');
+    sessionStorage.removeItem('impersonate_token');
+    sessionStorage.removeItem('impersonate_tenant');
+    document.cookie = 'auth_session=; Path=/; SameSite=Strict; Max-Age=0';
   }
 };
 
 export const isAuth = (): boolean => {
   return getToken() !== null;
+};
+
+export const setTenantId = (tenantId: number): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('tenant_id', String(tenantId));
+  }
+};
+
+export const getTenantId = (): number | null => {
+  if (typeof window !== 'undefined') {
+    const id = localStorage.getItem('tenant_id');
+    return id ? parseInt(id, 10) : null;
+  }
+  return null;
+};
+
+/** Stocke les infos business saisies au signup */
+export const setBusinessInfo = (info: { tenant_name: string; business_type: string }): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('business_info', JSON.stringify(info));
+  }
+};
+
+export const getBusinessInfo = (): { tenant_name: string; business_type: string } | null => {
+  if (typeof window !== 'undefined') {
+    const raw = localStorage.getItem('business_info');
+    return raw ? JSON.parse(raw) : null;
+  }
+  return null;
 };
 
 /**
@@ -71,16 +113,22 @@ export const apiCall = async (
       ...options,
     });
     
-    // If unauthorized, clear token and redirect to login
+    // If unauthorized, clear all auth state and redirect to login with a hint
     if (response.status === 401) {
       clearToken();
       if (typeof window !== 'undefined') {
+        localStorage.setItem('session_expired', '1');
         window.location.href = '/login';
       }
     }
     
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      let detail = '';
+      try {
+        const body = await response.clone().json();
+        detail = body.detail || body.error || body.message || '';
+      } catch { /* ignore parse error */ }
+      throw new Error(detail || `Erreur ${response.status}`);
     }
     
     return response;
@@ -88,4 +136,64 @@ export const apiCall = async (
     console.error(`API call failed for ${endpoint}:`, error);
     throw error;
   }
+};
+
+// ─── Superadmin helpers ───────────────────────────────────────────────────────
+
+export const setIsSuperadmin = (val: boolean): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('is_superadmin', String(val));
+  }
+};
+
+export const getIsSuperadmin = (): boolean => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('is_superadmin') === 'true';
+  }
+  return false;
+};
+
+export const clearAuth = (): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('tenant_id');
+    localStorage.removeItem('is_superadmin');
+    sessionStorage.removeItem('impersonate_token');
+    sessionStorage.removeItem('impersonate_tenant');
+  }
+};
+
+// ─── Impersonation helpers ────────────────────────────────────────────────────
+
+export const startImpersonation = (token: string, tenantName: string): void => {
+  if (typeof window !== 'undefined') {
+    // Double stockage : sessionStorage (onglet) + localStorage (résiste au refresh)
+    sessionStorage.setItem('impersonate_token', token);
+    sessionStorage.setItem('impersonate_tenant', tenantName);
+    localStorage.setItem('impersonate_token', token);
+    localStorage.setItem('impersonate_tenant', tenantName);
+  }
+};
+
+export const stopImpersonation = (): void => {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem('impersonate_token');
+    sessionStorage.removeItem('impersonate_tenant');
+    localStorage.removeItem('impersonate_token');
+    localStorage.removeItem('impersonate_tenant');
+  }
+};
+
+export const getImpersonatedTenant = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return sessionStorage.getItem('impersonate_tenant');
+  }
+  return null;
+};
+
+export const isImpersonating = (): boolean => {
+  if (typeof window !== 'undefined') {
+    return Boolean(sessionStorage.getItem('impersonate_token') || localStorage.getItem('impersonate_token'));
+  }
+  return false;
 };

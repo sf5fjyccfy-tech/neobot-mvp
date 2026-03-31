@@ -41,7 +41,7 @@ class SubscriptionService:
     async def start_trial(
         db: AsyncSession,
         tenant_id: int,
-        trial_days: int = 7
+        trial_days: int = 14
     ) -> Dict:
         """
         Start a new trial for a tenant
@@ -49,7 +49,7 @@ class SubscriptionService:
         Args:
             db: Database session
             tenant_id: Tenant ID
-            trial_days: Number of days for trial (default 7)
+            trial_days: Number of days for trial (default 14)
             
         Returns:
             Trial information dict
@@ -76,7 +76,7 @@ class SubscriptionService:
             # Create new subscription with trial
             subscription = Subscription(
                 tenant_id=tenant_id,
-                plan="basique",  # Default plan for new trials
+                plan="essential",  # Default plan for new trials
                 status="active",
                 is_trial=True,
                 trial_start_date=trial_start,
@@ -94,7 +94,7 @@ class SubscriptionService:
             return {
                 "success": True,
                 "tenant_id": tenant_id,
-                "plan": "basique",
+                "plan": "essential",
                 "trial_start_date": trial_start.isoformat(),
                 "trial_end_date": trial_end.isoformat(),
                 "days_remaining": trial_days
@@ -219,14 +219,14 @@ class SubscriptionService:
         Args:
             db: Database session
             tenant_id: Tenant ID
-            plan: New plan (basique, standard, pro)
+            plan: New plan (essential)
             
         Returns:
             Upgrade result dict
         """
         from app.models import Subscription
         
-        if plan not in ["basique", "standard", "pro"]:
+        if plan not in ["essential", "business", "enterprise"]:
             return {
                 "success": False,
                 "error": f"Invalid plan: {plan}"
@@ -282,14 +282,14 @@ class SubscriptionService:
         Args:
             db: Database session
             tenant_id: Tenant ID
-            new_plan: New plan (basique, standard, pro)
+            new_plan: New plan (essential)
             
         Returns:
             Plan change result dict
         """
         from app.models import Subscription
         
-        if new_plan not in ["basique", "standard", "pro"]:
+        if new_plan not in ["essential", "business", "enterprise"]:
             return {
                 "success": False,
                 "error": f"Invalid plan: {new_plan}"

@@ -202,10 +202,10 @@ def _get_smart_fallback(message: str, profile: dict, is_neobot: bool) -> str:
             return f"🤖 NéoBot automatise les réponses WhatsApp de votre entreprise. Vous pouvez répondre à vos clients 24/7!"
         
         elif any(w in message_lower for w in ["prix", "coûte", "tarif", "combien"]):
-            return "💰 Nos plans:\n- Basique: 20,000 FCFA/mois\n- Standard: 50,000 FCFA/mois\n- Pro: 90,000 FCFA/mois\nEssai gratuit 7 jours!"
-        
+            return "💰 Plan Essential : 20 000 FCFA/mois\n✅ 2 500 messages WhatsApp/mois\n✅ 1 agent IA actif\n✅ Essai gratuit 14 jours — aucune carte requise !\nD'autres formules arrivent bientôt."
+
         elif any(w in message_lower for w in ["essai", "trial", "demo", "test"]):
-            return "🎯 Lancez un essai gratuit de 7 jours - pas de carte bancaire requise! Comment souhaitez-vous commencer?"
+            return "🎯 Lancez un essai gratuit de 14 jours — aucune carte bancaire requise ! Comment souhaitez-vous commencer ?"
         
         else:
             return "🤖 Besoin d'aide avec NéoBot? Posez votre question!"

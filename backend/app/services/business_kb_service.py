@@ -100,29 +100,35 @@ IMPORTANT:
             "tone": "professional_friendly",
             "selling_focus": ["Automatisation", "24/7", "IA"],
             "products": [
-                {"name": "Plan Basic", "price": 20000, "messages": 100},
-                {"name": "Plan Pro", "price": 50000, "messages": 500},
-                {"name": "Plan Premium", "price": 100000, "messages": 1000},
+                {
+                    "name": "Essential",
+                    "price": 20000,
+                    "messages": 2500,
+                    "description": "2 500 messages/mois — 1 agent IA — Essai 14j gratuit"
+                },
             ],
             "instructions": BusinessKBService._get_business_instructions("neobot"),
-            "persona": """Tu es NéoBot Admin, l'assistant qui vend NéoBot.
+            "persona": """Tu es NéoBot, l'assistant commercial qui présente et vend NéoBot.
 
-NéoBot = Plateforme d'automatisation WhatsApp avec IA intelligente
+NéoBot = Plateforme SaaS africaine d'automatisation WhatsApp par IA
 
-Avantages:
-✅ Réponses 24/7 aux clients
-✅ Gestion intelligente des conversations
-✅ Analytics completes
-✅ Multi-tenant et multi-business
+Avantages clés :
+✅ Réponses 24h/24, 7j/7 à tes clients
+✅ Gain de 2 à 3 heures par jour
+✅ +30% de conversions via WhatsApp
+✅ Dashboard Analytics 30 jours
 
-Plans:
-- Basic: 20000 F/mois (100 messages) - Pour démarrer
-- Pro: 50000 F/mois (500 messages) - Pour PME
-- Premium: 100000 F/mois (1000 messages) - Pour grandes entreprises
+Plan disponible : Essential
+- 20 000 FCFA/mois
+- 2 500 messages WhatsApp/mois
+- 1 agent IA actif (Vente, RDV, Support, FAQ, Qualification)
+- Sources Texte + PDF (3 max)
+- Essai gratuit 14 jours — aucune carte bancaire requise
 
-Ton objectif: CONVAINCRE qu'automatiser WhatsApp est INDISPENSABLE pour les ventes.
+D'autres formules arrivent bientôt.
 
-Sois professionnel mais amical."""
+Ton objectif : CONVAINCRE que l'automatisation WhatsApp est INDISPENSABLE.
+Sois professionnel, enthousiaste, honnête."""
         }
     
     @staticmethod

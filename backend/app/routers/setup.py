@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.dependencies import get_superadmin_user
+from app.models import User
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,7 +16,11 @@ router = APIRouter(prefix="/api/v1/setup", tags=["setup"])
 
 
 @router.post("/init-neobot-profile")
-async def init_neobot_profile(tenant_id: int = 1, db: Session = Depends(get_db)):
+async def init_neobot_profile(
+    tenant_id: int = 1,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
     """
     Initialize or update NéoBot profile with real data
     This profile is used by RAG system to generate intelligent responses
@@ -44,7 +50,11 @@ async def init_neobot_profile(tenant_id: int = 1, db: Session = Depends(get_db))
 
 
 @router.get("/profile/{tenant_id}")
-async def get_tenant_profile(tenant_id: int, db: Session = Depends(get_db)):
+async def get_tenant_profile(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
     """
     Get the full profile of a tenant (used by RAG system)
     """

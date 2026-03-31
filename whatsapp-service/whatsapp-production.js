@@ -14,9 +14,11 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
 } from '@whiskeysockets/baileys';
+import { usePgAuthState, clearPgAuthState } from './pg-auth-state.js';
 import qrcodeTerminal from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import pino from 'pino';
+import * as Sentry from '@sentry/node';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,13 +27,33 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+// Init Sentry de secours — actif même si --import ./instrument.js est absent.
+// Sentry.init() est idempotent : si instrument.js l'a déjà appelé, ceci est ignoré.
+if (process.env.SENTRY_DSN && !Sentry.isInitialized()) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+    beforeSend(event, hint) {
+      const err = hint?.originalException;
+      if (err?.message?.includes('Connection Closed') ||
+          err?.message?.includes('ECONNREFUSED') ||
+          err?.message?.includes('Stream Errored')) {
+        return null;
+      }
+      return event;
+    },
+  });
+}
+
 const BACKEND_URL = process.env.WHATSAPP_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8000';
 const WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || process.env.WHATSAPP_SECRET_KEY || '';
 const PORT = Number.parseInt(process.env.WHATSAPP_PORT || process.env.PORT || '3001', 10);
 const DEFAULT_TENANT_ID = Number.parseInt(process.env.TENANT_ID || '1', 10);
-const MAX_RETRIES = Number.parseInt(process.env.WHATSAPP_MAX_RETRIES || '6', 10);
-const BASE_RECONNECT_DELAY_MS = Number.parseInt(process.env.WHATSAPP_RECONNECT_TIMEOUT || '3000', 10);
-const MAX_RECONNECT_DELAY_MS = 60000;
+const MAX_RETRIES = Number.parseInt(process.env.WHATSAPP_MAX_RETRIES || '10', 10);
+const BASE_RECONNECT_DELAY_MS = Number.parseInt(process.env.WHATSAPP_RECONNECT_TIMEOUT || '5000', 10);
+const MAX_RECONNECT_DELAY_MS = 300000; // 5min max entre retries
+const ERROR_AUTORECOVERY_MS = 15 * 60 * 1000; // 15min avant auto-recovery depuis état error
 const QR_TTL_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 30_000;
 const BAILEYS_VERSION_CACHE_MS = 4 * 60 * 60 * 1000;
@@ -83,6 +105,7 @@ class TenantSession {
     this.connected = false;
     this.initializing = false;
     this.retryCount = 0;
+    this.authResetCount = 0;
     this.connectedAt = null;
     this.lastError = null;
     this.lastDisconnectCode = null;
@@ -90,6 +113,7 @@ class TenantSession {
     this.qrImageDataUrl = null;
     this.qrExpiresAt = null;
     this.scheduledReconnect = null;
+    this.connectedPhone = null; // JID extrait des creds Baileys au moment de la connexion
   }
 
   snapshot() {
@@ -198,7 +222,7 @@ async function getBaileysVersion() {
     logger.warn('Failed to fetch latest Baileys version, using fallback', { error: error.message });
   }
 
-  cachedBaileysVersion.version = [2, 3000, 1033846690];
+  cachedBaileysVersion.version = [2, 3000, 1040787960];
   cachedBaileysVersion.fetchedAt = now;
   return cachedBaileysVersion.version;
 }
@@ -223,13 +247,18 @@ function clearReconnectTimer(session) {
   }
 }
 
-async function notifyBackendConnection(tenantId, connected) {
+async function notifyBackendConnection(tenantId, connected, phone = null) {
   const endpoint = connected
     ? `${BACKEND_URL}/api/tenants/${tenantId}/whatsapp/session/mark-connected`
     : `${BACKEND_URL}/api/tenants/${tenantId}/whatsapp/session/mark-disconnected`;
 
+  const body = connected && phone ? { phone } : {};
+
   try {
-    await axios.post(endpoint, {}, { timeout: 10_000 });
+    await axios.post(endpoint, body, {
+      timeout: 10_000,
+      headers: { 'x-internal-token': process.env.INTERNAL_API_KEY || '' },
+    });
   } catch (error) {
     logger.warn('Failed to notify backend connection state', {
       tenantId,
@@ -241,11 +270,17 @@ async function notifyBackendConnection(tenantId, connected) {
 }
 
 async function cleanupTenantAuth(tenantId) {
+  // En production : supprimer les credentials PostgreSQL
+  if (process.env.DATABASE_URL) {
+    await clearPgAuthState(tenantId);
+    logger.info('Auth state cleared from PostgreSQL', { tenantId });
+    return;
+  }
+  // En local : supprimer le répertoire filesystem
   const authDir = tenantAuthDir(tenantId);
   if (!fs.existsSync(authDir)) {
     return;
   }
-
   fs.rmSync(authDir, { recursive: true, force: true });
   logger.info('Auth directory removed', { tenantId, authDir });
 }
@@ -294,7 +329,7 @@ async function forwardIncomingMessage(tenantId, msg) {
     : {};
 
   try {
-    await axios.post(`${BACKEND_URL}/api/v1/webhooks/whatsapp`, payloadV1, { timeout: 12_000, headers });
+    await axios.post(`${BACKEND_URL}/api/v1/webhooks/whatsapp`, payloadV1, { timeout: 30_000, headers });
     return;
   } catch (errorV1) {
     logger.error('Primary webhook endpoint failed', {
@@ -332,15 +367,31 @@ function scheduleReconnect(session, reason) {
   if (session.retryCount >= MAX_RETRIES) {
     session.state = 'error';
     session.lastError = `Max retries reached. Last reason: ${reason}`;
-    logger.error('Max retries reached, manual reset required', {
+    session.errorSince = Date.now();
+    logger.error('Max retries reached — auto-recovery in 15min', {
       tenantId: session.tenantId,
       retries: session.retryCount,
       reason,
     });
+    // Auto-recovery : dans 15 min, on remet à zéro et on retente
+    // (le rate-limit WA est typiquement levé en < 15min)
+    clearReconnectTimer(session);
+    session.scheduledReconnect = setTimeout(() => {
+      session.scheduledReconnect = null;
+      logger.info('Auto-recovery from error state', { tenantId: session.tenantId });
+      session.retryCount = 0;
+      session.authResetCount = 0;
+      session.state = 'idle';
+      session.errorSince = null;
+      connectTenant(session.tenantId, { forceReset: false, reason: 'auto-recovery' });
+    }, ERROR_AUTORECOVERY_MS);
     return;
   }
 
   session.retryCount += 1;
+  // Backoff exponentiel dans tous les cas — même pour les nouvelles connexions.
+  // Avant: neverConnected → 2000ms (hammering WA → rate-limit 405/503).
+  // Maintenant: minimum 5s, exponentiel, pour ne pas se faire ban.
   const delay = reconnectDelayMs(session.retryCount);
 
   clearReconnectTimer(session);
@@ -391,15 +442,17 @@ async function onConnectionUpdate(session, update) {
     session.initializing = false;
     session.state = 'connected';
     session.retryCount = 0;
+    session.consecutive405 = 0;
     session.connectedAt = new Date().toISOString();
     session.lastError = null;
     session.lastDisconnectCode = null;
     session.qrRaw = null;
     session.qrImageDataUrl = null;
     session.qrExpiresAt = null;
+    session.connectedPhone = extractPhoneFromJid(session.socket?.user?.id || '');
 
-    logger.info('WhatsApp connected', { tenantId: session.tenantId });
-    await notifyBackendConnection(session.tenantId, true);
+    logger.info('WhatsApp connected', { tenantId: session.tenantId, phone: session.connectedPhone });
+    await notifyBackendConnection(session.tenantId, true, session.connectedPhone);
   }
 
   if (connection === 'close') {
@@ -425,6 +478,63 @@ async function onConnectionUpdate(session, update) {
         tenantId: session.tenantId,
         statusCode,
       });
+
+      session.authResetCount = (session.authResetCount || 0) + 1;
+
+      if (session.authResetCount > 3) {
+        logger.error('Too many consecutive auth resets — manual intervention required', {
+          tenantId: session.tenantId,
+          authResetCount: session.authResetCount,
+        });
+        // auth_failed: état ignoré par le watchdog → arrêt définitif de la boucle
+        session.state = 'auth_failed';
+        await resetTenant(session.tenantId, { keepSessionObject: true, autoReconnect: false });
+        return;
+      }
+
+      // 405 = ban IP WA — chaque retry aggrave et repousse la levée du ban.
+      // Stratégie : backoff très long dès le 1er 405, arrêt complet après 3 consécutifs.
+      if (statusCode === 405) {
+        session.consecutive405 = (session.consecutive405 || 0) + 1;
+        session.retryCount += 1;
+
+        if (session.consecutive405 >= 3) {
+          // 3 fois de suite = le ban est sérieux. On arrête 30 min.
+          // Pas de cleanupTenantAuth — inutile de supprimer l'auth à chaque 405.
+          session.state = 'error';
+          session.lastError = `IP rate-limited by WA (405) — ${session.consecutive405} consecutive. Waiting 30min.`;
+          session.errorSince = Date.now();
+          const backoff = 30 * 60 * 1000; // 30 minutes fixes
+          logger.warn('IP rate-limited 3+ times in a row, stopping for 30min', {
+            tenantId: session.tenantId, consecutive405: session.consecutive405, backoffMs: backoff,
+          });
+          clearReconnectTimer(session);
+          session.scheduledReconnect = setTimeout(() => {
+            session.scheduledReconnect = null;
+            session.state = 'idle';
+            session.consecutive405 = 0;
+            session.retryCount = 0;
+            connectTenant(session.tenantId, { forceReset: false, reason: 'rate-limit-30min-backoff' });
+          }, backoff);
+          return;
+        }
+
+        // 1er ou 2ème 405 : backoff exponentiel avec minimum 5 minutes
+        await cleanupTenantAuth(session.tenantId);
+        session.state = 'idle';
+        const FIVE_MIN = 5 * 60 * 1000;
+        const backoff = Math.min(FIVE_MIN * session.consecutive405, 15 * 60 * 1000); // 5min, 10min, max 15min
+        logger.warn('Rate-limited by WA (405), long wait before retry', {
+          tenantId: session.tenantId, consecutive405: session.consecutive405, backoffMs: backoff,
+        });
+        clearReconnectTimer(session);
+        session.scheduledReconnect = setTimeout(() => {
+          session.scheduledReconnect = null;
+          connectTenant(session.tenantId, { forceReset: false, reason: 'rate-limit-backoff' });
+        }, backoff);
+        return;
+      }
+
       await resetTenant(session.tenantId, { keepSessionObject: true, autoReconnect: true });
       return;
     }
@@ -456,8 +566,12 @@ async function connectTenant(tenantId, options = {}) {
   session.lastError = null;
 
   try {
+    // En production (DATABASE_URL défini) → persistance PostgreSQL (survit aux redémarrages Render)
+    // En développement local → filesystem auth_info_baileys/ (comportement inchangé)
     const authDir = tenantAuthDir(tenantId);
-    const { state: authState, saveCreds } = await useMultiFileAuthState(authDir);
+    const { state: authState, saveCreds } = process.env.DATABASE_URL
+      ? await usePgAuthState(tenantId)
+      : await useMultiFileAuthState(authDir);
     const version = await getBaileysVersion();
 
     // Cache compteur de retry par message (évite boucles infinies)
@@ -469,6 +583,8 @@ async function connectTenant(tenantId, options = {}) {
         creds: authState.creds,
         keys: makeCacheableSignalKeyStore(authState.keys, bailLogger),
       },
+      // macOS Desktop = fingerprint de l'app WhatsApp Desktop officielle.
+      // Beaucoup moins suspect que ubuntu/Chrome qui est un pattern de bot connu de WA.
       browser: Browsers.macOS('Desktop'),
       printQRInTerminal: false,
       syncFullHistory: false,
@@ -568,7 +684,9 @@ async function resetTenant(tenantId, options = {}) {
   session.connected = false;
   session.initializing = false;
   session.retryCount = 0;
+  session.authResetCount = 0;
   session.connectedAt = null;
+  session.connectedPhone = null;
   session.lastError = null;
   session.lastDisconnectCode = null;
   session.qrRaw = null;
@@ -595,7 +713,23 @@ async function sendMessageForTenant(tenantId, to, message) {
   }
 
   const jid = normalizeJid(to);
-  const result = await session.socket.sendMessage(jid, { text: message });
+  let result;
+  try {
+    result = await session.socket.sendMessage(jid, { text: message });
+    // Si le send vers @lid ne retourne pas de clé de message, considérer comme échec
+    if (jid.endsWith('@lid') && !result?.key?.id) {
+      throw new Error('LID send returned no message key');
+    }
+  } catch (lidErr) {
+    if (jid.endsWith('@lid')) {
+      const phone = extractPhoneFromJid(jid);
+      const fallbackJid = `${phone}@s.whatsapp.net`;
+      logger.warn('LID JID send failed, fallback to @s.whatsapp.net', { jid, fallbackJid, error: lidErr.message });
+      result = await session.socket.sendMessage(fallbackJid, { text: message });
+    } else {
+      throw lidErr;
+    }
+  }
 
   // Stocker le message envoyé pour permettre les retries Signal (fix "en attente")
   if (result?.key?.id && result?.message) {
@@ -616,6 +750,7 @@ function buildTenantQRResponse(session) {
     tenantId: session.tenantId,
     state: session.state,
     connected: session.connected,
+    phone: session.connectedPhone || null,
     hasQR: Boolean(session.qrRaw),
     qrRaw: session.qrRaw,
     qrImageDataUrl: session.qrImageDataUrl,
@@ -649,18 +784,31 @@ function startWatchdog() {
         continue;
       }
 
-      if (session.state === 'idle' || session.state === 'disconnected' || session.state === 'error') {
+      // auth_failed: stop définitif, nécessite un appel à /api/whatsapp/tenants/:id/reset
+      if (session.state === 'auth_failed') {
+        continue;
+      }
+
+      if (session.state === 'idle' || session.state === 'disconnected') {
         if (session.retryCount === 0 && !session.scheduledReconnect) {
           logger.info('Watchdog recovery triggered', { tenantId: session.tenantId, state: session.state });
           await connectTenant(session.tenantId, { reason: 'watchdog' });
         }
       }
+
+      // Pour l'état 'error' : le timer d'auto-recovery dans scheduleReconnect s'en charge.
+      // Le watchdog ne touche pas à 'error' pour ne pas interférer avec le backoff de 15min.
     }
   }, WATCHDOG_INTERVAL_MS);
 }
 
 const app = express();
 app.use(express.json());
+
+// DEBUG SENTRY — à protéger ou supprimer en production
+app.get('/debug-sentry', (req, res) => {
+  throw new Error('Test Sentry NéoBot WhatsApp — this is intentional');
+});
 
 app.get('/health', (req, res) => {
   const session = getTenantSession(DEFAULT_TENANT_ID);
@@ -803,6 +951,143 @@ app.post('/api/whatsapp/tenants/:tenantId/reset', async (req, res) => {
   }
 });
 
+// Déconnexion propre — ferme le socket sans supprimer les creds ni reconnecter.
+// Le backend est notifié via l'event 'close' → mark-disconnected.
+app.post('/api/whatsapp/tenants/:tenantId/disconnect', async (req, res) => {
+  const tenantId = Number.parseInt(req.params.tenantId, 10);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    return res.status(400).json({ error: 'Invalid tenantId' });
+  }
+
+  try {
+    const session = getTenantSession(tenantId);
+    clearReconnectTimer(session);
+    await stopTenantSocket(session);
+    session.connected = false;
+    session.state = 'disconnected';
+    session.connectedPhone = null;
+    logger.info('Tenant disconnected by user request', { tenantId });
+    res.json({ status: 'disconnected', tenantId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ── Pairing code (alternative au QR — pas sujet au rate-limit WA) ──────────
+// POST /api/whatsapp/tenants/:tenantId/request-pairing-code
+// Body: { phone_number: "22612345678" }  ← sans le +
+// Retourne: { code: "ABCD-1234" } à taper dans WA app Settings > Linked Devices
+// Pattern officiel Baileys : appeler requestPairingCode immédiatement après makeWASocket
+app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res) => {
+  const tenantId = Number.parseInt(req.params.tenantId, 10);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    return res.status(400).json({ error: 'Invalid tenantId' });
+  }
+
+  const phone = String(req.body?.phone_number || '').replace(/\D/g, '');
+  if (!phone || phone.length < 7 || phone.length > 15) {
+    return res.status(400).json({ error: 'phone_number requis (format international sans +, ex: 22612345678)' });
+  }
+
+  const session = getTenantSession(tenantId);
+
+  if (session.connected) {
+    return res.json({ status: 'already_connected', message: 'WhatsApp déjà connecté' });
+  }
+
+  // Stopper toute reconnexion en cours — éviter conflits de socket
+  clearReconnectTimer(session);
+  if (session.socket) {
+    try { session.socket.end(undefined); } catch (_) {}
+    session.socket = null;
+  }
+  session.state = 'idle';
+  session.retryCount = 0;
+  session.authResetCount = 0;
+
+  try {
+    const authDir = path.join(__dirname, 'auth_info_baileys', `tenant_${tenantId}`);
+    if (!fs.existsSync(authDir)) {
+      fs.mkdirSync(authDir, { recursive: true });
+    }
+
+    const { state, saveCreds } = process.env.DATABASE_URL
+      ? await usePgAuthState(tenantId)
+      : await useMultiFileAuthState(authDir);
+
+    let version = DEFAULT_WA_VERSION;
+    try {
+      const fetched = await fetchLatestBaileysVersion();
+      version = fetched.version;
+    } catch (_) {}
+
+    // Créer le socket — Baileys queue les messages en interne jusqu'à l'ouverture WS
+    // Doc officielle Baileys : appeler requestPairingCode immédiatement, sans sleep
+    const pairSock = makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, bailLogger),
+      },
+      browser: Browsers.macOS('Desktop'),
+      printQRInTerminal: false,
+      logger: bailLogger,
+      generateHighQualityLinkPreview: false,
+    });
+
+    pairSock.ev.on('creds.update', saveCreds);
+
+    // Stocker dans la session pour que les événements connection.update soient traités
+    session.socket = pairSock;
+    session.initializing = true;
+    session.state = 'initializing';
+
+    // requestPairingCode IMMÉDIATEMENT — Baileys gère l'envoi dès que le WS est ouvert
+    const code = await pairSock.requestPairingCode(phone);
+    const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+
+    logger.info('Pairing code generated successfully', { tenantId, phone, code: formatted });
+    return res.json({
+      status: 'code_generated',
+      code: formatted,
+      instructions: 'Sur votre téléphone : WA → ⋮ (menu) → Appareils connectés → Associer un appareil → Associer avec un numéro de téléphone',
+      phone,
+      tenantId,
+    });
+  } catch (error) {
+    logger.error('requestPairingCode failed', { tenantId, error: error.message });
+    // Relancer connexion normale en background — ne pas laisser tenant sans session
+    setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-fail' }), 3000);
+    return res.status(503).json({ error: `Impossible de générer le code de couplage : ${error.message}` });
+  }
+});
+
+app.post('/api/whatsapp/tenants/:tenantId/typing', async (req, res) => {
+  const tenantId = Number.parseInt(req.params.tenantId, 10);
+  const { to } = req.body || {};
+
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    return res.status(400).json({ error: 'Invalid tenantId' });
+  }
+  if (!to) {
+    return res.status(400).json({ error: 'Missing required field: to' });
+  }
+
+  const session = getTenantSession(tenantId);
+  if (!session.connected || !session.socket) {
+    return res.status(503).json({ error: 'WhatsApp not connected for this tenant' });
+  }
+
+  try {
+    const jid = normalizeJid(to);
+    await session.socket.sendPresenceUpdate('composing', jid);
+    res.json({ status: 'typing', tenantId });
+  } catch (error) {
+    logger.error('Failed to send typing indicator', { tenantId, to, error: error.message });
+    res.status(503).json({ error: error.message });
+  }
+});
+
 app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
   const tenantId = Number.parseInt(req.params.tenantId, 10);
   const { to, message } = req.body || {};
@@ -826,6 +1111,11 @@ app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
 
   try {
     const result = await sendMessageForTenant(tenantId, to, message);
+    // Annuler l'indicateur "en train d'écrire" après envoi — comportement humain naturel
+    try {
+      const jid = normalizeJid(to);
+      await session.socket.sendPresenceUpdate('paused', jid);
+    } catch (_) { /* non bloquant */ }
     logger.info('Outgoing message sent', { tenantId, to, msgId: result?.key?.id || null });
     res.json({ status: 'sent', tenantId, id: result?.key?.id || null });
   } catch (error) {
@@ -849,7 +1139,8 @@ app.delete('/api/whatsapp/tenants/:tenantId', async (req, res) => {
 });
 
 app.use((err, req, res, _next) => {
-  logger.error('Unhandled express error', { error: err.message });
+  Sentry.captureException(err);
+  logger.error('Express error', { error: err.message, path: req.path, method: req.method });
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -871,10 +1162,12 @@ function registerProcessHandlers(server) {
   process.on('SIGINT', () => shutdown('SIGINT'));
 
   process.on('uncaughtException', (error) => {
+    Sentry.captureException(error);
     logger.error('uncaughtException', { error: error.message, stack: error.stack });
   });
 
   process.on('unhandledRejection', (reason) => {
+    Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
     logger.error('unhandledRejection', { reason: String(reason) });
   });
 }
@@ -920,6 +1213,7 @@ async function start() {
 }
 
 start().catch((error) => {
+  Sentry.captureException(error);
   logger.error('Fatal startup error', { error: error.message, stack: error.stack });
   process.exit(1);
 });

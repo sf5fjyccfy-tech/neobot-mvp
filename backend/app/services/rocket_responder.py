@@ -29,9 +29,9 @@ class RocketResponder:
             "📉 **DIAGNOSTIC:** Inefficacité coûteuse.\n\n⚡ **REMÈDE NÉOBOT:**\n→ Réponses IA: +40% ventes\n→ Temps gagné: 15h/semaine\n→ Service permanent\n\n✅ **ESSAI GRATUIT IMMÉDIAT**\nTu es partant ?"
         ],
         "tarifs": [
-            "💰 **INVESTISSEMENT INTELLIGENT:**\n\n🏷️ BASIQUE: 20k/mois\n  • 2000 messages\n  • Réponses auto\n  • Dashboard\n\n🏷️ STANDARD: 50k/mois\n  • Messages illimités\n  • IA avancée\n  • Analytics\n\n🏷️ PRO: 90k/mois\n  • API complète\n  • Support prioritaire\n  • Formation\n\n🎁 **ESSAI 14 JOURS GRATUIT**\nActivation immédiate ?",
-            "📊 **TARIFS ADAPTÉS:**\n\n🔹 BASIQUE (20k): Messages limités\n🔹 STANDARD (50k): Illimité + IA\n🔹 PRO (90k): Tout inclus + API\n\n⭐ **AVANTAGE:** Essai gratuit avant paiement\n💡 **RECOMMANDATION:** Standard pour boutique\n\n🔓 **DÉBLOQUER L'ESSAI ?**",
-            "💳 **PLANS FLEXIBLES:**\n\n1. Basique (20k) → Test\n2. Standard (50k) → Optimal\n3. Pro (90k) → Premium\n\n✨ **GARANTIE:** Satisfaction 100%\n⏱️ **DÉCISION:** 2 min pour activer l'essai\n\n🚪 **ON OUVRE TA DÉMO ?**"
+            "💰 **PLAN ESSENTIAL — NéoBot :**\n\n🏷️ Essential : 20 000 FCFA/mois\n  ✅ 2 500 messages WhatsApp/mois\n  ✅ 1 agent IA actif\n  ✅ Sources Texte + PDF\n  ✅ Dashboard Analytics 30 jours\n  ✅ Rappels RDV automatiques\n\n🎁 **ESSAI 14 JOURS GRATUIT** — Aucune carte requise\nD'autres formules arrivent bientôt.\n\nActivation maintenant ?",
+            "📊 **TARIF NÉOBOT :**\n\n🏷️ **Essential** (20 000 FCFA/mois)\n  → 2 500 messages WhatsApp\n  → 1 agent IA (Vente, RDV, Support, FAQ…)\n  → Sources Texte + PDF\n  → Dashboard 30 jours\n\n⭐ **AVANTAGE:** 14 jours d'essai gratuit\nD'autres formules bientôt disponibles.\n\n🔓 **DÉMARRER L'ESSAI ?**",
+            "💳 **INVESTISSEMENT ESSENTIEL :**\n\n🏷️ Essential (20 000 FCFA/mois)\n  • 2 500 messages/mois\n  • 1 agent IA\n  • Texte + PDF\n  • Analytics\n\n✨ **GARANTIE:** Essai 14 jours gratuit\n⏱️ **DÉCISION:** 2 min pour activer\nD'autres plans arrivent bientôt.\n\n🚪 **ON DÉMARRE ?"
         ],
         "default": [
             "🚀 **NÉOBOT** - Automatisation WhatsApp\n\nJe réponds 24/7, je vends pour toi, j'analyse tout.\n\n🎁 Essai gratuit 14 jours\n💬 Envie de voir une démo ?",

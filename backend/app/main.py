@@ -4,6 +4,7 @@ Version: 1.0.0
 """
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.orm import Session
@@ -12,12 +13,20 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 import logging
 import os
+import asyncio
 from dotenv import load_dotenv
 import httpx
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 # Imports locaux
-from .database import get_db, init_db, Base, engine
-from .models import Tenant, Conversation, Message
+from .database import get_db, init_db, Base, engine, SessionLocal
+from .models import Tenant, Conversation, Message, User
+from .dependencies import get_superadmin_user
+from .middleware_security import SecurityHeadersMiddleware
 from .whatsapp_webhook import router as whatsapp_router
 from .routers.tenant_business import router as tenant_business_router
 from .routers.business import router as business_router
@@ -33,19 +42,67 @@ from .routers.contacts import router as contacts_router
 from .routers.tenant_settings import router as tenant_settings_router
 from .routers.human_detection import router as human_detection_router
 from .routers.agents import router as agents_router
+from .routers.admin import router as admin_router
+from .routers.conversations import router as conversations_router
+from .routers.neo_assistant import router as neo_assistant_router
+from .routers.neopay import router as neopay_router
+from .routers.sentry_webhook import router as sentry_webhook_router
+from .routers.monitoring import router as monitoring_router
+from .services import neopay_service
+from .services import monitoring_service
+from .services.email_service import send_internal_alert
 from .services.business_kb_service import BusinessKBService
 from .http_client import close_http_client
+from .middleware_subscription import SubscriptionMiddleware
+from .limiter import limiter
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Charger .env
+# Classe définie ici, appliquée dans _startup_tasks APRÈS que uvicorn a appelé
+# dictConfig() — sans ça, uvicorn écrase le filtre au démarrage.
+class _SuppressASGIExceptionLog(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Exception in ASGI application" not in record.getMessage()
+
+# Charger .env — cherche d'abord backend/.env, puis racine du projet
 load_dotenv()
+load_dotenv(dotenv_path="/home/tim/neobot-mvp/.env", override=False)
+
+# ========== SENTRY ==========
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn and not _sentry_dsn.startswith("REMPLACER"):
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("APP_ENV", "development"),
+        traces_sample_rate=0.2 if os.getenv("APP_ENV") == "production" else 1.0,
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+        # Filtrer les 4xx sauf 401/403 (attaques à monitor) et sauf 429 (rate limit)
+        before_send=lambda event, hint: None if (
+            hint.get("exc_info") and
+            isinstance(hint["exc_info"][1], HTTPException) and
+            400 <= hint["exc_info"][1].status_code < 500 and
+            hint["exc_info"][1].status_code not in (401, 403)
+        ) else event,
+    )
+    logger.info("✅ Sentry initialisé")
+else:
+    logger.warning("⚠️  SENTRY_DSN non défini — monitoring Sentry désactivé")
 
 # ========== STARTUP/SHUTDOWN ==========
 async def _startup_tasks():
     """Initialiser la DB au démarrage"""
+    # Appliqué ICI car uvicorn appelle logging.config.dictConfig() avant ce point,
+    # ce qui efface tout filtre posé au chargement du module.
+    _f = _SuppressASGIExceptionLog()
+    logging.getLogger("uvicorn.error").addFilter(_f)
+    for _h in logging.root.handlers:  # couvre la propagation vers root
+        _h.addFilter(_f)
+
     try:
         init_db()
 
@@ -71,24 +128,25 @@ async def _startup_tasks():
                     tenant_id=1,
                     business_type_id=neobot_type.id,
                     company_name="NéoBot",
-                    company_description="Plateforme d'automatisation WhatsApp avec IA",
-                    tone="Professional, Friendly, Expert",
-                    selling_focus="Automatisation, Efficacité, Scaling",
+                    company_description="Plateforme SaaS africaine d'automatisation WhatsApp par IA — PME africaines, réponses 24h/24 7j/7",
+                    tone="Professional, Friendly, Expert, Persuasif",
+                    selling_focus="Automatisation WhatsApp, gain de clients, disponibilité 24h/24",
                     products_services=json.dumps([
                         {
-                            "name": "NéoBot Starter",
+                            "name": "Essential",
                             "price": 20000,
-                            "description": "500 messages/mois + Support"
-                        },
-                        {
-                            "name": "NéoBot Pro",
-                            "price": 50000,
-                            "description": "Messages illimités + Analytics + API"
-                        },
-                        {
-                            "name": "NéoBot Enterprise",
-                            "price": 100000,
-                            "description": "Tout illimité + Support prioritaire"
+                            "description": "2 500 messages/mois — 1 agent IA — Sources Texte + PDF — Essai 14j gratuit",
+                            "features": [
+                                "2 500 messages WhatsApp/mois",
+                                "1 agent IA actif",
+                                "Sources de connaissance : Texte + PDF (3 max)",
+                                "Génération de prompt par IA",
+                                "Délai de réponse configurable",
+                                "Rappels RDV automatiques",
+                                "Dashboard Analytics 30 jours",
+                                "Support par email",
+                                "Essai gratuit 14 jours — aucune carte bancaire requise"
+                            ]
                         }
                     ])
                 )
@@ -107,12 +165,154 @@ async def _shutdown_tasks():
     logger.info("🛑 Application arrêtée")
 
 
+async def _retry_webhooks_loop():
+    """Background task : retente les webhooks échoués toutes les 5 min."""
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(300)  # 5 minutes
+        db = SessionLocal()
+        try:
+            await loop.run_in_executor(None, neopay_service.retry_failed_webhooks, db)
+        except Exception as exc:
+            import sentry_sdk as _sentry
+            _sentry.capture_exception(exc)
+            logger.error(f"❌ retry_webhooks_loop error: {exc}")
+        finally:
+            db.close()
+
+
+async def _credits_check_loop():
+    """Vérifie les balances API DeepSeek + Anthropic toutes les heures."""
+    while True:
+        await asyncio.sleep(3600)  # 1h
+        db = SessionLocal()
+        try:
+            await monitoring_service.check_and_store_credits(db)
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            logger.error(f"❌ credits_check_loop error: {exc}")
+        finally:
+            db.close()
+
+
+async def _morning_summary_loop():
+    """Envoie un résumé des alertes Sentry ouvertes à 8h UTC chaque jour."""
+    from datetime import datetime as _dt, timezone as _tz
+    while True:
+        now = _dt.now(_tz.utc)
+        # Prochain 8h00 UTC
+        target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now >= target:
+            # On est déjà passé 8h aujourd'hui — attendre demain
+            from datetime import timedelta as _td
+            target += _td(days=1)
+        await asyncio.sleep((target - now).total_seconds())
+        db = SessionLocal()
+        try:
+            await monitoring_service.send_morning_summary(db)
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            logger.error(f"❌ morning_summary_loop error: {exc}")
+        finally:
+            db.close()
+
+
+async def _db_cleanup_loop():
+    """
+    Cron hebdomadaire : dimanche à 3h UTC.
+    - Archive les conversations de plus de 6 mois dans conversations_archive
+    - Log la taille actuelle de la base Neon
+    - Envoie une alerte email si la base dépasse 400 MB (limite Neon free : 512 MB)
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    while True:
+        now = _dt.now(_tz.utc)
+        # Prochain dimanche 3h00 UTC
+        days_until_sunday = (6 - now.weekday()) % 7  # 6 = dimanche
+        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0) + _td(days=days_until_sunday)
+        if next_run <= now:
+            next_run += _td(weeks=1)
+        await asyncio.sleep((next_run - now).total_seconds())
+
+        db = SessionLocal()
+        try:
+            # 1. Créer la table d'archive si elle n'existe pas
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS conversations_archive (
+                    id             INTEGER,
+                    tenant_id      INTEGER,
+                    customer_phone VARCHAR(50),
+                    customer_name  VARCHAR(255),
+                    channel        VARCHAR(50),
+                    status         VARCHAR(50),
+                    created_at     TIMESTAMP,
+                    last_message_at TIMESTAMP,
+                    outcome_type   VARCHAR(50),
+                    outcome_detected_at TIMESTAMP,
+                    archived_at    TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            db.commit()
+
+            # 2. Copier les conversations de plus de 6 mois (sans supprimer — safe pour MVP)
+            result = db.execute(text("""
+                INSERT INTO conversations_archive
+                    (id, tenant_id, customer_phone, customer_name, channel, status,
+                     created_at, last_message_at, outcome_type, outcome_detected_at, archived_at)
+                SELECT id, tenant_id, customer_phone, customer_name, channel, status,
+                       created_at, last_message_at, outcome_type, outcome_detected_at, NOW()
+                FROM conversations
+                WHERE created_at < NOW() - INTERVAL '6 months'
+                  AND id NOT IN (SELECT id FROM conversations_archive WHERE id IS NOT NULL)
+            """))
+            db.commit()
+            archived_count = result.rowcount
+            logger.info(f"✅ DB cleanup : {archived_count} conversations archivées")
+
+            # 3. Mesurer la taille de la base
+            size_result = db.execute(text(
+                "SELECT pg_database_size(current_database()) AS bytes"
+            )).fetchone()
+            size_mb = round(size_result.bytes / (1024 * 1024), 1) if size_result else 0
+            logger.info(f"📊 Taille base Neon : {size_mb} MB")
+
+            # 4. Alerte si on approche de la limite
+            alert_email = os.getenv("NEOPAY_ALERT_EMAIL", "neobot561@gmail.com")
+            if size_mb > 400:
+                await send_internal_alert(
+                    subject=f"⚠️ NéoBot — Base de données à {size_mb} MB (limite : 512 MB)",
+                    body=(
+                        f"La base de données Neon atteint {size_mb} MB.\n\n"
+                        f"Conversations archivées ce cycle : {archived_count}\n\n"
+                        f"Action requise : supprimer les anciennes données ou migrer vers un plan supérieur.\n"
+                        f"Limite Neon free tier : 512 MB."
+                    )
+                )
+                logger.warning(f"⚠️ Alerte taille DB envoyée : {size_mb} MB > 400 MB")
+            else:
+                logger.info(f"✅ Taille DB OK : {size_mb} MB / 512 MB")
+
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            logger.error(f"❌ db_cleanup_loop error: {exc}")
+        finally:
+            db.close()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await _startup_tasks()
+    retry_task    = asyncio.create_task(_retry_webhooks_loop())
+    credits_task  = asyncio.create_task(_credits_check_loop())
+    morning_task  = asyncio.create_task(_morning_summary_loop())
+    cleanup_task  = asyncio.create_task(_db_cleanup_loop())
     try:
         yield
     finally:
+        retry_task.cancel()
+        credits_task.cancel()
+        morning_task.cancel()
+        cleanup_task.cancel()
         await _shutdown_tasks()
 
 
@@ -123,6 +323,10 @@ app = FastAPI(
     description="WhatsApp Bot Assistant avec IA",
     lifespan=lifespan,
 )
+
+# Rate limiting via slowapi — identifie les clients par IP
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ========== INCLUDE ROUTERS ==========
 app.include_router(auth_router)
@@ -140,20 +344,41 @@ app.include_router(human_detection_router)
 app.include_router(tenant_business_router)
 app.include_router(business_router)
 app.include_router(agents_router)
+app.include_router(admin_router)
+app.include_router(conversations_router)
+app.include_router(neo_assistant_router)
+app.include_router(neopay_router)
+app.include_router(sentry_webhook_router)
+app.include_router(monitoring_router)
 
 # ========== CORS MIDDLEWARE ==========
+# Note : les middlewares Starlette s'exécutent dans l'ordre inverse d'ajout.
+# CORS doit être ajouté EN DERNIER pour être exécuté EN PREMIER (traite les OPTIONS avant subscription check).
+app.add_middleware(GZipMiddleware, minimum_size=500)
+app.add_middleware(SubscriptionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",      # Development frontend
         "http://127.0.0.1:3000",      # Development frontend
-        "https://app.votre-domaine.com",  # Production frontend (change this)
+        "http://localhost:3001",      # Development frontend alt
+        "http://127.0.0.1:3001",
+        "http://localhost:3002",      # Development frontend (current)
+        "http://127.0.0.1:3002",
+        "http://localhost:3003",      # Development frontend alt
+        "http://127.0.0.1:3003",
+        # Domaines de production supplémentaires via variable d'environnement
+        # Exemple: ALLOWED_ORIGINS=https://app.mondomaine.com,https://www.mondomaine.com
+        *[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()],
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
     max_age=3600,
 )
+# SecurityHeadersMiddleware en dernier = plus externe = s'exécute en premier
+# Ajoute les headers de sécurité sur TOUTES les réponses, y compris les erreurs CORS
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ========== HEALTH CHECKS ==========
 @app.get("/health")
@@ -186,6 +411,21 @@ async def api_health(db: Session = Depends(get_db)):
             }
         )
 
+
+@app.get("/api/service-health")
+async def service_health():
+    """Proxy public vers le health check du service WhatsApp — utilisé par la page /status."""
+    whatsapp_url = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            resp = await client.get(f"{whatsapp_url}/health")
+            data = resp.json()
+            return JSONResponse(status_code=resp.status_code, content=data)
+    except httpx.TimeoutException:
+        return JSONResponse(status_code=503, content={"status": "down", "detail": "timeout"})
+    except Exception as exc:
+        return JSONResponse(status_code=503, content={"status": "down", "detail": str(exc)})
+
 # ========== ROOT ENDPOINT ==========
 @app.get("/")
 async def root():
@@ -208,9 +448,18 @@ async def docs_info():
         }
     }
 
-# ========== TENANT ENDPOINTS ==========
+# ========== DEBUG SENTRY (superadmin uniquement, désactivé en production) ==========
+@app.get("/debug-sentry")
+async def debug_sentry(_: User = Depends(get_superadmin_user)):
+    """Déclenche une erreur intentionnelle pour valider l'intégration Sentry.
+    Accessible aux superadmins uniquement et désactivé en production."""
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(status_code=403, detail="Endpoint debug désactivé en production")
+    raise ValueError("Test Sentry NéoBot Backend — this is intentional")
+
+# ========== TENANT ENDPOINTS (superadmin only) ==========
 @app.get("/api/tenants")
-async def list_tenants(db: Session = Depends(get_db)):
+async def list_tenants(db: Session = Depends(get_db), _: User = Depends(get_superadmin_user)):
     """Lister tous les tenants"""
     tenants = db.query(Tenant).all()
     return {
@@ -228,7 +477,7 @@ async def list_tenants(db: Session = Depends(get_db)):
     }
 
 @app.get("/api/tenants/{tenant_id}")
-async def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
+async def get_tenant(tenant_id: int, db: Session = Depends(get_db), _: User = Depends(get_superadmin_user)):
     """Récupérer un tenant"""
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
@@ -245,7 +494,7 @@ async def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
     }
 
 @app.post("/api/tenants")
-async def create_tenant(data: dict, db: Session = Depends(get_db)):
+async def create_tenant(data: dict, db: Session = Depends(get_db), _: User = Depends(get_superadmin_user)):
     """Créer un nouveau tenant"""
     try:
         tenant = Tenant(
@@ -472,13 +721,16 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """Handler personnalisé pour les erreurs HTTP"""
     detail = getattr(exc, "detail", str(exc))
     status_code = getattr(exc, "status_code", 500)
+    # Forwarder les headers de l'exception (ex. WWW-Authenticate sur 401)
+    exc_headers = getattr(exc, "headers", None) or {}
     return JSONResponse(
         status_code=status_code,
         content={
             "error": detail,
             "status": "error",
             "timestamp": datetime.utcnow().isoformat()
-        }
+        },
+        headers=exc_headers,
     )
 
 @app.exception_handler(Exception)

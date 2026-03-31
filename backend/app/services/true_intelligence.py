@@ -56,13 +56,16 @@ Je peux vous montrer comment :
 
 Vous gérez une entreprise ? Je peux vous faire une démo personnalisée.""",
             
-            "pricing": """💰 **PLANS NÉOBOT** - ROI immédiat
+            "pricing": """💰 **PLAN ESSENTIAL — NéoBot** — ROI immédiat
 
-• BASIQUE : 20k FCFA/mois → 2000 msg WhatsApp + IA
-• STANDARD : 50k FCFA/mois → IA avancée + multi-canaux  
-• PRO : 90k FCFA/mois → API + Dashboard complet + Support
+🏷️ **Essential** : 20 000 FCFA/mois
+   ✅ 2 500 messages WhatsApp/mois
+   ✅ 1 agent IA actif (Vente, RDV, Support, FAQ, Qualification…)
+   ✅ Sources Texte + PDF (3 max)
+   ✅ Dashboard Analytics 30 jours
+   ✅ Essai gratuit 14 jours — aucune carte requise
 
-💡 Le Standard est le plus populaire : il paie souvent sa 1ère vente en 48h.
+D'autres formules arrivent bientôt.
 
 Quel type d'entreprise gérez-vous ?""",
             

@@ -1,18 +1,6 @@
 import type { Metadata } from 'next';
-import { Syne, DM_Sans } from 'next/font/google';
 import './globals.css';
-
-const syne = Syne({
-  subsets: ['latin'],
-  variable: '--font-syne',
-  display: 'swap',
-});
-
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  variable: '--font-dm-sans',
-  display: 'swap',
-});
+import GalaxyCanvas from '@/components/ui/GalaxyCanvas';
 
 export const metadata: Metadata = {
   title: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
@@ -26,10 +14,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr" className={`${syne.variable} ${dmSans.variable}`}>
-      <body style={{ backgroundColor: '#05050F' }}>
-        {children}
+    <html lang="fr">
+      <head>
+        {/* Fonts chargées par le navigateur (pas au build) — évite les erreurs réseau en CI/CD */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body style={{ backgroundColor: '#06040E', position: 'relative' }}>
+        <GalaxyCanvas />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {children}
+        </div>
       </body>
     </html>
   );
 }
+

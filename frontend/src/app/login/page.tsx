@@ -1,5 +1,6 @@
 import LoginForm from '@/components/auth/LoginForm';
-import { Bot, Shield, Zap, Users } from 'lucide-react';
+import { Shield, Zap, Users } from 'lucide-react';
+import { NeoBotBrandmark } from '@/components/ui/NeoBotLogo';
 
 export const metadata = {
   title: 'Connexion - NéoBot',
@@ -7,33 +8,35 @@ export const metadata = {
 };
 
 const STATS = [
-  { value: '2,500+', label: 'Entreprises actives' },
+  { value: '2 500+', label: 'Entreprises actives' },
   { value: '98%', label: 'Satisfaction client' },
   { value: '< 2s', label: 'Temps de réponse' },
 ];
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gray-950 flex">
+    <div className="min-h-screen flex" style={{ background: '#06040E' }}>
       {/* GAUCHE : Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-900 via-green-900 to-teal-900" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(52,211,153,0.15),_transparent_60%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
+        {/* Fond galaxie */}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #0D0008, #06040E, #00080A)' }} />
+        {/* Nébuleuses */}
+        <div className="absolute" style={{ top: '-10%', left: '-10%', width: '60%', height: '60%', background: 'radial-gradient(circle, rgba(255,77,0,0.15) 0%, transparent 70%)', borderRadius: '50%' }} />
+        <div className="absolute" style={{ bottom: '-10%', right: '-10%', width: '50%', height: '50%', background: 'radial-gradient(circle, rgba(0,229,204,0.12) 0%, transparent 70%)', borderRadius: '50%' }} />
+        {/* Grid cosmique */}
+        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,77,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,77,0,0.04) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
 
+        {/* Content */}
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 bg-emerald-400 rounded-xl flex items-center justify-center">
-              <Bot className="w-6 h-6 text-gray-900" />
-            </div>
-            <span className="text-white text-xl font-bold tracking-tight">NéoBot</span>
+          <div className="mb-14">
+            <NeoBotBrandmark size={30} iconColor="#00E5CC" textColor="#FFFFFF" />
           </div>
 
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
             Bon retour<br />
-            <span className="text-emerald-400">parmi nous</span> 👋
+            <span style={{ background: 'linear-gradient(90deg, #FF9A6C, #00E5CC)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>parmi nous</span> 👋
           </h1>
-          <p className="text-white/60 text-lg leading-relaxed mb-12">
+          <p style={{ color: 'rgba(255,180,120,0.6)' }} className="text-lg leading-relaxed mb-12">
             Votre assistant WhatsApp IA n'attend que vous.
             Gérez vos conversations, vos clients et vos ventes.
           </p>
@@ -41,9 +44,9 @@ export default function LoginPage() {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 mb-12">
             {STATS.map(({ value, label }) => (
-              <div key={label} className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10 text-center">
-                <div className="text-2xl font-bold text-emerald-400 mb-1">{value}</div>
-                <div className="text-white/50 text-xs">{label}</div>
+              <div key={label} style={{ background: 'rgba(255,77,0,0.08)', border: '1px solid rgba(255,77,0,0.25)' }} className="backdrop-blur-sm rounded-2xl p-4 text-center">
+                <div className="text-2xl font-bold mb-1" style={{ background: 'linear-gradient(90deg, #FF9A6C, #00E5CC)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{value}</div>
+                <div style={{ color: 'rgba(255,180,120,0.5)' }} className="text-xs">{label}</div>
               </div>
             ))}
           </div>
@@ -56,39 +59,36 @@ export default function LoginPage() {
               { icon: Users, text: 'Support disponible 7j/7' },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-3">
-                <div className="w-7 h-7 bg-emerald-400/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,77,0,0.12)', border: '1px solid rgba(255,77,0,0.25)' }}>
+                  <Icon className="w-3.5 h-3.5" style={{ color: '#FF9A6C' }} />
                 </div>
-                <span className="text-white/70 text-sm">{text}</span>
+                <span style={{ color: 'rgba(255,180,120,0.7)' }} className="text-sm">{text}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="relative z-10 text-white/30 text-xs">
-          © 2026 NéoBot — Tim Patrick DIMANI BALLA
+        <div className="relative z-10 text-xs" style={{ color: 'rgba(0,229,204,0.5)' }}>
+          © 2026 NéoBot. Tous droits réservés.
         </div>
       </div>
 
       {/* DROITE : Formulaire */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12" style={{ background: 'rgba(5,0,16,0.95)' }}>
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 bg-emerald-400 rounded-lg flex items-center justify-center">
-              <Bot className="w-5 h-5 text-gray-900" />
-            </div>
-            <span className="text-white text-lg font-bold">NéoBot</span>
+            <NeoBotBrandmark size={22} iconColor="#00E5CC" textColor="#FFFFFF" />
           </div>
 
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-white mb-2">Connexion</h2>
-            <p className="text-white/50">Accédez à votre tableau de bord</p>
+            <p style={{ color: 'rgba(255,180,120,0.5)' }}>Accédez à votre tableau de bord</p>
           </div>
 
           <LoginForm />
 
-          <p className="text-center text-white/30 text-xs mt-8">
+          <p className="text-center text-xs mt-8" style={{ color: 'rgba(0,229,204,0.5)' }}>
             Protégé par chiffrement JWT 256-bit
           </p>
         </div>

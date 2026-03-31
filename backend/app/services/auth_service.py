@@ -3,16 +3,25 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 import os
+import secrets
+import uuid
 
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
-from app.models import User
+from app.models import User, RevokedToken
 from app.utils.security import verify_password, get_password_hash as hash_password
 
-SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production")
+_jwt_secret_env = os.getenv("JWT_SECRET", "")
+if not _jwt_secret_env:
+    import logging as _logging
+    _logging.getLogger(__name__).critical(
+        "SECURITE CRITIQUE : JWT_SECRET n'est pas défini dans les variables d'environnement. "
+        "Utilisez une clé forte en production."
+    )
+SECRET_KEY = _jwt_secret_env or "change-me-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -26,12 +35,13 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """Create a signed JWT access token."""
+    """Create a signed JWT access token with unique JTI for blacklisting."""
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire})
+    # JTI unique pour pouvoir révoquer un token précis sans invalider tous les autres
+    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -42,6 +52,27 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return payload
     except JWTError:
         return None
+
+
+def is_token_revoked(db: Session, jti: str) -> bool:
+    """Vérifie si un JTI est dans la blacklist (token révoqué via logout)."""
+    return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
+
+
+def revoke_token(db: Session, jti: str, user_id: int, expires_at: datetime) -> None:
+    """Ajoute un JTI à la blacklist. Appelé au logout."""
+    entry = RevokedToken(jti=jti, user_id=user_id, expires_at=expires_at)
+    db.add(entry)
+    db.commit()
+
+
+def purge_expired_revoked_tokens(db: Session) -> int:
+    """Supprime les tokens révoqués dont le JWT a déjà expiré (inutiles en blacklist)."""
+    count = db.query(RevokedToken).filter(
+        RevokedToken.expires_at < datetime.now(timezone.utc)
+    ).delete()
+    db.commit()
+    return count
 
 
 def get_password_hash(password: str) -> str:

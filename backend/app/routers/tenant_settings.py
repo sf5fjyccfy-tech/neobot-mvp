@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 import logging
 
 from ..database import get_db
+from ..models import User
 from ..services.response_delay_service import ResponseDelayService
 from ..schemas import SetTenantDelayRequest, SetContactDelayRequest
+from ..dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +21,11 @@ router = APIRouter(prefix="/api/tenants", tags=["settings"])
 @router.get("/{tenant_id}/settings")
 async def get_tenant_settings(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Récupère tous les settings du tenant
     (délai réponse, overrides par contact, etc.)
@@ -43,8 +48,11 @@ async def get_tenant_settings(
 async def update_tenant_settings(
     tenant_id: int,
     body: SetTenantDelayRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Met à jour les settings du tenant
     
@@ -78,8 +86,11 @@ async def set_contact_delay(
     tenant_id: int,
     phone: str,
     body: SetContactDelayRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Configure un délai spécifique pour un contact
     
@@ -117,8 +128,11 @@ async def set_contact_delay(
 async def remove_contact_delay(
     tenant_id: int,
     phone: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Supprime configuration custom pour ce contact
     (revient au délai par défaut du tenant)
@@ -154,8 +168,11 @@ async def remove_contact_delay(
 @router.get("/{tenant_id}/settings/queue")
 async def get_message_queue(
     tenant_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if not getattr(current_user, "is_superadmin", False) and current_user.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     """
     Récupère les messages actuellement en queue (en attente d'envoi)
     """

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from app.database import get_db
 from app.models import User, Tenant
-from app.services.auth_service import decode_access_token
+from app.services.auth_service import decode_access_token, is_token_revoked
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -24,9 +24,7 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Extract and validate JWT token, return current user
-    
-    Raises HTTPException if token is invalid or user not found
+    Valide le JWT bearer, vérifie la blacklist de révocation, retourne l'utilisateur.
     """
     token = credentials.credentials
     
@@ -34,22 +32,29 @@ async def get_current_user(
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            detail="Token invalide ou expiré",
+        )
+
+    # Vérifier si le token a été révoqué explicitement (logout)
+    jti = payload.get("jti")
+    if jti and is_token_revoked(db, jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token révoqué — veuillez vous reconnecter",
         )
 
     user_id: int = payload.get("user_id")
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            detail="Token invalide",
         )
     
-    # Get user from database
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="Utilisateur introuvable",
         )
     
     return user
@@ -64,13 +69,25 @@ async def get_tenant_from_request(
     return current_user.tenant_id
 
 
+async def get_superadmin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Réservé exclusivement au super-admin (fondateur)."""
+    if not getattr(current_user, "is_superadmin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé au super-administrateur",
+        )
+    return current_user
+
+
 def verify_tenant_access(
     tenant_id: int,
     current_user: User = Depends(get_current_user)
 ) -> bool:
-    """
-    Verify that current user has access to the specified tenant
-    """
+    """Superadmin peut accéder à tous les tenants. Client = uniquement le sien."""
+    if getattr(current_user, "is_superadmin", False):
+        return True
     if current_user.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

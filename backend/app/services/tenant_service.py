@@ -49,7 +49,7 @@ class TenantService:
             email=email,
             phone=phone,
             business_type=business_type,
-            plan="basique"
+            plan="essential"
         )
         
         self.db.add(tenant)
