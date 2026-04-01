@@ -190,6 +190,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
               </p>
               <div style={{ background: '#FFFFFF', borderRadius: 12, padding: 12, margin: '0 auto', display: 'inline-block' }}>
                 {qrData.qr_code ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={qrData.qr_code} alt="QR Code WhatsApp" style={{ width: 200, height: 200, display: 'block' }} />
                 ) : (
                   <div style={{ width: 200, height: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0', borderRadius: 8 }}>

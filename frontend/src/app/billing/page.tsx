@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getToken, getTenantId, buildApiUrl } from '@/lib/api';
 import AppShell from '@/components/ui/AppShell';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const NEON   = '#FF4D00';
 const BG     = '#06040E';
@@ -36,6 +37,7 @@ interface UsageSummary {
 }
 
 export default function BillingPage() {
+  const isMobile = useIsMobile();
   const [mounted, setMounted]   = useState(false);
   const [usage, setUsage]       = useState<UsageSummary | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -80,19 +82,19 @@ export default function BillingPage() {
     <div style={{ minHeight: '100vh', fontFamily: '"DM Sans", sans-serif', color: TEXT }}>
 
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE, padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE, padding: isMobile ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontFamily: '"Syne", sans-serif', fontSize: 24, fontWeight: 800, color: '#fff', margin: 0, marginBottom: 4 }}>Facturation</h1>
-          <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>Votre abonnement et votre consommation</p>
+          <h1 style={{ fontFamily: '"Syne", sans-serif', fontSize: isMobile ? 18 : 24, fontWeight: 800, color: '#fff', margin: 0, marginBottom: isMobile ? 0 : 4 }}>Facturation</h1>
+          {!isMobile && <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>Votre abonnement et votre consommation</p>}
         </div>
         <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-          <div style={{ padding: '8px 16px', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8, color: TEXT, fontSize: 13, cursor: 'pointer' }}>
+          <div style={{ padding: isMobile ? '6px 12px' : '8px 16px', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8, color: TEXT, fontSize: 13, cursor: 'pointer' }}>
             ← Dashboard
           </div>
         </Link>
       </div>
 
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px' : '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         {/* Plan actuel card */}
         <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, overflow: 'hidden' }}>
@@ -186,7 +188,7 @@ export default function BillingPage() {
           <p style={{ color: MUTED, fontSize: 13, margin: '0 0 20px' }}>
             Business et Enterprise arrivent prochainement.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
             {[
               { key: 'essential', label: 'Essential', price: '20 000', available: true  },
               { key: 'business',  label: 'Business',  price: '50 000', available: false },

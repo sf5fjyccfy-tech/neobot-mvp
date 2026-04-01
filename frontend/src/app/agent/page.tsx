@@ -329,9 +329,11 @@ export default function AgentPage() {
       form.append('name', pdfFile.name.replace('.pdf', ''));
       form.append('source_type', 'pdf');
       const token = getToken();
+      const uploadHeaders: Record<string, string> = {};
+      if (token) uploadHeaders['Authorization'] = `Bearer ${token}`;
       await fetch(buildApiUrl(`/api/tenants/${tid}/agents/${selectedAgent.id}/knowledge/upload`), {
         method: 'POST',
-        headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
+        headers: uploadHeaders,
         body: form,
       });
       showToast(`PDF "${pdfFile.name}" importé ✓`);

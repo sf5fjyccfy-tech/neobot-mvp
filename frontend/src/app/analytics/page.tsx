@@ -177,27 +177,29 @@ export default function AnalyticsPage() {
       <div style={{
         borderBottom: `1px solid ${BORDER}`,
         background: SURFACE,
-        padding: '20px 32px',
+        padding: isMobile ? '14px 16px' : '20px 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
         <div>
-          <h1 style={{ fontFamily: '"Syne", sans-serif', fontSize: 24, fontWeight: 800, color: '#fff', margin: 0, marginBottom: 4 }}>
+          <h1 style={{ fontFamily: '"Syne", sans-serif', fontSize: isMobile ? 18 : 24, fontWeight: 800, color: '#fff', margin: 0, marginBottom: 4 }}>
             Analytics
           </h1>
-          <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
-            Statistiques & performances de votre bot
-          </p>
+          {!isMobile && (
+            <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
+              Statistiques &amp; performances de votre bot
+            </p>
+          )}
         </div>
         <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-          <div style={{ padding: '8px 16px', border: `1px solid ${BORDER}`, borderRadius: 8, color: TEXT, fontSize: 13, cursor: 'pointer' }}>
+          <div style={{ padding: isMobile ? '6px 12px' : '8px 16px', border: `1px solid ${BORDER}`, borderRadius: 8, color: '#E0E0FF', fontSize: 13, cursor: 'pointer' }}>
             ← Dashboard
           </div>
         </Link>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '16px' : '32px 24px' }}>
 
         {/* Sélecteur de période */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>

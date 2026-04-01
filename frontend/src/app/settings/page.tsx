@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getToken, getTenantId, buildApiUrl, apiCall } from '@/lib/api';
 import AppShell from '@/components/ui/AppShell';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const BG = '#06040E';
 const SURFACE = '#0C0916';
@@ -13,6 +14,7 @@ const TEXT = '#E0E0FF';
 const NEON = '#FF4D00';
 
 export default function SettingsPage() {
+  const isMobile = useIsMobile();
   const [company, setCompany] = useState('');
   const [sector, setSector] = useState('restaurant');
   const [phone, setPhone] = useState('');
@@ -40,7 +42,7 @@ export default function SettingsPage() {
         setSector(data.sector ?? 'restaurant');
         setPhone(data.phone ?? '');
         setEmail(data.email ?? '');
-        setWelcomeMsg(data.greeting_message ?? welcomeMsg);
+        setWelcomeMsg(prev => data.greeting_message ?? prev);
       })
       .catch(() => {});
     // Statut WhatsApp réel
@@ -122,7 +124,7 @@ export default function SettingsPage() {
       <div style={{
         borderBottom: `1px solid ${BORDER}`,
         background: SURFACE,
-        padding: '20px 32px',
+        padding: isMobile ? '14px 16px' : '20px 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -130,21 +132,23 @@ export default function SettingsPage() {
         <div>
           <h1 style={{
             fontFamily: '"Syne", sans-serif',
-            fontSize: 24,
+            fontSize: isMobile ? 18 : 24,
             fontWeight: 800,
             color: '#fff',
             margin: 0,
-            marginBottom: 4,
+            marginBottom: isMobile ? 0 : 4,
           }}>
             Paramètres
           </h1>
-          <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
-            Gérez les paramètres de votre compte NéoBot
-          </p>
+          {!isMobile && (
+            <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
+              Gérez les paramètres de votre compte NéoBot
+            </p>
+          )}
         </div>
         <Link href="/dashboard" style={{ textDecoration: 'none' }}>
           <div style={{
-            padding: '8px 16px',
+            padding: isMobile ? '6px 12px' : '8px 16px',
             background: SURFACE,
             border: `1px solid ${BORDER}`,
             borderRadius: 8,
@@ -157,8 +161,8 @@ export default function SettingsPage() {
         </Link>
       </div>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px' : '32px 24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 16 : 24 }}>
 
           {/* LEFT — Formulaires */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -178,7 +182,7 @@ export default function SettingsPage() {
               }}>
                 <span style={{ color: NEON }}>◈</span> Informations de l'Entreprise
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
                 <div>
                   <label style={labelStyle}>Nom de l'entreprise</label>
                   <input

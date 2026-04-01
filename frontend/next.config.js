@@ -5,6 +5,10 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  experimental: {
+    // Active la découverte du fichier src/instrumentation.ts (Sentry server/edge)
+    instrumentationHook: true,
+  },
   webpack: (config) => {
     // Garantit la résolution de l'alias @/ même quand withSentryConfig wraps la config
     config.resolve.alias = {
