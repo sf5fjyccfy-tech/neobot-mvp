@@ -55,6 +55,8 @@ services:
         value: "+237694256267"
       - key: SUPERADMIN_EMAILS
         value: timpatrick561@gmail.com
+      - key: PYTHON_VERSION
+        value: "3.11.9"
 
   # ─── Service WhatsApp Node.js / Baileys ──────────────────────
   - type: web
@@ -91,7 +93,7 @@ services:
     region: frankfurt
     plan: free
     rootDir: frontend
-    buildCommand: "npm install && npm run build"
+    buildCommand: "npm install --include=dev && npm run build"
     startCommand: "npx next start -p $PORT"
     healthCheckPath: /
     envVars:
