@@ -6,6 +6,7 @@ import WhatsAppQRDisplay from '@/components/config/WhatsAppQRDisplay';
 import { getTenantId, getToken, buildApiUrl } from '@/lib/api';
 import Link from 'next/link';
 import AppShell from '@/components/ui/AppShell';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const BG = '#06040E';
 const SURFACE = '#0C0916';
@@ -16,6 +17,7 @@ const NEON = '#FF4D00';
 
 export default function ConfigPage() {
   const tenantId = getTenantId() ?? 1;
+  const isMobile = useIsMobile();
   const [waConnected, setWaConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export default function ConfigPage() {
       <div style={{
         borderBottom: `1px solid ${BORDER}`,
         background: SURFACE,
-        padding: '20px 32px',
+        padding: isMobile ? '14px 16px' : '20px 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -45,7 +47,7 @@ export default function ConfigPage() {
         <div>
           <h1 style={{
             fontFamily: '"Syne", sans-serif',
-            fontSize: 24,
+            fontSize: isMobile ? 18 : 24,
             fontWeight: 800,
             color: '#fff',
             margin: 0,
@@ -53,14 +55,15 @@ export default function ConfigPage() {
           }}>
             Configuration
           </h1>
-          <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
-            Configurez votre bot et connectez WhatsApp
-          </p>
+          {!isMobile && (
+            <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
+              Configurez votre bot et connectez WhatsApp
+            </p>
+          )}
         </div>
         <Link href="/dashboard" style={{ textDecoration: 'none' }}>
           <div style={{
-            padding: '8px 16px',
-            
+            padding: isMobile ? '6px 12px' : '8px 16px',
             border: `1px solid ${BORDER}`,
             borderRadius: 8,
             color: TEXT,
@@ -73,8 +76,8 @@ export default function ConfigPage() {
       </div>
 
       {/* Main Content */}
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '16px' : '32px 24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 16 : 24 }}>
 
           {/* Left: Business Config Form */}
           <div id="neo-config-business" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
@@ -184,11 +187,11 @@ export default function ConfigPage() {
 
         {/* Documentation Box */}
         <div style={{
-          marginTop: 24,
+          marginTop: isMobile ? 16 : 24,
           background: SURFACE,
           border: `1px solid ${BORDER}`,
           borderRadius: 16,
-          padding: 24,
+          padding: isMobile ? 16 : 24,
         }}>
           <h3 style={{
             fontFamily: '"Syne", sans-serif',
@@ -203,7 +206,7 @@ export default function ConfigPage() {
           }}>
             <span style={{ color: NEON }}>◈</span> Documentation
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 12 : 16 }}>
             {[
               {
                 accentColor: '#00E5CC',

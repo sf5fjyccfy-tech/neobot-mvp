@@ -1014,11 +1014,8 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       ? await usePgAuthState(tenantId)
       : await useMultiFileAuthState(authDir);
 
-    let version = DEFAULT_WA_VERSION;
-    try {
-      const fetched = await fetchLatestBaileysVersion();
-      version = fetched.version;
-    } catch (_) {}
+    // Réutiliser getBaileysVersion() — même logique que connectTenant (cache + fallback)
+    const version = await getBaileysVersion();
 
     // Créer le socket — Baileys queue les messages en interne jusqu'à l'ouverture WS
     // Doc officielle Baileys : appeler requestPairingCode immédiatement, sans sleep
@@ -1046,6 +1043,25 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
 
     logger.info('Pairing code generated successfully', { tenantId, phone, code: formatted });
+
+    // CRUCIAL : écouter la connexion sur pairSock — sans ça, session.connected ne passe
+    // jamais à true après que l'utilisateur entre le code, et le bot ne reçoit jamais de msgs.
+    pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+      if (connection === 'open') {
+        logger.info('Pairing code connection open — reinitializing full session', { tenantId });
+        // Relancer connectTenant avec les creds sauvegardés pour enregistrer
+        // tous les handlers (messages.upsert, etc.) correctement
+        setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' }), 500);
+      } else if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const isLoggedOut = statusCode === 401 || statusCode === 440;
+        if (!isLoggedOut) {
+          logger.info('Pairing socket closed, scheduling reconnect', { tenantId, statusCode });
+          setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' }), 3000);
+        }
+      }
+    });
+
     return res.json({
       status: 'code_generated',
       code: formatted,

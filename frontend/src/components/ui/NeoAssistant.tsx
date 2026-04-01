@@ -253,7 +253,7 @@ export function NeoAssistant() {
       )}
 
       {/* ── Bulle tooltip onboarding ─────────────────────────────────────── */}
-      {isOnboarding && currentStep && spotlightReady && (
+      {isOnboarding && currentStep && (
         <div
           ref={tooltipRef}
           style={{

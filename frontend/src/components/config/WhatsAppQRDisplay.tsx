@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiCall } from '@/lib/api';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 interface WhatsAppQR {
   tenant_id: number;
@@ -12,6 +13,7 @@ interface WhatsAppQR {
 }
 
 export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
+  const isMobile = useIsMobile();
   const [qrData, setQrData] = useState<WhatsAppQR | null>(null);
   const [loading, setLoading] = useState(false);
   const [phone, setPhone] = useState('');
@@ -22,6 +24,13 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const [pairingLoading, setPairingLoading] = useState(false);
   const [pairingError, setPairingError] = useState('');
   const [showPairing, setShowPairing] = useState(false);
+
+  // Sur mobile, le QR code est inutilisable (scanner son propre téléphone) — basculer sur le code de jumelage
+  useEffect(() => {
+    if (isMobile) {
+      setShowPairing(true);
+    }
+  }, [isMobile]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {

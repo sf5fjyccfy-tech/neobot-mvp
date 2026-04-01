@@ -231,7 +231,7 @@ export default function DashboardPage() {
       <div style={{
         borderBottom: `1px solid ${BORDER}`,
         background: SURFACE,
-        padding: '20px 32px',
+        padding: isMobile ? '14px 16px' : '20px 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

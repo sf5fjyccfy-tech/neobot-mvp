@@ -189,9 +189,15 @@ export default function ConversationsPage() {
         },
         body: JSON.stringify({ message: msg.content }),
       });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
         // Rollback : retire le message optimiste si l'envoi échoue
         setMessages(prev => prev.filter(m => m.id !== optimisticId));
+      } else if (data?.whatsapp_sent === false) {
+        // HTTP 200 mais WhatsApp non connecté — retirer le message optimiste et alerter
+        setMessages(prev => prev.filter(m => m.id !== optimisticId));
+        const errDetail = data?.wa_error ? ` (${data.wa_error})` : '';
+        alert(`⚠️ Message non envoyé : WhatsApp n'est pas connecté${errDetail}.\nConnectez WhatsApp dans Configuration.`);
       } else {
         setBotPaused(true); // Le bot est mis en pause automatiquement après envoi manuel
       }
