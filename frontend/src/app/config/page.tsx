@@ -80,7 +80,7 @@ export default function ConfigPage() {
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 16 : 24 }}>
 
           {/* Left: Business Config Form */}
-          <div id="neo-config-business" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
+          <div id="neo-config-business" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24, order: isMobile ? 2 : 0 }}>
             <h2 style={{
               fontFamily: '"Syne", sans-serif',
               fontSize: 16,
@@ -102,7 +102,7 @@ export default function ConfigPage() {
           </div>
 
           {/* Right column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, order: isMobile ? 1 : 0 }}>
 
             {/* WhatsApp Connection */}
             <div id="neo-config-whatsapp" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
