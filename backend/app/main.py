@@ -2,7 +2,7 @@
 NÉOBOT - Backend principal robuste et production-ready
 Version: 1.0.0
 """
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -389,6 +389,11 @@ async def health():
         "timestamp": datetime.utcnow().isoformat(),
         "version": "1.0.0"
     }
+
+@app.head("/health")
+async def health_head():
+    """HEAD /health — UptimeRobot et autres monitors utilisent HEAD"""
+    return Response(status_code=200)
 
 @app.get("/api/health")
 async def api_health(db: Session = Depends(get_db)):
