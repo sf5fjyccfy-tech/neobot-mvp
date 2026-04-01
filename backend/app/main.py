@@ -735,8 +735,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "error": str(exc),
-            "traceback": tb,
+            "detail": "Une erreur interne est survenue.",
             "status": "error",
             "timestamp": datetime.utcnow().isoformat()
         }
