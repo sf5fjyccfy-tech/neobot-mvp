@@ -990,17 +990,26 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
 
   const session = getTenantSession(tenantId);
 
+  // Si déjà connecté → déconnecter proprement d'abord pour permettre le re-jumelage
+  // (changement de numéro, code expiré, ou DB désynchronisée après redémarrage Render).
+  // NE PAS retourner already_connected — ça bloque la régénération.
   if (session.connected) {
-    return res.json({ status: 'already_connected', message: 'WhatsApp déjà connecté' });
+    logger.info('Re-pairing requested on connected session — disconnecting first', { tenantId });
+    clearReconnectTimer(session);
+    await stopTenantSocket(session);
+    session.connected = false;
+    session.state = 'idle';
+    await notifyBackendConnection(tenantId, false);
+  } else {
+    // Stopper toute reconnexion en cours — éviter conflits de socket
+    clearReconnectTimer(session);
+    if (session.socket) {
+      try { session.socket.end(undefined); } catch (_) {}
+      session.socket = null;
+    }
+    session.state = 'idle';
   }
-
-  // Stopper toute reconnexion en cours — éviter conflits de socket
-  clearReconnectTimer(session);
-  if (session.socket) {
-    try { session.socket.end(undefined); } catch (_) {}
-    session.socket = null;
-  }
-  session.state = 'idle';
+  session.initializing = false;
   session.retryCount = 0;
   session.authResetCount = 0;
 
@@ -1063,13 +1072,30 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         logger.info('Pairing code connection open — reinitializing full session', { tenantId });
         // Relancer connectTenant avec les creds sauvegardés pour enregistrer
         // tous les handlers (messages.upsert, etc.) correctement
-        setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' }), 500);
+        session.scheduledReconnect = setTimeout(() => {
+          session.scheduledReconnect = null;
+          connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
+        }, 500);
       } else if (connection === 'close') {
+        // Déverrouiller la session — sans ça, initializing reste à true indéfiniment
+        // et toute tentative de reconnexion est ignorée par le guard de connectTenant.
+        session.initializing = false;
+        session.state = 'disconnected';
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const isLoggedOut = statusCode === 401 || statusCode === 440;
         if (!isLoggedOut) {
           logger.info('Pairing socket closed, scheduling reconnect', { tenantId, statusCode });
-          setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' }), 3000);
+          // Stocker dans scheduledReconnect pour pouvoir annuler si l'utilisateur
+          // relance une nouvelle tentative de jumelage avant l'expiration du timer.
+          clearReconnectTimer(session);
+          session.scheduledReconnect = setTimeout(() => {
+            session.scheduledReconnect = null;
+            connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' });
+          }, 3000);
+        } else {
+          // Code erroné ou session révoquée — nettoyer sans reconnecter.
+          logger.info('Pairing rejected (logged out), cleaning state', { tenantId, statusCode });
+          clearReconnectTimer(session);
         }
       }
     });

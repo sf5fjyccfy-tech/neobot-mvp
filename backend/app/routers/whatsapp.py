@@ -192,15 +192,6 @@ async def get_whatsapp_qr(
             message="Aucune session WhatsApp créée. Veuillez d'abord connecter un numéro."
         )
     
-    if session.is_connected:
-        return WhatsAppQRResponse(
-            tenant_id=tenant_id,
-            status="connected",
-            qr_code=None,
-            phone=session.whatsapp_phone,
-            message=f"✅ Connecté: {session.whatsapp_phone}"
-        )
-    
     service_qr_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/qr"
     service_connect_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/connect"
 
@@ -231,12 +222,19 @@ async def get_whatsapp_qr(
                 state = qr_payload.get("state", state)
                 qr_image = qr_payload.get("qrImageDataUrl")
 
-        # Keep DB state in sync with live service state when known
+        # Sync DB ↔ service réel — le service fait autorité sur la connexion live
         if is_connected and not session.is_connected:
             session.is_connected = True
             session.last_connected_at = datetime.utcnow()
             session.failed_attempts = 0
             db.commit()
+        elif not is_connected and session.is_connected:
+            # DB dit "connecté" mais le service dit "non" (ex: redémarrage Render).
+            # Rectifier la DB pour débloquer l'UI — sinon l'utilisateur ne peut plus
+            # accéder au formulaire de re-jumelage.
+            session.is_connected = False
+            db.commit()
+            logger.info(f"DB desync fixed for tenant {tenant_id}: marked disconnected")
 
         if is_connected:
             return WhatsAppQRResponse(
@@ -269,12 +267,30 @@ async def get_whatsapp_qr(
             f"WhatsApp service HTTP error for tenant {tenant_id}: "
             f"{e.response.status_code} {e.response.text}"
         )
+        # Fallback sur la DB si le service est temporairement indisponible
+        if session.is_connected:
+            return WhatsAppQRResponse(
+                tenant_id=tenant_id,
+                status="connected",
+                qr_code=None,
+                phone=session.whatsapp_phone,
+                message=f"✅ Connecté: {session.whatsapp_phone}",
+            )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Service WhatsApp indisponible temporairement"
         )
     except httpx.RequestError as e:
         logger.error(f"WhatsApp service request error for tenant {tenant_id}: {str(e)}")
+        # Fallback sur la DB — ne pas bloquer l'UI si le service est down
+        if session.is_connected:
+            return WhatsAppQRResponse(
+                tenant_id=tenant_id,
+                status="connected",
+                qr_code=None,
+                phone=session.whatsapp_phone,
+                message=f"✅ Connecté: {session.whatsapp_phone}",
+            )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Impossible de joindre le service WhatsApp"
