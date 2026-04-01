@@ -49,27 +49,27 @@ export const PAGE_ONBOARDING: Partial<Record<PageKey, OnboardingStep[]>> = {
   agent: [
     {
       id: "agent-welcome",
-      title: "Configuration de ton agent IA \uD83E\uDD16",
-      body: "C\u2019est ici que ton bot prend vie. Choisis son type, son comportement, sa base de connaissance. Il bosse 24h/24 \u00e0 ta place.",
+      title: "Crée ton premier agent IA 🤖",
+      body: "Ton compte est prêt. Il te reste une étape clé : créer l'agent qui va répondre à tes clients sur WhatsApp. Clique sur \"+ Nouvel agent\" pour commencer.",
     },
     {
       id: "agent-list",
       targetId: "neo-agent-sidebar",
       placement: "right",
       title: "Tes agents",
-      body: "Tu peux cr\u00e9er plusieurs agents selon tes besoins : Support, Vente, RDV... Clique sur un agent pour le configurer.",
+      body: "Tu peux créer plusieurs agents selon tes besoins : Support client, Vente, RDV, Qualification... Chacun a son propre comportement et ses propres instructions.",
     },
     {
       id: "agent-config",
       targetId: "neo-agent-config",
       placement: "left",
-      title: "Panneau de configuration",
-      body: "Ici tu d\u00e9finis le nom de l\u2019agent, son type, ses instructions, son d\u00e9lai de r\u00e9ponse et les contacts \u00e0 exclure.",
+      title: "Configure ton agent",
+      body: "Choisis le type d'agent, donne-lui des instructions précises sur ton business, et définis son délai de réponse. Plus les instructions sont précises, mieux il répond.",
     },
     {
       id: "agent-done",
-      title: "Agent configur\u00e9 \u2705",
-      body: "Pense \u00e0 connecter WhatsApp depuis la page Config pour que ton agent commence \u00e0 r\u00e9pondre. Tu veux y aller maintenant ?",
+      title: "Agent créé ✅",
+      body: "Connecte maintenant WhatsApp depuis la page Config pour que ton agent commence à répondre à tes clients. C'est l'étape finale !",
     },
   ],
   config: [

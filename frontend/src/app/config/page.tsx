@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import BusinessConfigForm from '@/components/config/BusinessConfigForm';
 import WhatsAppQRDisplay from '@/components/config/WhatsAppQRDisplay';
-import { getTenantId } from '@/lib/api';
+import { getTenantId, getToken, buildApiUrl } from '@/lib/api';
 import Link from 'next/link';
 import AppShell from '@/components/ui/AppShell';
 
@@ -16,6 +16,19 @@ const NEON = '#FF4D00';
 
 export default function ConfigPage() {
   const tenantId = getTenantId() ?? 1;
+  const [waConnected, setWaConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const tid = getTenantId();
+    const token = getToken();
+    if (!tid || !token) return;
+    fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setWaConnected(data.status === 'connected'); })
+      .catch(() => {});
+  }, []);
 
   return (
     <AppShell>
@@ -144,7 +157,11 @@ export default function ConfigPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
                   { label: 'Configuration', status: '✅ Prêt', color: NEON },
-                  { label: 'WhatsApp', status: '⏳ En attente', color: '#FFD700' },
+                  {
+                    label: 'WhatsApp',
+                    status: waConnected === null ? '⏳ Vérification...' : waConnected ? '✅ Connecté' : '⏳ En attente',
+                    color: waConnected === null ? MUTED : waConnected ? NEON : '#FFD700',
+                  },
                   { label: 'IA', status: '✅ Actif', color: NEON },
                 ].map((item, i) => (
                   <div key={i} style={{

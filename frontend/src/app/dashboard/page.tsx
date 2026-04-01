@@ -115,6 +115,9 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<StatCard[]>(STATS);
   const [statsLoaded, setStatsLoaded] = useState(false);
   const [dashStats, setDashStats] = useState<DashStats | null>(null);
+  const [isTrial, setIsTrial] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
+  const [waConnected, setWaConnected] = useState(false);
 
   useEffect(() => {
     // Détecter un token d'impersonation passé en query param
@@ -151,13 +154,18 @@ export default function DashboardPage() {
       Promise.all([
         fetch(buildApiUrl(`/api/tenants/${tid}/usage`), { headers }).then(r => r.ok ? r.json() : null),
         fetch(buildApiUrl(`/api/tenants/${tid}/dashboard/stats`), { headers }).then(r => r.ok ? r.json() : null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), { headers }).then(r => r.ok ? r.json() : null),
       ])
-        .then(([usageData, statsData]) => {
+        .then(([usageData, statsData, waData]) => {
+          const waOk = waData?.status === 'connected';
+          setWaConnected(waOk);
           if (usageData) {
+            setIsTrial(usageData.is_trial ?? false);
+            setTrialDaysLeft(usageData.trial_days_left ?? null);
             setStats(prev => prev.map((s, i) => {
               if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
               if (i === 1) return { ...s, value: String(usageData.active_conversations ?? '—'), sub: 'Sessions ouvertes' };
-              if (i === 3) return { ...s, value: usageData.over_limit ? 'QUOTA' : 'ACTIF', sub: usageData.over_limit ? 'Quota dépassé' : 'WhatsApp connecté' };
+              if (i === 3) return { ...s, value: usageData.over_limit ? 'QUOTA' : waOk ? 'ACTIF' : 'INACTIF', sub: usageData.over_limit ? 'Quota dépassé' : waOk ? 'WhatsApp connecté' : 'WhatsApp non connecté' };
               return s;
             }));
           }
@@ -228,9 +236,9 @@ export default function DashboardPage() {
               Tableau de bord
             </h1>
             <span style={{
-              background: `${NEON}20`,
-              border: `1px solid ${NEON}40`,
-              color: NEON,
+              background: isTrial ? 'rgba(230,127,0,0.15)' : `${NEON}20`,
+              border: `1px solid ${isTrial ? 'rgba(230,127,0,0.4)' : `${NEON}40`}`,
+              color: isTrial ? '#E67F00' : NEON,
               fontSize: 11,
               fontWeight: 700,
               padding: '2px 10px',
@@ -238,7 +246,7 @@ export default function DashboardPage() {
               letterSpacing: 1,
               textTransform: 'uppercase',
             }}>
-              Essential
+              {isTrial ? `Essai${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : 'Essential'}
             </span>
           </div>
           <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
@@ -536,9 +544,11 @@ export default function DashboardPage() {
               borderRadius: 10,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ color: NEON, fontSize: 12, fontWeight: 700 }}>Plan Essential</span>
-                <Link href="/billing" style={{ textDecoration: 'none' }}>
-                  <span style={{ color: MUTED, fontSize: 11 }}>Upgrader →</span>
+                <span style={{ color: isTrial ? '#E67F00' : NEON, fontSize: 12, fontWeight: 700 }}>
+                  {isTrial ? `Essai gratuit${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : 'Plan Essential'}
+                </span>
+                <Link href={isTrial ? '/pricing' : '/billing'} style={{ textDecoration: 'none' }}>
+                  <span style={{ color: MUTED, fontSize: 11 }}>{isTrial ? 'Activer →' : 'Gérer →'}</span>
                 </Link>
               </div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

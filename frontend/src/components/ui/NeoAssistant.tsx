@@ -80,6 +80,12 @@ export function NeoAssistant() {
       const el = document.getElementById(targetId);
       if (el) {
         const rect = el.getBoundingClientRect();
+        // Élément hors viewport ou caché (height/width === 0) → traiter comme sans spotlight
+        if (rect.height === 0 || rect.width === 0) {
+          setSpotlightRect(null);
+          setSpotlightReady(true);
+          return;
+        }
         setSpotlightRect({
           top: rect.top - 8,
           left: rect.left - 8,
@@ -177,7 +183,8 @@ export function NeoAssistant() {
     if (spotlightRect.top + spotlightRect.height + 16 + tooltipH < vh) {
       top = spotlightRect.top + spotlightRect.height + 16;
     } else {
-      bottom = vh - spotlightRect.top + 16;
+      // Au-dessus de l'élément, clamped pour ne pas sortir du haut
+      top = Math.max(16, spotlightRect.top - tooltipH - 16);
     }
 
     // Centrer horizontalement sur l'élément, clamped dans le viewport
@@ -186,8 +193,7 @@ export function NeoAssistant() {
 
     return {
       position: 'fixed',
-      top: top !== undefined ? top : undefined,
-      bottom: bottom !== undefined ? bottom : undefined,
+      top,
       left,
       width: tooltipW,
       zIndex: 10002,

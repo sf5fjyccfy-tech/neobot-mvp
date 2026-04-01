@@ -269,18 +269,6 @@ async def register(
     
     db.commit()
 
-    # Créer un agent LIBRE par défaut — si ça plante, l'inscription ne foire pas
-    try:
-        AgentService.create_agent(
-            tenant_id=new_tenant.id,
-            name="Assistant IA",
-            agent_type=AgentType.LIBRE,
-            db=db,
-            activate=True,
-        )
-    except Exception as e:
-        logger.warning(f"⚠ Agent par défaut non créé pour tenant {new_tenant.id}: {e}")
-
     # Créer le token JWT + refresh token
     access_token = create_access_token(
         data={"sub": new_user.email, "user_id": new_user.id, "tenant_id": new_user.tenant_id}

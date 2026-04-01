@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getToken, getTenantId, buildApiUrl } from '@/lib/api';
+import { getToken, getTenantId, buildApiUrl, apiCall } from '@/lib/api';
 import AppShell from '@/components/ui/AppShell';
 
 const BG = '#06040E';
@@ -20,11 +20,16 @@ export default function SettingsPage() {
   const [welcomeMsg, setWelcomeMsg] = useState('Bonjour ! Bienvenue chez nous. Comment puis-je vous aider aujourd\'hui ?');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [waConnected, setWaConnected] = useState<boolean | null>(null);
+  const [waPhone, setWaPhone] = useState<string | null>(null);
+  const [isTrial, setIsTrial] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
 
   useEffect(() => {
     const token = getToken();
     const tid = getTenantId();
     if (!token || !tid) return;
+    // Config business
     fetch(buildApiUrl(`/api/tenants/${tid}/business/config`), {
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -36,6 +41,28 @@ export default function SettingsPage() {
         setPhone(data.phone ?? '');
         setEmail(data.email ?? '');
         setWelcomeMsg(data.greeting_message ?? welcomeMsg);
+      })
+      .catch(() => {});
+    // Statut WhatsApp réel
+    fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setWaConnected(data.status === 'connected');
+        setWaPhone(data.phone ?? null);
+      })
+      .catch(() => { setWaConnected(false); });
+    // Plan / trial
+    fetch(buildApiUrl(`/api/tenants/${tid}/usage`), {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setIsTrial(!!data.is_trial);
+        setTrialDaysLeft(data.trial_days_left ?? null);
       })
       .catch(() => {});
   }, []);
@@ -234,26 +261,30 @@ export default function SettingsPage() {
                 <span style={{ color: NEON }}>◈</span> Configuration WhatsApp
               </h3>
 
-              {/* Status badge */}
+              {/* Status badge WA dynamique */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '12px 16px',
-                background: `${NEON}08`,
-                border: `1px solid ${NEON}20`,
+                background: waConnected ? `${NEON}08` : 'rgba(255,100,50,0.06)',
+                border: `1px solid ${waConnected ? `${NEON}20` : 'rgba(255,100,50,0.20)'}`,
                 borderRadius: 10,
                 marginBottom: 16,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>✅</span>
+                  <span style={{ fontSize: 18 }}>{waConnected === null ? '⏳' : waConnected ? '✅' : '🔴'}</span>
                   <div>
-                    <p style={{ color: NEON, fontSize: 13, fontWeight: 700, margin: 0 }}>WhatsApp Connecté</p>
-                    <p style={{ color: MUTED, fontSize: 11, margin: 0 }}>Votre numéro est connecté et actif</p>
+                    <p style={{ color: waConnected ? NEON : '#FF8C6B', fontSize: 13, fontWeight: 700, margin: 0 }}>
+                      {waConnected === null ? 'Vérification...' : waConnected ? 'WhatsApp Connecté' : 'WhatsApp non connecté'}
+                    </p>
+                    <p style={{ color: MUTED, fontSize: 11, margin: 0 }}>
+                      {waConnected === null ? '' : waConnected ? (waPhone ?? 'Numéro actif') : 'Scannez le QR code pour activer votre bot'}
+                    </p>
                   </div>
                 </div>
                 <Link href="/config" style={{ textDecoration: 'none' }}>
-                  <span style={{ color: NEON, fontSize: 12, fontWeight: 600 }}>Reconfigurer →</span>
+                  <span style={{ color: NEON, fontSize: 12, fontWeight: 600 }}>{waConnected ? 'Reconfigurer →' : 'Connecter →'}</span>
                 </Link>
               </div>
 
@@ -268,16 +299,16 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: `${NEON}08`, border: `1px solid ${NEON}20`, borderRadius: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: waConnected ? `${NEON}08` : 'rgba(100,100,120,0.06)', border: `1px solid ${waConnected ? `${NEON}20` : BORDER}`, borderRadius: 10 }}>
                 <div>
                   <p style={{ color: TEXT, fontSize: 13, fontWeight: 600, margin: 0 }}>Bot actif 24h/24</p>
-                  <p style={{ color: MUTED, fontSize: 11, margin: '2px 0 0' }}>L'agent répond à toute heure, tous les jours</p>
+                  <p style={{ color: MUTED, fontSize: 11, margin: '2px 0 0' }}>{waConnected ? "L'agent répond à toute heure, tous les jours" : "Connectez WhatsApp pour activer le bot"}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 36, height: 20, borderRadius: 10, background: `${NEON}CC`, position: 'relative', cursor: 'default' }}>
-                    <div style={{ position: 'absolute', top: 2, left: 18, width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
+                  <div style={{ width: 36, height: 20, borderRadius: 10, background: waConnected ? `${NEON}CC` : '#333', position: 'relative', cursor: 'default' }}>
+                    <div style={{ position: 'absolute', top: 2, left: waConnected ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
                   </div>
-                  <span style={{ color: NEON, fontSize: 12, fontWeight: 600 }}>Activé</span>
+                  <span style={{ color: waConnected ? NEON : MUTED, fontSize: 12, fontWeight: 600 }}>{waConnected ? 'Activé' : 'Inactif'}</span>
                 </div>
               </div>
             </div>
@@ -298,31 +329,70 @@ export default function SettingsPage() {
               }}>
                 Votre Plan
               </h3>
-              <div style={{
-                background: 'linear-gradient(135deg, #FF4D00, #0891B2)',
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 12,
-              }}>
-                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, margin: 0, marginBottom: 4 }}>Plan actuel</p>
-                <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, margin: 0, marginBottom: 2 }}>Essential</p>
-                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 20, fontWeight: 800, margin: 0 }}>20 000 <span style={{ fontSize: 13 }}>FCFA/mois</span></p>
-                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, margin: '6px 0 0' }}>2 500 msg • 1 agent • Analytics 30j</p>
-              </div>
-              <Link href="/billing" style={{ textDecoration: 'none' }}>
-                <button style={{
-                  width: '100%',
-                  padding: '10px',
-                  background: SURFACE,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 8,
-                  color: TEXT,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}>
-                  Changer de Plan
-                </button>
-              </Link>
+              {isTrial ? (
+                <>
+                  <div style={{
+                    background: 'linear-gradient(135deg, #E67E00, #B85C00)',
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 12,
+                  }}>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, margin: 0, marginBottom: 4 }}>Plan actuel</p>
+                    <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, margin: 0, marginBottom: 2 }}>Essai gratuit</p>
+                    {trialDaysLeft !== null && trialDaysLeft > 0 ? (
+                      <p style={{ color: 'rgba(255,230,180,0.9)', fontSize: 13, fontWeight: 700, margin: 0 }}>
+                        {trialDaysLeft} jour{trialDaysLeft > 1 ? 's' : ''} restant{trialDaysLeft > 1 ? 's' : ''}
+                      </p>
+                    ) : (
+                      <p style={{ color: 'rgba(255,180,180,0.9)', fontSize: 13, fontWeight: 700, margin: 0 }}>Essai expiré</p>
+                    )}
+                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, margin: '6px 0 0' }}>2 500 msg • 1 agent • Analytics 30j</p>
+                  </div>
+                  <Link href="/pricing" style={{ textDecoration: 'none' }}>
+                    <button style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: NEON,
+                      border: 'none',
+                      borderRadius: 8,
+                      color: '#000',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}>
+                      Passer à Essential — 20 000 FCFA/mois
+                    </button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <div style={{
+                    background: 'linear-gradient(135deg, #FF4D00, #0891B2)',
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 12,
+                  }}>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, margin: 0, marginBottom: 4 }}>Plan actuel</p>
+                    <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, margin: 0, marginBottom: 2 }}>Essential</p>
+                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 20, fontWeight: 800, margin: 0 }}>20 000 <span style={{ fontSize: 13 }}>FCFA/mois</span></p>
+                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, margin: '6px 0 0' }}>2 500 msg • 1 agent • Analytics 30j</p>
+                  </div>
+                  <Link href="/billing" style={{ textDecoration: 'none' }}>
+                    <button style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: SURFACE,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 8,
+                      color: TEXT,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                    }}>
+                      Changer de Plan
+                    </button>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Fallback IA */}
