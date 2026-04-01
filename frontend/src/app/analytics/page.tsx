@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/ui/AppShell';
-import { getTenantId, buildApiUrl } from '@/lib/api';
+import { getTenantId, buildApiUrl, getToken } from '@/lib/api';
 
 const NEON = '#FF4D00';
 const SURFACE = '#0C0916';
@@ -112,7 +112,9 @@ export default function AnalyticsPage() {
     if (!tid) { setLoading(false); return; }
     setLoading(true);
     try {
-      const r = await fetch(buildApiUrl(`/api/tenants/${tid}/analytics/dashboard`));
+      const token = getToken();
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const r = await fetch(buildApiUrl(`/api/tenants/${tid}/analytics/dashboard`), { headers });
       const json = await r.json();
       if (json.status === 'success') setData(json.data);
     } catch (_) {}

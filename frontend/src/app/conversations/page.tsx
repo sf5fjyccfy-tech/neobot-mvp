@@ -72,6 +72,7 @@ export default function ConversationsPage() {
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [botPaused, setBotPaused] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const filtered = conversations.filter(c => {
@@ -106,6 +107,35 @@ export default function ConversationsPage() {
       .catch(err => { if (err.name !== 'AbortError') console.error('fetch messages:', err); });
     return () => controller.abort();
   }, [selected]);
+
+  // Charger l'état du bot quand on change de conversation
+  useEffect(() => {
+    if (!selected) { setBotPaused(false); return; }
+    const tid = getTenantId();
+    const token = getToken();
+    if (!tid) return;
+    fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/bot-state`), {
+      headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setBotPaused(d?.bot_paused ?? false))
+      .catch(() => setBotPaused(false));
+  }, [selected]);
+
+  async function toggleBot(pause: boolean) {
+    if (!selected) return;
+    const tid = getTenantId();
+    const token = getToken();
+    if (!tid) return;
+    try {
+      await fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/toggle-bot`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) },
+        body: JSON.stringify({ paused: pause }),
+      });
+      setBotPaused(pause);
+    } catch (_) {}
+  }
 
   useEffect(() => {
     const tid = getTenantId();
@@ -147,17 +177,19 @@ export default function ConversationsPage() {
       const tid = getTenantId();
       const token = getToken();
       if (!tid) return;
-      const res = await fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/message`), {
+      const res = await fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/send`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token && { 'Authorization': `Bearer ${token}` }),
         },
-        body: JSON.stringify({ phone: selected.customer_phone, message: msg.content }),
+        body: JSON.stringify({ message: msg.content }),
       });
       if (!res.ok) {
         // Rollback : retire le message optimiste si l'envoi échoue
         setMessages(prev => prev.filter(m => m.id !== optimisticId));
+      } else {
+        setBotPaused(true); // Le bot est mis en pause automatiquement après envoi manuel
       }
     } catch (_) {
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
@@ -349,17 +381,22 @@ export default function ConversationsPage() {
                 }}>
                   ✓ WhatsApp
                 </span>
-                <span style={{
-                  padding: '5px 12px',
-                  background: '#7B61FF15',
-                  border: '1px solid #7B61FF30',
-                  color: '#00E5CC',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}>
-                  🤖 IA Active
-                </span>
+                <button
+                  onClick={() => toggleBot(!botPaused)}
+                  style={{
+                    padding: '5px 12px',
+                    background: botPaused ? '#FF4D0015' : '#00E5CC15',
+                    border: `1px solid ${botPaused ? '#FF4D0030' : '#00E5CC30'}`,
+                    color: botPaused ? '#FF6B35' : '#00E5CC',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                  title={botPaused ? 'Cliquer pour reprendre le bot' : 'Cliquer pour prendre la main'}
+                >
+                  {botPaused ? '⏸ Bot en pause' : '🤖 IA Active'}
+                </button>
               </div>
             </div>
 

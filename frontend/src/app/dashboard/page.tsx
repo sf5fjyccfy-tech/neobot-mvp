@@ -169,7 +169,17 @@ export default function DashboardPage() {
               return s;
             }));
           }
-          if (statsData) setDashStats(statsData);
+          if (statsData) {
+            setDashStats(statsData);
+            // Calcul du taux de résolution = nb conversations avec outcome / total conversations ce mois
+            const totalOutcomes = Object.values(statsData.outcomes_month as Record<string, number>).reduce((a: number, b: number) => a + b, 0);
+            const totalConvs = usageData?.active_conversations ?? 0;
+            const rate = totalConvs > 0 ? Math.round((totalOutcomes / totalConvs) * 100) : 0;
+            setStats(prev => prev.map((s, i) => {
+              if (i === 2) return { ...s, value: `${rate}%`, sub: `${totalOutcomes} résultat${totalOutcomes !== 1 ? 's' : ''} ce mois` };
+              return s;
+            }));
+          }
         })
         .catch(() => {})
         .finally(() => setStatsLoaded(true));

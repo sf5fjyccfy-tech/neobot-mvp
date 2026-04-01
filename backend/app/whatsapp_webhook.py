@@ -5,7 +5,7 @@ Receives messages from WhatsApp service and processes them
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
 from pydantic import BaseModel, field_validator
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import random
 import httpx
@@ -21,7 +21,7 @@ from sqlalchemy import func
 # Imports locaux
 import asyncio
 from app.database import get_db
-from app.models import Conversation, Message
+from app.models import Conversation, Message, ConversationHumanState
 from app.services.business_kb_service import BusinessKBService
 from app.services.contact_filter_service import ContactFilterService
 from app.services.agent_service import AgentService
@@ -463,6 +463,21 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         if not ContactFilterService.is_ai_enabled_for_contact(tenant_id, phone, db):
             logger.info(f"🚫 IA désactivée pour {phone} (tenant {tenant_id}) — réponse ignorée")
             return {"status": "skipped", "reason": "ai_disabled_for_contact"}
+
+        # Check human takeover — opérateur actif dans les 30 dernières minutes?
+        human_state = db.query(ConversationHumanState).filter(
+            ConversationHumanState.conversation_id == conversation.id
+        ).first()
+        if human_state and human_state.human_active:
+            pause_window = timedelta(minutes=30)
+            if human_state.last_human_message_at and (datetime.utcnow() - human_state.last_human_message_at) < pause_window:
+                logger.info(f"🔇 Bot en pause conv {conversation.id} — opérateur actif depuis {human_state.last_human_message_at}")
+                return {"status": "skipped", "reason": "human_takeover"}
+            else:
+                # Pause expirée — réactiver le bot automatiquement
+                human_state.human_active = False
+                db.commit()
+                logger.info(f"🔄 Pause expirée conv {conversation.id} — bot réactivé")
 
         # Fetch agent settings (delay + typing) before generating response
         active_agent = AgentService.get_active_agent(tenant_id, db)
