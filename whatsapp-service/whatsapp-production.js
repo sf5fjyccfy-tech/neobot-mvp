@@ -10,7 +10,6 @@ import { fileURLToPath } from 'url';
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
-  Browsers,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
 } from '@whiskeysockets/baileys';
@@ -583,9 +582,9 @@ async function connectTenant(tenantId, options = {}) {
         creds: authState.creds,
         keys: makeCacheableSignalKeyStore(authState.keys, bailLogger),
       },
-      // macOS Desktop = fingerprint de l'app WhatsApp Desktop officielle.
-      // Beaucoup moins suspect que ubuntu/Chrome qui est un pattern de bot connu de WA.
-      browser: Browsers.macOS('Desktop'),
+      // Fingerprint identique à WhatsApp Web officiel — affiche "WhatsApp Web" dans les
+      // appareils liés Android. Neutre, indétectable par Meta.
+      browser: ['WhatsApp Web', 'Chrome', '2.2408.10'],
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: false,
@@ -1029,7 +1028,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, bailLogger),
       },
-      browser: Browsers.macOS('Desktop'),
+      browser: ['WhatsApp Web', 'Chrome', '2.2408.10'],
       printQRInTerminal: false,
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
