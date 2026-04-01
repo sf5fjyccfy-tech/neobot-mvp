@@ -3,7 +3,7 @@ services:
   - type: web
     name: neobot-backend
     env: python
-    region: fra
+    region: frankfurt
     plan: free
     buildCommand: "pip install -r backend/requirements.txt"
     startCommand: "cd backend && bash start.sh"
@@ -60,7 +60,7 @@ services:
   - type: web
     name: neobot-whatsapp
     env: node
-    region: fra
+    region: frankfurt
     plan: free
     rootDir: whatsapp-service
     buildCommand: "npm install"
@@ -88,7 +88,7 @@ services:
   - type: web
     name: neobot-frontend
     env: node
-    region: fra
+    region: frankfurt
     plan: free
     rootDir: frontend
     buildCommand: "npm install && npm run build"
