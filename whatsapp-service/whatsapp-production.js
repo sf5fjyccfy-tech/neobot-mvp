@@ -1010,6 +1010,18 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       fs.mkdirSync(authDir, { recursive: true });
     }
 
+    // Vider les credentials existants — Baileys rejette requestPairingCode si
+    // state.creds.registered === true (device déjà enregistré / session précédente).
+    // On force un départ propre : nouvelle paire de clés, nouveau pairing.
+    if (process.env.DATABASE_URL) {
+      await clearPgAuthState(tenantId);
+    } else {
+      // Supprime le contenu du répertoire auth sans supprimer le répertoire lui-même
+      for (const file of fs.readdirSync(authDir)) {
+        fs.rmSync(path.join(authDir, file), { force: true });
+      }
+    }
+
     const { state, saveCreds } = process.env.DATABASE_URL
       ? await usePgAuthState(tenantId)
       : await useMultiFileAuthState(authDir);
