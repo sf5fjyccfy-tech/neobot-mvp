@@ -68,29 +68,11 @@ def _derive_tenant_phone(email: str) -> str:
 
 
 def _validate_password_strength(password: str) -> None:
-    """
-    Vérifie la complexité du mot de passe.
-    Min 8 chars, 1 majuscule, 1 chiffre, 1 caractère spécial.
-    """
+    """Vérifie la complexité du mot de passe. Min 8 caractères."""
     if len(password) < 8:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Mot de passe : minimum 8 caractères requis",
-        )
-    if not re.search(r"[A-Z]", password):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Mot de passe : au moins une lettre majuscule requise",
-        )
-    if not re.search(r"[0-9]", password):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Mot de passe : au moins un chiffre requis",
-        )
-    if not re.search(r'[!@#$%^&*()\-_=+\[\]{}|;:\'",.<>?/`~\\]', password):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Mot de passe : au moins un caractère spécial requis (!@#$%...)",
         )
 
 
