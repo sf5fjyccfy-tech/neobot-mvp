@@ -358,21 +358,8 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(SubscriptionMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:3002",
-        "http://127.0.0.1:3002",
-        "http://localhost:3003",
-        "http://127.0.0.1:3003",
-        # Production Render
-        "https://neobot-frontend-nkt1.onrender.com",
-        # Domaines supplémentaires via variable d'environnement
-        *[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()],
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
     max_age=3600,
@@ -742,15 +729,11 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handler générique pour les erreurs"""
-    import traceback
-    tb = traceback.format_exc()
-    logger.error(f"❌ Erreur non gérée: {exc}\n{tb}")
+    logger.error(f"❌ Erreur non gérée: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
-            "detail": str(exc),
-            "traceback": tb,
             "status": "error",
             "timestamp": datetime.utcnow().isoformat()
         }
