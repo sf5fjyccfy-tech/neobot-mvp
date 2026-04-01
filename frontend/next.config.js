@@ -22,3 +22,4 @@ module.exports = withSentryConfig(nextConfig, {
   disableServerWebpackPlugin: process.env.NODE_ENV !== 'production',
   disableClientWebpackPlugin: process.env.NODE_ENV !== 'production',
 });
+
