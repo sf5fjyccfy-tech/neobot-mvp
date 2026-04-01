@@ -366,6 +366,17 @@ export default function LandingPage() {
         .neo-nav-link:hover { color:#FFF0E8!important }
         .neo-galaxy-slow   { animation:galaxy-spin-slow   90s linear infinite }
         .neo-galaxy-medium { animation:galaxy-spin-medium 55s linear infinite reverse }
+        @media (max-width:768px) {
+          .neo-nav-links     { display:none }
+          .neo-nav-pad       { padding:11px 16px !important }
+          .neo-grid-stats    { grid-template-columns:repeat(2,1fr) !important }
+          .neo-grid-features { grid-template-columns:1fr !important }
+          .neo-grid-demo     { grid-template-columns:1fr !important; gap:36px !important }
+          .neo-grid-usecases { grid-template-columns:repeat(3,1fr) !important }
+          .neo-grid-testimonials { grid-template-columns:1fr !important }
+          .neo-grid-footer   { grid-template-columns:1fr 1fr !important; gap:20px !important }
+          .neo-footer-bottom { flex-direction:column !important; gap:8px !important; text-align:center }
+        }
       `}</style>
 
       <div style={{minHeight:'100vh',color:'#FFF0E8',overflow:'hidden',background:'#06040E',fontFamily:'"DM Sans",sans-serif',position:'relative'}}>
@@ -373,7 +384,7 @@ export default function LandingPage() {
         <GalaxyBG/>
 
         {/* ══════════════════════════════════════════════════════ NAV ══ */}
-        <nav style={{
+        <nav className="neo-nav-pad" style={{
           position:'fixed',top:0,left:0,right:0,zIndex:50,
           borderBottom:'1px solid rgba(255,77,0,.1)',
           backdropFilter:'blur(24px)',
@@ -388,7 +399,7 @@ export default function LandingPage() {
             </span>
           </Link>
 
-          <div style={{display:'flex',alignItems:'center',gap:36}}>
+          <div className="neo-nav-links" style={{display:'flex',alignItems:'center',gap:36}}>
             {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
               <a key={h} href={h} className="neo-link neo-nav-link" style={{fontSize:13,color:'rgba(237,233,254,.38)'}}>
                 {l}
@@ -504,7 +515,7 @@ export default function LandingPage() {
             </p>
 
             {/* Stats */}
-            <div className="neo-fade" style={{
+            <div className="neo-fade neo-grid-stats" style={{
               display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,
               maxWidth:700,margin:'52px auto 0',animationDelay:'.7s',
             }}>
@@ -543,7 +554,7 @@ export default function LandingPage() {
                 Tout ce dont vous avez besoin pour vendre plus, dormir mieux et ravir vos clients.
               </p>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
+            <div className="neo-grid-features" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
               {FEATURES.map(({I,t,d})=>(
                 <div key={t} style={{...CARD_BASE}}
                   onMouseEnter={e=>hoverCard(e.currentTarget as HTMLElement,true)}
@@ -565,7 +576,7 @@ export default function LandingPage() {
             position:'absolute',inset:0,pointerEvents:'none',
             background:'radial-gradient(ellipse 55% 55% at 50% 50%, rgba(204,61,0,.05) 0%, transparent 70%)',
           }}/>
-          <div style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'1fr 1fr',gap:64,alignItems:'center',position:'relative',zIndex:1}}>
+          <div className="neo-grid-demo" style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'1fr 1fr',gap:64,alignItems:'center',position:'relative',zIndex:1}}>
             <div>
               <div style={PILL}>Démo en direct</div>
               <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:42,fontWeight:900,color:'#F5F0FF',marginBottom:20,lineHeight:1.1}}>
@@ -607,7 +618,7 @@ export default function LandingPage() {
                 NéoBot s&apos;installe en moins de 5 minutes dans votre activité.
               </p>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:14}}>
+            <div className="neo-grid-usecases" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:14}}>
               {USE_CASES.map(({ic,t,d})=>(
                 <div key={t} style={{
                   borderRadius:18,padding:'22px 14px',textAlign:'center',
@@ -634,7 +645,7 @@ export default function LandingPage() {
                 Ce qu&apos;ils en disent
               </h2>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
+            <div className="neo-grid-testimonials" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
               {TESTIMONIALS.map(({n,r,q,s})=>(
                 <div key={n} style={{...CARD_BASE}}
                   onMouseEnter={e=>hoverCard(e.currentTarget as HTMLElement,true)}
@@ -712,7 +723,7 @@ export default function LandingPage() {
         {/* ═══════════════════════════════════════════════ FOOTER ═══════ */}
         <footer style={{borderTop:'1px solid rgba(255,77,0,.1)',padding:'60px 24px',position:'relative',zIndex:1}}>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr',gap:44,marginBottom:48}}>
+            <div className="neo-grid-footer" style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr',gap:44,marginBottom:48}}>
               <div>
                 <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
                   <NeoLogo size={28} color="#FF9A6C"/>
@@ -748,7 +759,7 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-            <div style={{borderTop:'1px solid rgba(255,255,255,.05)',paddingTop:24,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div className="neo-footer-bottom" style={{borderTop:'1px solid rgba(255,255,255,.05)',paddingTop:24,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <p style={{fontSize:13,color:'rgba(255,255,255,.18)',margin:0}}>© 2026 NéoBot. Tous droits réservés.</p>
               <p style={{fontSize:13,color:'rgba(255,255,255,.12)',margin:0}}>Propulsé par DeepSeek AI · Conçu pour les PME africaines</p>
             </div>

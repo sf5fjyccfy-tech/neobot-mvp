@@ -1050,6 +1050,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       printQRInTerminal: false,
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
+      connectTimeoutMs: 20_000,
     });
 
     pairSock.ev.on('creds.update', saveCreds);
@@ -1080,6 +1081,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         // Déverrouiller la session — sans ça, initializing reste à true indéfiniment
         // et toute tentative de reconnexion est ignorée par le guard de connectTenant.
         session.initializing = false;
+        session.socket = null;
         session.state = 'disconnected';
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const isLoggedOut = statusCode === 401 || statusCode === 440;
@@ -1110,6 +1112,9 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
   } catch (error) {
     logger.error('requestPairingCode failed', { tenantId, error: error.message });
     // Relancer connexion normale en background — ne pas laisser tenant sans session
+    // Réinitialiser l'état pour que connectTenant ne soit pas bloqué par le guard
+    session.initializing = false;
+    session.socket = null;
     setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-fail' }), 3000);
     return res.status(503).json({ error: `Impossible de générer le code de couplage : ${error.message}` });
   }

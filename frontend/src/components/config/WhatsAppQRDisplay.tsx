@@ -104,6 +104,32 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     } finally { setPairingLoading(false); }
   };
 
+  const [copied, setCopied] = useState(false);
+  const handleCopyCode = async () => {
+    if (!pairingCode) return;
+    try {
+      await navigator.clipboard.writeText(pairingCode.replace(/-/g, ''));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback pour les navigateurs qui bloquent clipboard sans HTTPS
+      const el = document.createElement('textarea');
+      el.value = pairingCode.replace(/-/g, '');
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleRegenerateCode = () => {
+    setPairingCode(null);
+    setPairingError('');
+    // Garder pairingPhone pré-rempli pour ne pas re-saisir le numéro
+  };
+
   const [disconnecting, setDisconnecting] = useState(false);
 
   const handleDisconnect = async () => {
@@ -214,12 +240,25 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                 <strong style={{ color: TEXT }}>WA → ⋮ → Appareils connectés → Associer → Code téléphonique</strong>
               </p>
               {pairingCode ? (
-                <div style={{ margin: '0 auto 14px', maxWidth: 280 }}>
-                  <p style={{ color: MUTED, fontSize: 12, margin: '0 0 8px' }}>Entrez ce code dans l'app WhatsApp :</p>
+                <div style={{ margin: '0 auto 14px', maxWidth: 300 }}>
+                  <p style={{ color: MUTED, fontSize: 12, margin: '0 0 8px' }}>Entrez ce code dans l&apos;app WhatsApp :</p>
                   <div style={{ background: BG, border: `2px solid ${NEON}`, borderRadius: 12, padding: '14px 20px', letterSpacing: 6, fontSize: 28, fontWeight: 900, color: NEON, fontFamily: 'monospace' }}>
                     {pairingCode}
                   </div>
-                  <p style={{ color: MUTED, fontSize: 11, marginTop: 8 }}>Le code expire après quelques minutes</p>
+                  {/* Boutons copier + régénérer */}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
+                    <button
+                      onClick={handleCopyCode}
+                      style={{ flex: 1, padding: '9px 0', background: copied ? '#00E5CC20' : '#00E5CC15', border: `1px solid ${copied ? '#00E5CC' : '#00E5CC60'}`, borderRadius: 8, color: copied ? '#00E5CC' : '#A0D8D0', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' }}>
+                      {copied ? '✓ Copié !' : '📋 Copier'}
+                    </button>
+                    <button
+                      onClick={handleRegenerateCode}
+                      style={{ flex: 1, padding: '9px 0', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, color: MUTED, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      🔄 Nouveau code
+                    </button>
+                  </div>
+                  <p style={{ color: MUTED, fontSize: 11, marginTop: 8 }}>Code valide quelques minutes · Sur WA : ⋮ → Appareils connectés → Associer → Code téléphonique</p>
                 </div>
               ) : (
                 <form onSubmit={handleRequestPairingCode} style={{ display: 'flex', gap: 8, maxWidth: 320, margin: '0 auto 12px' }}>
