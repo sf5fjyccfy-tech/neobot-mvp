@@ -903,7 +903,7 @@ export default function AgentPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold mb-1.5 uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Longueur max. des réponses</label>
+                        <label className="block text-xs font-semibold mb-1.5 uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Longueur max. des réponses (tokens ≈ mots)</label>
                         <input
                           type="number" min={50} max={2000}
                           value={selectedAgent.max_response_length}
@@ -911,6 +911,7 @@ export default function AgentPage() {
                           className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
                           style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', caretColor: '#FF4D00' }}
                         />
+                        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>1 token ≈ ¾ mot. 100 tokens ≈ 2-3 phrases. 400 = défaut recommandé.</p>
                       </div>
                     </div>
                     <label className="flex items-center gap-3 cursor-pointer">

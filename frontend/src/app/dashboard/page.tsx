@@ -6,6 +6,7 @@ import { MessageSquare, Users, CheckCircle2, Wifi, Bot, BarChart2, Settings, Cre
 import { getBusinessInfo, isImpersonating, getImpersonatedTenant, stopImpersonation, startImpersonation, getTenantId, buildApiUrl, getToken } from '@/lib/api';
 import AppShell from '@/components/ui/AppShell';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const NEON = '#FF4D00';
 const BG = '#06040E';
@@ -106,6 +107,7 @@ function formatDetectedAt(isoString: string): string {
 }
 
 export default function DashboardPage() {
+  const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
   const [pulse, setPulse] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -339,8 +341,8 @@ export default function DashboardPage() {
         {/* Stats grid */}
         <div id="neo-stats-grid" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: isMobile ? 12 : 16,
           marginBottom: 32,
         }}>
           {stats.map((stat, i) => {
@@ -407,7 +409,7 @@ export default function DashboardPage() {
             }}>
               Résultats du bot — ce mois
             </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12 }}>
               {OUTCOME_CONFIG.map(oc => {
                 const monthVal = dashStats.outcomes_month[oc.key] ?? 0;
                 const todayVal = dashStats.outcomes_today[oc.key] ?? 0;
@@ -442,7 +444,7 @@ export default function DashboardPage() {
         )}
 
         {/* Main 2-col layout */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 16 : 24, marginBottom: 24 }}>
 
           {/* Quick actions */}
           <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>

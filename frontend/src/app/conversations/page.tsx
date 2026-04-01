@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { buildApiUrl, getTenantId, getToken, clearToken } from '@/lib/api';
 import AppShell from '@/components/ui/AppShell';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const NEON = '#FF4D00';
 const BG = '#06040E';
@@ -73,6 +74,9 @@ export default function ConversationsPage() {
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [botPaused, setBotPaused] = useState(false);
+  const isMobile = useIsMobile();
+  // Sur mobile : 'list' affiche la liste, 'chat' affiche la conversation
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const filtered = conversations.filter(c => {
@@ -201,7 +205,7 @@ export default function ConversationsPage() {
   return (
     <AppShell>
     <div style={{
-      height: '100vh',
+      height: isMobile ? 'calc(100vh - 64px)' : '100vh',
       display: 'flex',
       fontFamily: '"DM Sans", sans-serif',
       color: TEXT,
@@ -209,9 +213,9 @@ export default function ConversationsPage() {
     }}>
       {/* Sidebar */}
       <div id="neo-conv-list" style={{
-        width: 320,
-        borderRight: `1px solid ${BORDER}`,
-        display: 'flex',
+        width: isMobile ? '100%' : 320,
+        borderRight: isMobile ? 'none' : `1px solid ${BORDER}`,
+        display: isMobile && mobileView === 'chat' ? 'none' : 'flex',
         flexDirection: 'column',
         background: SURFACE,
         flexShrink: 0,
@@ -285,7 +289,7 @@ export default function ConversationsPage() {
             filtered.map(conv => (
               <div
                 key={conv.id}
-                onClick={() => setSelected(conv)}
+                onClick={() => { setSelected(conv); if (isMobile) setMobileView('chat'); }}
                 style={{
                   padding: '14px 16px',
                   borderBottom: `1px solid ${BORDER}`,
@@ -350,7 +354,7 @@ export default function ConversationsPage() {
       </div>
 
       {/* Chat area */}
-      <div id="neo-conv-detail" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div id="neo-conv-detail" style={{ flex: 1, display: isMobile && mobileView === 'list' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', width: isMobile ? '100%' : 'auto' }}>
         {selected ? (
           <>
             {/* Chat header */}
@@ -363,11 +367,22 @@ export default function ConversationsPage() {
               justifyContent: 'space-between',
               flexShrink: 0,
             }}>
-              <div>
-                <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700, margin: 0, marginBottom: 2 }}>
-                  {selected.customer_name}
-                </h3>
-                <span style={{ color: MUTED, fontSize: 12 }}>{selected.customer_phone}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {isMobile && (
+                  <button
+                    onClick={() => { setMobileView('list'); setSelected(null); }}
+                    style={{ background: 'transparent', border: 'none', color: NEON, fontSize: 20, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}
+                    aria-label="Retour"
+                  >
+                    ←
+                  </button>
+                )}
+                <div>
+                  <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700, margin: 0, marginBottom: 2 }}>
+                    {selected.customer_name}
+                  </h3>
+                  <span style={{ color: MUTED, fontSize: 12 }}>{selected.customer_phone}</span>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <span style={{

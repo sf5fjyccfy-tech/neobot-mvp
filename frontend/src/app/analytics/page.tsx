@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/ui/AppShell';
 import { getTenantId, buildApiUrl, getToken } from '@/lib/api';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const NEON = '#FF4D00';
 const SURFACE = '#0C0916';
@@ -103,6 +104,7 @@ function BarChart({ data, days }: { data: { date: string; count: number }[]; day
 }
 
 export default function AnalyticsPage() {
+  const isMobile = useIsMobile();
   const [period, setPeriod] = useState(30);
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -220,7 +222,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* KPI grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
           {kpis.map((kpi, i) => (
             <div key={i} style={{
               background: SURFACE, border: `1px solid ${BORDER}`,
@@ -252,7 +254,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Charts row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 20, marginBottom: 20 }}>
 
           {/* Graphique barres réel */}
           <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
@@ -313,7 +315,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Liens rapides */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16 }}>
           {[
             { label: 'Conversations', desc: 'Voir les chats complets', icon: '💬', href: '/conversations', color: '#00E5CC' },
             { label: 'Facturation', desc: 'Gestion dépassements', icon: '💳', href: '/billing', color: '#FF6B35' },

@@ -42,6 +42,15 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
       }
     } catch (err) {
       console.error('Error fetching QR code:', err);
+      // Service indisponible → afficher l'état d'erreur plutôt que
+      // le spinner infini (qrData=null → 'Chargement...' infini)
+      setQrData(prev => prev ?? {
+        tenant_id: tenantId,
+        status: 'error',
+        qr_code: null,
+        phone: null,
+        message: 'Service WhatsApp indisponible. Vérifiez que le service est démarré puis rechargez la page.',
+      });
     }
   }, [tenantId]);
 
