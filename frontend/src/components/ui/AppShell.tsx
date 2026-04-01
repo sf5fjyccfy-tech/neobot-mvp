@@ -30,16 +30,33 @@ interface NavItem {
   shortLabel: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard',     shortLabel: 'Home'     },
-  { href: '/agent',         icon: Bot,             label: 'Agent IA',      shortLabel: 'Agent'    },
-  { href: '/conversations', icon: MessageSquare,   label: 'Conversations', shortLabel: 'Msgs'     },
-  { href: '/analytics',     icon: BarChart2,       label: 'Analytics',     shortLabel: 'Stats'    },
-  { href: '/config',        icon: Smartphone,      label: 'Config WA',     shortLabel: 'Config'   },
-  { href: '/settings',      icon: Settings,        label: 'Paramètres',    shortLabel: 'Réglages' },
+interface NavSection {
+  label?: string; // undefined = pas de séparateur
+  items: NavItem[];
+}
+
+// Navigation structurée en blocs
+const NAV_SECTIONS: NavSection[] = [
+  {
+    items: [
+      { href: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard',     shortLabel: 'Home'  },
+      { href: '/agent',         icon: Bot,             label: 'Agent IA',      shortLabel: 'Agent' },
+      { href: '/conversations', icon: MessageSquare,   label: 'Conversations', shortLabel: 'Msgs'  },
+      { href: '/analytics',     icon: BarChart2,       label: 'Analytics',     shortLabel: 'Stats' },
+    ],
+  },
+  {
+    label: 'Configurer',
+    items: [
+      { href: '/config',    icon: Smartphone, label: 'WhatsApp',    shortLabel: 'WA'      },
+      { href: '/settings',  icon: Settings,   label: 'Paramètres',  shortLabel: 'Config'  },
+    ],
+  },
 ];
 
-const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
+// Aplatir pour la bottom nav mobile (5 premiers items)
+const ALL_NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap(s => s.items);
+const MOBILE_NAV = ALL_NAV_ITEMS.slice(0, 5);
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -94,47 +111,65 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        {/* Navigation items */}
+        {/* Navigation par blocs */}
         <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV_ITEMS.map(item => {
-            const active = isActive(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{ textDecoration: 'none' }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '9px 12px',
-                  borderRadius: 10,
-                  background: active ? `${NEON}18` : 'transparent',
-                  border: active ? `1px solid ${NEON}30` : '1px solid transparent',
-                  color: active ? NEON : MUTED,
-                  fontSize: 13,
-                  fontWeight: active ? 600 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+          {NAV_SECTIONS.map((section, si) => (
+            <div key={si}>
+              {section.label && (
+                <p style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: 1.5,
+                  textTransform: 'uppercase',
+                  color: MUTED,
+                  padding: '10px 12px 4px',
+                  margin: 0,
+                  opacity: 0.6,
                 }}>
-                  <Icon size={16} strokeWidth={active ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
-                  <span>{item.label}</span>
-                  {active && (
+                  {section.label}
+                </p>
+              )}
+              {section.items.map(item => {
+                const active = isActive(item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    style={{ textDecoration: 'none' }}
+                  >
                     <div style={{
-                      marginLeft: 'auto',
-                      width: 5,
-                      height: 5,
-                      borderRadius: '50%',
-                      background: NEON,
-                      boxShadow: '0 0 6px #FF4D00',
-                    }} />
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '9px 12px',
+                      borderRadius: 10,
+                      background: active ? `${NEON}18` : 'transparent',
+                      border: active ? `1px solid ${NEON}30` : '1px solid transparent',
+                      color: active ? NEON : MUTED,
+                      fontSize: 13,
+                      fontWeight: active ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}>
+                      <Icon size={16} strokeWidth={active ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
+                      <span>{item.label}</span>
+                      {active && (
+                        <div style={{
+                          marginLeft: 'auto',
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          background: NEON,
+                          boxShadow: '0 0 6px #FF4D00',
+                        }} />
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Lien admin — visible uniquement pour le superadmin */}
