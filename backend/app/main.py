@@ -359,16 +359,17 @@ app.add_middleware(SubscriptionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",      # Development frontend
-        "http://127.0.0.1:3000",      # Development frontend
-        "http://localhost:3001",      # Development frontend alt
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
         "http://127.0.0.1:3001",
-        "http://localhost:3002",      # Development frontend (current)
+        "http://localhost:3002",
         "http://127.0.0.1:3002",
-        "http://localhost:3003",      # Development frontend alt
+        "http://localhost:3003",
         "http://127.0.0.1:3003",
-        # Domaines de production supplémentaires via variable d'environnement
-        # Exemple: ALLOWED_ORIGINS=https://app.mondomaine.com,https://www.mondomaine.com
+        # Production Render
+        "https://neobot-frontend-nkt1.onrender.com",
+        # Domaines supplémentaires via variable d'environnement
         *[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()],
     ],
     allow_credentials=True,
