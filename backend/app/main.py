@@ -729,11 +729,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handler générique pour les erreurs"""
-    logger.error(f"❌ Erreur non gérée: {exc}", exc_info=True)
+    import traceback as _tb
+    tb = _tb.format_exc()
+    logger.error(f"❌ Erreur non gérée: {exc}\n{tb}")
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal server error",
+            "error": str(exc),
+            "traceback": tb,
             "status": "error",
             "timestamp": datetime.utcnow().isoformat()
         }
