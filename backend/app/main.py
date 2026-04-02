@@ -48,6 +48,7 @@ from .routers.neo_assistant import router as neo_assistant_router
 from .routers.neopay import router as neopay_router
 from .routers.sentry_webhook import router as sentry_webhook_router
 from .routers.monitoring import router as monitoring_router
+from .routers.demo import router as demo_router
 from .services import neopay_service
 from .services import monitoring_service
 from .services.email_service import send_internal_alert
@@ -350,6 +351,7 @@ app.include_router(neo_assistant_router)
 app.include_router(neopay_router)
 app.include_router(sentry_webhook_router)
 app.include_router(monitoring_router)
+app.include_router(demo_router)
 
 # ========== CORS MIDDLEWARE ==========
 # Note : les middlewares Starlette s'exécutent dans l'ordre inverse d'ajout.

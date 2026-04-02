@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight, CheckCircle, BarChart3,
   Bot, Zap, Shield, ChevronDown,
-  Clock, Globe, Sparkles,
+  Clock, Globe, Sparkles, Send,
 } from 'lucide-react';
 import { NeoBotIcon as NeoLogo } from '@/components/ui/NeoBotLogo';
 
@@ -227,13 +227,6 @@ const FAQS = [
   { q:'La limite de messages est-elle stricte ?',     a:'Non. En cas de dépassement, vous êtes notifié — le service continue sans coupure brutale.' },
 ];
 
-const CHAT = [
-  { f:'user', t:"Bonsoir, comment ça marche ? 🤔" },
-  { f:'bot',  t:"Bonsoir ! 👋 Connectez votre WhatsApp en 30s, configurez votre bot, et il répond 24h/24 en votre nom. Vous voulez démarrer ?" },
-  { f:'user', t:"Oui ! C'est quoi le délai ?" },
-  { f:'bot',  t:"⚡ 30 secondes — QR code scanné, bot actif immédiatement. Je vous envoie le lien ?" },
-];
-
 // ─── Sub-components ───────────────────────────────────────────────────────
 
 function FaqItem({ q, a }: { q:string; a:string }) {
@@ -254,18 +247,53 @@ function FaqItem({ q, a }: { q:string; a:string }) {
   );
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 function ChatDemo() {
-  const [n, setN] = useState(0);
-  const [typing, setTyping] = useState(false);
-  useEffect(()=>{
-    if(n>=CHAT.length) return;
-    const wait = n===0 ? 600 : 1100;
-    const t = setTimeout(()=>{
-      if(CHAT[n].f==='bot') { setTyping(true); setTimeout(()=>{ setTyping(false); setN(v=>v+1); },700); }
-      else setN(v=>v+1);
-    }, wait);
-    return ()=>clearTimeout(t);
-  },[n]);
+  const [messages, setMessages] = useState<{f:'user'|'bot', t:string}[]>([
+    { f:'bot', t:'Bonsoir\u00a0! 👋 Je suis l\'agent de la Boutique Aminata Mode. Comment puis-je vous aider\u00a0?' },
+  ]);
+  const [input, setInput]     = useState('');
+  const [typing, setTyping]   = useState(false);
+  const [count, setCount]     = useState(0);
+  const [limitReached, setLimit] = useState(false);
+  const [sessionId]           = useState(() =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36)
+  );
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const MAX_EXCHANGES = 5;
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, typing]);
+
+  const send = async () => {
+    const msg = input.trim();
+    if (!msg || typing || limitReached) return;
+    setInput('');
+    setMessages(prev => [...prev, { f:'user', t:msg }]);
+    setTyping(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/demo/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, message: msg }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      setMessages(prev => [...prev, { f:'bot', t:data.reply }]);
+      setCount(data.exchange_count);
+      if (data.exchange_count >= data.max_exchanges) setLimit(true);
+    } catch {
+      setMessages(prev => [...prev, { f:'bot', t:'Désolée, une erreur est survenue\u00a0! Réessayez dans un instant.' }]);
+    } finally {
+      setTyping(false);
+    }
+  };
 
   return (
     <div style={{borderRadius:22,overflow:'hidden',border:'1px solid rgba(255,77,0,.2)',background:'#06010F',boxShadow:'0 0 80px rgba(204,61,0,.1), 0 0 40px rgba(0,229,204,.06)'}}>
@@ -275,37 +303,81 @@ function ChatDemo() {
           <NeoLogo size={22} color="#FF9A6C"/>
         </div>
         <div>
-          <div style={{color:'#FFF0E8',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>NéoBot</div>
+          <div style={{color:'#FFF0E8',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>Boutique Aminata Mode</div>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{width:6,height:6,borderRadius:'50%',background:'#00E5CC',display:'inline-block',boxShadow:'0 0 6px #00E5CC'}}/>
-            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · IA de dernière génération</span>
+            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · Propulsé par NéoBot</span>
           </div>
         </div>
       </div>
+
       {/* Messages */}
-      <div style={{padding:'18px 16px',minHeight:250,display:'flex',flexDirection:'column',gap:10}}>
-        {CHAT.slice(0,n).map((m,i)=>(
-          <div key={i} style={{display:'flex',justifyContent:m.f==='bot'?'flex-end':'flex-start'}}>
+      <div ref={scrollRef} style={{padding:'14px 16px',height:260,overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}>
+        {messages.map((m,i)=>(
+          <div key={i} style={{display:'flex',justifyContent:m.f==='bot'?'flex-start':'flex-end'}}>
             <div style={{
-              padding:'10px 14px',maxWidth:280,fontSize:13,lineHeight:1.55,
-              background:m.f==='bot'?'rgba(204,61,0,.15)':'rgba(255,255,255,.05)',
-              color:m.f==='bot'?'#FF9A6C':'rgba(237,233,254,.82)',
-              border:`1px solid ${m.f==='bot'?'rgba(255,77,0,.25)':'rgba(255,255,255,.08)'}`,
-              borderRadius:m.f==='bot'?'16px 16px 4px 16px':'16px 16px 16px 4px',
+              padding:'10px 14px',maxWidth:260,fontSize:13,lineHeight:1.55,
+              background:m.f==='bot'?'rgba(204,61,0,.15)':'rgba(255,255,255,.06)',
+              color:m.f==='bot'?'#FFC49A':'rgba(237,233,254,.85)',
+              border:`1px solid ${m.f==='bot'?'rgba(255,77,0,.25)':'rgba(255,255,255,.1)'}`,
+              borderRadius:m.f==='bot'?'4px 16px 16px 16px':'16px 4px 16px 16px',
             }}>{m.t}</div>
           </div>
         ))}
         {typing && (
-          <div style={{display:'flex',justifyContent:'flex-end'}}>
-            <div style={{padding:'10px 16px',background:'rgba(204,61,0,.1)',border:'1px solid rgba(255,77,0,.18)',borderRadius:16,display:'flex',gap:5}}>
+          <div style={{display:'flex',justifyContent:'flex-start'}}>
+            <div style={{padding:'10px 16px',background:'rgba(204,61,0,.1)',border:'1px solid rgba(255,77,0,.18)',borderRadius:'4px 16px 16px 16px',display:'flex',gap:5}}>
               {[0,1,2].map(j=>(
                 <span key={j} className="neo-bounce" style={{width:6,height:6,borderRadius:'50%',background:'#FF9A6C',display:'inline-block',animationDelay:`${j*.15}s`}}/>
               ))}
             </div>
           </div>
         )}
-        <div style={{textAlign:'center',fontSize:11,color:'rgba(255,255,255,.14)',marginTop:4}}>Réponse générée en 1.1s</div>
       </div>
+
+      {/* Input ou CTA limite */}
+      {limitReached ? (
+        <div style={{padding:'14px 16px',borderTop:'1px solid rgba(255,77,0,.12)',textAlign:'center'}}>
+          <p style={{fontSize:12,color:'rgba(237,233,254,.4)',marginBottom:10}}>Démo terminée ({MAX_EXCHANGES}/{MAX_EXCHANGES} messages)</p>
+          <Link href="/signup" className="neo-link" style={{
+            display:'inline-flex',alignItems:'center',gap:6,
+            padding:'10px 22px',borderRadius:12,
+            background:'linear-gradient(135deg,#FF4D00,#00E5CC)',
+            color:'#fff',fontWeight:800,fontSize:13,fontFamily:'"Syne",sans-serif',
+          }}>
+            Créez votre agent — essai gratuit 14j <ArrowRight style={{width:13,height:13}}/>
+          </Link>
+        </div>
+      ) : (
+        <div style={{padding:'10px 12px',borderTop:'1px solid rgba(255,77,0,.12)',display:'flex',gap:8,alignItems:'center'}}>
+          <input
+            value={input}
+            onChange={e=>setInput(e.target.value.slice(0,480))}
+            onKeyDown={e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } }}
+            placeholder={`Écrivez un message… (${MAX_EXCHANGES - count} restants)`}
+            disabled={typing}
+            style={{
+              flex:1,background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.08)',
+              borderRadius:12,padding:'9px 14px',color:'#FFF0E8',fontSize:13,outline:'none',
+              fontFamily:'"DM Sans",sans-serif',
+            }}
+          />
+          <button
+            onClick={send}
+            disabled={typing || !input.trim()}
+            style={{
+              width:38,height:38,borderRadius:12,flexShrink:0,
+              background: typing||!input.trim()?'rgba(255,77,0,.1)':'linear-gradient(135deg,#FF4D00,#CC3D00)',
+              border:'1px solid rgba(255,77,0,.25)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              cursor:typing||!input.trim()?'not-allowed':'pointer',
+              transition:'background .2s',
+            }}
+          >
+            <Send style={{width:15,height:15,color: typing||!input.trim()?'rgba(255,154,108,.3)':'#FFF0E8'}}/>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -574,7 +646,7 @@ export default function LandingPage() {
           }}/>
           <div className="neo-grid-demo" style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'1fr 1fr',gap:64,alignItems:'center',position:'relative',zIndex:1}}>
             <div>
-              <div style={PILL}>Démo en direct</div>
+              <div style={PILL}>Essayez maintenant — démo live</div>
               <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:42,fontWeight:900,color:'#F5F0FF',marginBottom:20,lineHeight:1.1}}>
                 Votre bot,<br/>
                 <span style={{background:'linear-gradient(to right,#FF9A6C,#00E5CC)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
