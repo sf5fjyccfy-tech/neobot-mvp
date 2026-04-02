@@ -251,7 +251,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 function ChatDemo() {
   const [messages, setMessages] = useState<{f:'user'|'bot', t:string}[]>([
-    { f:'bot', t:'Bonsoir\u00a0! 👋 Je suis l\'agent de la Boutique Aminata Mode. Comment puis-je vous aider\u00a0?' },
+    { f:'bot', t:'Bonjour\u00a0! Je suis N\u00e9oBot \ud83d\udc4b Posez-moi n\u2019importe quelle question sur le produit, les tarifs ou comment d\u00e9marrer.' },
   ]);
   const [input, setInput]     = useState('');
   const [typing, setTyping]   = useState(false);
@@ -303,10 +303,10 @@ function ChatDemo() {
           <NeoLogo size={22} color="#FF9A6C"/>
         </div>
         <div>
-          <div style={{color:'#FFF0E8',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>Boutique Aminata Mode</div>
+          <div style={{color:'#FFF0E8',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>NéoBot</div>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{width:6,height:6,borderRadius:'50%',background:'#00E5CC',display:'inline-block',boxShadow:'0 0 6px #00E5CC'}}/>
-            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · Propulsé par NéoBot</span>
+            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · Posez n’importe quelle question</span>
           </div>
         </div>
       </div>
@@ -648,21 +648,21 @@ export default function LandingPage() {
             <div>
               <div style={PILL}>Essayez maintenant — démo live</div>
               <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:42,fontWeight:900,color:'#F5F0FF',marginBottom:20,lineHeight:1.1}}>
-                Votre bot,<br/>
+                Parlez-lui.<br/>
                 <span style={{background:'linear-gradient(to right,#FF9A6C,#00E5CC)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
-                  votre style de vente
+                  Il vous répond maintenant.
                 </span>
               </h2>
               <p style={{fontSize:16,color:'rgba(237,233,254,.46)',marginBottom:28,lineHeight:1.72}}>
-                NéoBot s&apos;adapte à votre secteur. Donnez-lui vos informations et il parle
-                exactement comme vous le feriez — en mieux.
+                N&apos;importe quelle question sur le produit, les tarifs ou votre cas d&apos;usage.
+                N&apos;importe quand. C&apos;est exactement ce que vos clients vivront, construit pour vous.
               </p>
               <div style={{display:'flex',flexDirection:'column',gap:14}}>
                 {[
-                  'Répond avec vos prix et menus exacts',
-                  'Gère les objections et relance automatiquement',
-                  "Escalade vers vous si le client est urgent",
-                  'Français, anglais, dialectes locaux',
+                  'Demandez les tarifs, il répond au centime',
+                  'Demandez comment ça marche, il explique',
+                  "Demandez s'il gère votre secteur, il vous dit oui ou non",
+                  'Voir la démo, c\'est déjà utiliser le produit',
                 ].map(t=>(
                   <div key={t} style={{display:'flex',alignItems:'center',gap:12}}>
                     <CheckCircle style={{width:17,height:17,color:'#00E5CC',flexShrink:0}}/>
