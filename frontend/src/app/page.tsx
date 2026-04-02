@@ -277,6 +277,10 @@ function ChatDemo() {
     setInput('');
     setMessages(prev => [...prev, { f:'user', t:msg }]);
     setTyping(true);
+    // Incrément optimiste — met à jour le placeholder immédiatement
+    const newCount = count + 1;
+    setCount(newCount);
+    if (newCount >= MAX_EXCHANGES) setLimit(true);
     try {
       const res = await fetch(`${API_BASE}/api/demo/chat`, {
         method: 'POST',
@@ -286,10 +290,14 @@ function ChatDemo() {
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       setMessages(prev => [...prev, { f:'bot', t:data.reply }]);
+      // Synchro avec le backend (source de vérité)
       setCount(data.exchange_count);
       if (data.exchange_count >= data.max_exchanges) setLimit(true);
     } catch {
-      setMessages(prev => [...prev, { f:'bot', t:'Désolée, une erreur est survenue\u00a0! Réessayez dans un instant.' }]);
+      // Échec → on restitue le quota (le message n'a pas été traité)
+      setCount(newCount - 1);
+      setLimit(false);
+      setMessages(prev => [...prev, { f:'bot', t:'Une erreur est survenue — réessayez dans un instant.' }]);
     } finally {
       setTyping(false);
     }

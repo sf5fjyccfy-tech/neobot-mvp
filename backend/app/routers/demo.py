@@ -127,6 +127,9 @@ async def demo_chat(request: Request, body: DemoChatRequest):
         reply = await client.call(messages, temperature=0.72, max_tokens=200)
     except Exception as exc:
         logger.error("Demo chat DeepSeek error: %s", exc)
+        # Rembourse le quota — l'échange n'a pas abouti
+        session["count"] -= 1
+        session["messages"].pop()  # retire le message utilisateur non traité
         raise HTTPException(status_code=502, detail="Erreur lors de la génération de la réponse")
 
     session["messages"].append({"role": "assistant", "content": reply})
