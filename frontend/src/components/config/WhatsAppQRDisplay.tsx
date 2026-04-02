@@ -32,6 +32,10 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     }
   }, [isMobile]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Compteur d'échecs consécutifs — au-delà de MAX_ERRORS, on arrête de spammer
+  // le service down toutes les 5s et on laisse l'utilisateur décider de réessayer.
+  const errorCountRef = useRef(0);
+  const MAX_ERRORS = 3;
 
   const stopPolling = () => {
     if (intervalRef.current) {
@@ -44,24 +48,37 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     try {
       const response = await apiCall(`/api/tenants/${tenantId}/whatsapp/qr`);
       const data: WhatsAppQR = await response.json();
+      errorCountRef.current = 0; // reset sur succès
       setQrData(data);
       if (data.status === 'connected') {
         stopPolling();
         setPairingCode(null);
       }
     } catch (err) {
-      console.error('Error fetching QR code:', err);
-      // Service indisponible → afficher l'état d'erreur plutôt que
-      // le spinner infini (qrData=null → 'Chargement...' infini)
+      errorCountRef.current += 1;
+      // Logger une seule fois pour ne pas spammer la console
+      if (errorCountRef.current === 1) {
+        console.warn('WhatsApp QR fetch failed:', err instanceof Error ? err.message : err);
+      }
+      if (errorCountRef.current >= MAX_ERRORS) {
+        stopPolling(); // stopper le polling — l'utilisateur a un bouton Réessayer
+      }
       setQrData(prev => prev ?? {
         tenant_id: tenantId,
         status: 'error',
         qr_code: null,
         phone: null,
-        message: 'Service WhatsApp indisponible. Vérifiez que le service est démarré puis rechargez la page.',
+        message: 'Service WhatsApp indisponible temporairement.',
       });
     }
   }, [tenantId]);
+
+  const handleRetry = () => {
+    errorCountRef.current = 0;
+    setQrData(null);
+    fetchQRCode();
+    intervalRef.current = setInterval(fetchQRCode, 5000);
+  };
 
   useEffect(() => {
     fetchQRCode();
@@ -161,7 +178,17 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
       {/* Error State */}
       {qrData.status === 'error' && (
         <div style={{ background: '#FF6B3510', border: '1px solid #FF6B3530', borderRadius: 12, padding: 20, textAlign: 'center' }}>
-          <p style={{ color: '#FF8C6B', margin: '0 0 14px', fontSize: 13 }}>{qrData.message}</p>
+          <p style={{ color: '#FF8C6B', margin: '0 0 4px', fontSize: 13 }}>{qrData.message}</p>
+          <p style={{ color: MUTED, fontSize: 12, margin: '0 0 14px' }}>
+            Le service se réveille peut-être (Render cold start) — attendez 30s puis réessayez.
+          </p>
+          {/* Bouton Réessayer — relance le polling après arrêt sur MAX_ERRORS */}
+          <button
+            onClick={handleRetry}
+            style={{ padding: '8px 20px', background: 'transparent', border: `1px solid ${MUTED}`, borderRadius: 8, color: MUTED, fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 14 }}
+          >
+            🔄 Réessayer
+          </button>
           <form onSubmit={handleCreateSession} style={{ display: 'flex', gap: 8, maxWidth: 320, margin: '0 auto' }}>
             <input
               type="tel"
