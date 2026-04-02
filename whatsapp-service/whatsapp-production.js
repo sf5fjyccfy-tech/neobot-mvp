@@ -1060,45 +1060,68 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     session.initializing = true;
     session.state = 'initializing';
 
-    // requestPairingCode IMMÉDIATEMENT — Baileys gère l'envoi dès que le WS est ouvert
-    const code = await pairSock.requestPairingCode(phone);
-    const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+    // Pattern Baileys correct : attendre 'open' AVANT d'appeler requestPairingCode.
+    // Appeler avant 'open' provoque "Connection Closed" si le WS ne s'établit pas
+    // assez vite (très fréquent sur les plans Render free avec cold-start).
+    const formatted = await new Promise((resolveCode, rejectCode) => {
+      // Timeout de sécurité — 20s max pour que WA ouvre le WS
+      const connectionTimer = setTimeout(() => {
+        rejectCode(new Error('Connexion WhatsApp expirée (20s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
+      }, 19_000);
 
-    logger.info('Pairing code generated successfully', { tenantId, phone, code: formatted });
+      pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+        if (connection === 'open') {
+          // WS établi — demander le code maintenant, ça marche à coup sûr
+          try {
+            const code = await pairSock.requestPairingCode(phone);
+            clearTimeout(connectionTimer);
+            const fmt = code?.match(/.{1,4}/g)?.join('-') || code;
+            logger.info('Pairing code generated successfully', { tenantId, phone, code: fmt });
+            resolveCode(fmt);
+          } catch (codeErr) {
+            clearTimeout(connectionTimer);
+            rejectCode(codeErr);
+          }
+        } else if (connection === 'open') {
+          // Branche morte — jsut au cas où une future version Baileys duplique l'event
+        } else if (connection === 'close') {
+          clearTimeout(connectionTimer);
+          // Déverrouiller la session
+          session.initializing = false;
+          session.socket = null;
+          session.state = 'disconnected';
+          const statusCode = lastDisconnect?.error?.output?.statusCode;
+          const isLoggedOut = statusCode === 401 || statusCode === 440;
+          if (!isLoggedOut) {
+            logger.info('Pairing socket closed, scheduling reconnect', { tenantId, statusCode });
+            clearReconnectTimer(session);
+            session.scheduledReconnect = setTimeout(() => {
+              session.scheduledReconnect = null;
+              connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' });
+            }, 3000);
+          } else {
+            logger.info('Pairing rejected (logged out), cleaning state', { tenantId, statusCode });
+            clearReconnectTimer(session);
+          }
+          // La Promise sera rejetée par le timeout ou par codeErr — ne pas rejeter ici
+          // aussi sinon on risque un "unhandled rejection" double.
+          rejectCode(new Error(`Connection Closed (code ${statusCode ?? 'unknown'}) — réessayez dans quelques secondes`));
+        }
+      });
 
-    // CRUCIAL : écouter la connexion sur pairSock — sans ça, session.connected ne passe
-    // jamais à true après que l'utilisateur entre le code, et le bot ne reçoit jamais de msgs.
-    pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+      // Après-code handler : relancer la session complète une fois le code entré par l'user
+      // On réabonne ici pour le cas 'open' POST-pairing (après que l'user a tapé le code)
+      // Ce handler est distinct — il s'exécute sur l'event suivant 'open' (après renvoi HTTP)
+    });
+
+    // Réabonner pour détecter quand l'utilisateur entre le code → relancer la session complète
+    pairSock.ev.on('connection.update', async ({ connection }) => {
       if (connection === 'open') {
         logger.info('Pairing code connection open — reinitializing full session', { tenantId });
-        // Relancer connectTenant avec les creds sauvegardés pour enregistrer
-        // tous les handlers (messages.upsert, etc.) correctement
         session.scheduledReconnect = setTimeout(() => {
           session.scheduledReconnect = null;
           connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
         }, 500);
-      } else if (connection === 'close') {
-        // Déverrouiller la session — sans ça, initializing reste à true indéfiniment
-        // et toute tentative de reconnexion est ignorée par le guard de connectTenant.
-        session.initializing = false;
-        session.socket = null;
-        session.state = 'disconnected';
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const isLoggedOut = statusCode === 401 || statusCode === 440;
-        if (!isLoggedOut) {
-          logger.info('Pairing socket closed, scheduling reconnect', { tenantId, statusCode });
-          // Stocker dans scheduledReconnect pour pouvoir annuler si l'utilisateur
-          // relance une nouvelle tentative de jumelage avant l'expiration du timer.
-          clearReconnectTimer(session);
-          session.scheduledReconnect = setTimeout(() => {
-            session.scheduledReconnect = null;
-            connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' });
-          }, 3000);
-        } else {
-          // Code erroné ou session révoquée — nettoyer sans reconnecter.
-          logger.info('Pairing rejected (logged out), cleaning state', { tenantId, statusCode });
-          clearReconnectTimer(session);
-        }
       }
     });
 

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight, CheckCircle, BarChart3,
-  Bot, Zap, Shield, Star, ChevronDown,
+  Bot, Zap, Shield, ChevronDown,
   Clock, Globe, Sparkles,
 } from 'lucide-react';
 import { NeoBotIcon as NeoLogo } from '@/components/ui/NeoBotLogo';
@@ -194,16 +194,16 @@ function GalaxyBG() {
 // ─── Static data ──────────────────────────────────────────────────────────
 
 const STATS = [
-  { v:'2 500+', l:'Entreprises actives' },
-  { v:'98%',    l:'Satisfaction client'  },
+  { v:'14j',    l:'Essai gratuit'       },
   { v:'< 2s',   l:'Temps de réponse'    },
-  { v:'+34%',   l:'CA moyen à 3 mois'   },
+  { v:'100%',   l:'WhatsApp natif'      },
+  { v:'0 code', l:'Aucune installation' },
 ];
 
 const FEATURES = [
   { I:Bot,       t:'IA Contextualisée',       d:'Réponses personnalisées, gestion des objections — votre bot pense comme un vrai commercial.' },
   { I:Clock,     t:'Disponible 24h/24',        d:'Répond à 2h du matin comme à 14h. Zéro client sans réponse, zéro vente manquée.' },
-  { I:Zap,       t:'Réponse en < 2 secondes',  d:'Alimenté par DeepSeek AI. Votre client a sa réponse avant même de poser son téléphone.' },
+  { I:Zap,       t:'Réponse en < 2 secondes',  d:'IA de dernière génération. Votre client a sa réponse avant même de poser son téléphone.' },
   { I:Shield,    t:'Ultra Sécurisé',           d:'Données isolées par tenant, chiffrement JWT. Votre business reste entièrement confidentiel.' },
   { I:BarChart3, t:'Analytics Temps Réel',     d:"Conversations, conversions — tout visible en un coup d'œil depuis votre dashboard." },
   { I:Globe,     t:'Multi-Secteurs',            d:"Restaurants, boutiques, agences — NéoBot apprend votre vocabulaire et vos produits." },
@@ -218,11 +218,7 @@ const USE_CASES = [
   { ic:'💼', t:'Services B2B',        d:'Devis, RDV, support client'    },
 ];
 
-const TESTIMONIALS = [
-  { n:'Rodrigue K.', r:'Restaurant Chez Mama, Yaoundé', q:'En 1 semaine, notre bot répond à 200+ messages/jour. Nos commandes ont augmenté de 40%.',  s:5 },
-  { n:'Aïcha N.',    r:'Boutique Fashion, Douala',      q:'Les clients commandent directement via WhatsApp. NéoBot envoie les confirmations tout seul.', s:5 },
-  { n:'Patrick D.',  r:'Agence de voyage, Abidjan',     q:'Service client 24h/24 sans recruter. ROI immédiat dès le premier mois.',                     s:5 },
-];
+// Pas de témoignages fictifs — section early adopters à la place
 
 const FAQS = [
   { q:'Comment fonctionne NéoBot avec WhatsApp ?',    a:"Scannez un QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro — le bot répond en votre nom." },
@@ -282,7 +278,7 @@ function ChatDemo() {
           <div style={{color:'#FFF0E8',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>NéoBot</div>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{width:6,height:6,borderRadius:'50%',background:'#00E5CC',display:'inline-block',boxShadow:'0 0 6px #00E5CC'}}/>
-            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · DeepSeek AI</span>
+            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · IA de dernière génération</span>
           </div>
         </div>
       </div>
@@ -451,7 +447,7 @@ export default function LandingPage() {
               <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'6px 18px',borderRadius:30,background:'rgba(255,77,0,.08)',border:'1px solid rgba(255,77,0,.22)',marginBottom:24}}>
                 <Sparkles style={{width:12,height:12,color:'#FF9A6C'}}/>
                 <span style={{fontSize:11,color:'#FF9A6C',fontWeight:700,letterSpacing:2,textTransform:'uppercase',fontFamily:'"Syne",sans-serif'}}>
-                  Propulsé par DeepSeek AI · Conçu pour l&apos;Afrique
+                  IA de dernière génération · Conçu pour l&apos;Afrique
                 </span>
               </div>
             </div>
@@ -464,7 +460,7 @@ export default function LandingPage() {
                 fontWeight:900,lineHeight:1.04,letterSpacing:-1,
                 color:'#F5F0FF',marginBottom:20,
               }}>
-                L&apos;IA qui vend<br/>
+                L&apos;IA qui vend{' '}<br/>
                 <span style={{
                   background:'linear-gradient(to right, #FF9A6C, #00E5CC)',
                   WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
@@ -637,36 +633,88 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════ TESTIMONIALS ═════════ */}
-        <section style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
-          <div style={{maxWidth:1100,margin:'0 auto'}}>
-            <div style={{textAlign:'center',marginBottom:58}}>
-              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF'}}>
-                Ce qu&apos;ils en disent
-              </h2>
-            </div>
-            <div className="neo-grid-testimonials" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
-              {TESTIMONIALS.map(({n,r,q,s})=>(
-                <div key={n} style={{...CARD_BASE}}
-                  onMouseEnter={e=>hoverCard(e.currentTarget as HTMLElement,true)}
-                  onMouseLeave={e=>hoverCard(e.currentTarget as HTMLElement,false)}>
-                  <div style={{display:'flex',gap:3,marginBottom:16}}>
-                    {Array.from({length:s}).map((_,i)=>(
-                      <Star key={i} style={{width:13,height:13,fill:'#FDE68A',color:'#FDE68A'}}/>
-                    ))}
-                  </div>
-                  <p style={{fontSize:14,color:'rgba(237,233,254,.56)',lineHeight:1.72,marginBottom:20}}>&ldquo;{q}&rdquo;</p>
-                  <div style={{display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:36,height:36,borderRadius:'50%',background:'rgba(204,61,0,.18)',border:'1px solid rgba(255,77,0,.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800,color:'#FF9A6C',fontFamily:'"Syne",sans-serif'}}>
-                      {n[0]}
-                    </div>
-                    <div>
-                      <div style={{fontSize:14,fontWeight:700,color:'#FFF0E8',fontFamily:'"Syne",sans-serif'}}>{n}</div>
-                      <div style={{fontSize:12,color:'rgba(237,233,254,.3)'}}>{r}</div>
-                    </div>
-                  </div>
+        {/* ═══════════════════════════════════════ EARLY ADOPTERS ═════════ */}
+        <section style={{position:'relative',zIndex:1,padding:'90px 24px'}}>
+          <div style={{maxWidth:700,margin:'0 auto',textAlign:'center'}}>
+            <div style={PILL}>Lancement</div>
+            <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:40,fontWeight:900,color:'#F5F0FF',marginBottom:16}}>
+              Soyez parmi les premiers
+            </h2>
+            <p style={{fontSize:16,color:'rgba(237,233,254,.42)',lineHeight:1.75,marginBottom:36}}>
+              NéoBot est en lancement actif. Les premiers utilisateurs bénéficient
+              d&apos;un accès prioritaire et contribuent directement à la feuille de route.
+            </p>
+            <div style={{display:'flex',flexWrap:'wrap',justifyContent:'center',gap:24,marginBottom:40}}>
+              {[
+                { v:'14 jours', l:'Essai gratuit sans carte' },
+                { v:'< 30 min', l:'Installation complète'    },
+                { v:'5 types',  l:'Agents IA disponibles'    },
+              ].map(({v,l})=>(
+                <div key={l} style={{borderRadius:16,padding:'18px 28px',background:'rgba(204,61,0,.06)',border:'1px solid rgba(255,77,0,.14)'}}>
+                  <div style={{fontSize:22,fontWeight:800,background:'linear-gradient(to right,#FF9A6C,#00E5CC)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',fontFamily:'"Syne",sans-serif',marginBottom:4}}>{v}</div>
+                  <div style={{fontSize:12,color:'rgba(237,233,254,.36)'}}>{l}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ════════════════════════════════════════════════ PRICING ════ */}
+        <section id="pricing" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+          <div style={{
+            position:'absolute',inset:0,pointerEvents:'none',
+            background:'radial-gradient(ellipse 55% 55% at 50% 50%, rgba(0,229,204,.04) 0%, transparent 70%)',
+          }}/>
+          <div style={{maxWidth:520,margin:'0 auto',position:'relative',zIndex:1}}>
+            <div style={{textAlign:'center',marginBottom:48}}>
+              <div style={PILL}>Tarifs</div>
+              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
+                Simple et transparent
+              </h2>
+              <p style={{fontSize:16,color:'rgba(237,233,254,.36)'}}>Un seul plan, tout inclus. Aucune surprise.</p>
+            </div>
+            <div style={{
+              borderRadius:24,padding:'36px 32px',
+              background:'rgba(255,255,255,.015)',
+              border:'1px solid rgba(0,229,204,.25)',
+              boxShadow:'0 0 60px rgba(0,229,204,.07)',
+              textAlign:'center',
+            }}>
+              <div style={{fontSize:13,fontWeight:700,color:'#00E5CC',letterSpacing:2,textTransform:'uppercase',fontFamily:'"Syne",sans-serif',marginBottom:16}}>Essential</div>
+              <div style={{display:'flex',alignItems:'baseline',justifyContent:'center',gap:6,marginBottom:8}}>
+                <span style={{fontSize:52,fontWeight:900,color:'#F5F0FF',fontFamily:'"Syne",sans-serif',lineHeight:1}}>20 000</span>
+                <span style={{fontSize:16,color:'rgba(237,233,254,.5)'}}>FCFA / mois</span>
+              </div>
+              <p style={{fontSize:13,color:'rgba(237,233,254,.3)',marginBottom:32}}>Après 14 jours d&apos;essai gratuit — aucune carte requise</p>
+              <ul style={{listStyle:'none',margin:'0 0 32px',padding:0,display:'flex',flexDirection:'column',gap:12,textAlign:'left'}}>
+                {[
+                  '2 500 messages WhatsApp / mois',
+                  '1 agent IA actif',
+                  '5 types d\u2019agents : Vente, RDV, Support, FAQ, Qualification',
+                  'Base de connaissance : Texte + PDF (3 fichiers)',
+                  'Génération de prompt par IA',
+                  'Dashboard Analytics 30 jours',
+                  'Rappels RDV automatiques',
+                  'Support par email',
+                ].map(f=>(
+                  <li key={f} style={{display:'flex',alignItems:'center',gap:10}}>
+                    <CheckCircle style={{width:16,height:16,color:'#00E5CC',flexShrink:0}}/>
+                    <span style={{fontSize:14,color:'rgba(237,233,254,.65)'}}>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/signup" className="neo-link" style={{
+                display:'inline-flex',alignItems:'center',gap:8,
+                width:'100%',justifyContent:'center',
+                padding:'15px 0',borderRadius:14,
+                background:CTA_GRAD,color:'#fff',
+                fontWeight:900,fontSize:15,fontFamily:'"Syne",sans-serif',
+              }}>
+                Démarrer l&apos;essai gratuit <ArrowRight style={{width:16,height:16}}/>
+              </Link>
+              <p style={{fontSize:11,color:'rgba(255,255,255,.2)',marginTop:16}}>
+                Résiliable à tout moment · Bientôt : plans Business &amp; Enterprise
+              </p>
             </div>
           </div>
         </section>
@@ -703,7 +751,7 @@ export default function LandingPage() {
               Prêt à transformer<br/>votre WhatsApp ?
             </h2>
             <p style={{fontSize:17,color:'rgba(237,233,254,.46)',marginBottom:36,lineHeight:1.75}}>
-              Rejoignez des milliers d&apos;entreprises africaines<br/>qui font déjà confiance à NéoBot.
+              Automatisez vos ventes WhatsApp dès ce soir.<br/>Installation en moins de 30 minutes.
             </p>
             <Link href="/signup" className="neo-link neo-glow" style={{
               display:'inline-flex',alignItems:'center',gap:10,
@@ -739,9 +787,9 @@ export default function LandingPage() {
                 </p>
               </div>
               {([
-                ['Produit',    [['Fonctionnalités','#'],['Roadmap','#'],['API','#']]],
-                ['Support',    [['Documentation','#'],['Contact','mailto:contact@neobot-ai.com'],['WhatsApp','#']]],
-                ['Entreprise', [['À propos','#'],['CGU','/legal?tab=cgu'],['Confidentialité','/legal?tab=confidentialite'],['Mentions légales','/legal?tab=mentions']]],
+                ['Produit',    [['Fonctionnalités','#features'],['Tarifs','#pricing'],['FAQ','#faq']]],
+                ['Support',    [['Contact','mailto:contact@neobot-ai.com'],['Signaler un bug','mailto:contact@neobot-ai.com?subject=Bug']]],
+                ['Légal',      [['CGU','/legal?tab=cgu'],['Confidentialité','/legal?tab=confidentialite'],['Mentions légales','/legal?tab=mentions']]],
               ] as [string,[string,string][]][]).map(([title,links])=>(
                 <div key={title}>
                   <h4 style={{fontFamily:'"Syne",sans-serif',fontWeight:700,fontSize:13,color:'#FFF0E8',marginBottom:16}}>{title}</h4>
@@ -761,7 +809,7 @@ export default function LandingPage() {
             </div>
             <div className="neo-footer-bottom" style={{borderTop:'1px solid rgba(255,255,255,.05)',paddingTop:24,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <p style={{fontSize:13,color:'rgba(255,255,255,.18)',margin:0}}>© 2026 NéoBot. Tous droits réservés.</p>
-              <p style={{fontSize:13,color:'rgba(255,255,255,.12)',margin:0}}>Propulsé par DeepSeek AI · Conçu pour les PME africaines</p>
+              <p style={{fontSize:13,color:'rgba(255,255,255,.12)',margin:0}}>IA de dernière génération · Conçu pour les PME africaines</p>
             </div>
           </div>
         </footer>
