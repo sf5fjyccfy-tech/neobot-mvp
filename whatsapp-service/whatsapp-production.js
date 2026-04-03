@@ -1050,7 +1050,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       printQRInTerminal: false,
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
-      connectTimeoutMs: 20_000,
+      connectTimeoutMs: 60_000,
     });
 
     pairSock.ev.on('creds.update', saveCreds);
@@ -1064,10 +1064,10 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     // Appeler avant 'open' provoque "Connection Closed" si le WS ne s'établit pas
     // assez vite (très fréquent sur les plans Render free avec cold-start).
     const formatted = await new Promise((resolveCode, rejectCode) => {
-      // Timeout de sécurité — 20s max pour que WA ouvre le WS
+      // Timeout de sécurité — 55s max pour que WA ouvre le WS (cloud + cold start)
       const connectionTimer = setTimeout(() => {
-        rejectCode(new Error('Connexion WhatsApp expirée (20s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
-      }, 19_000);
+        rejectCode(new Error('Connexion WhatsApp expirée (55s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
+      }, 55_000);
 
       pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
