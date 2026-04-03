@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ArrowRight, CheckCircle, BarChart3,
   Bot, Zap, Shield, ChevronDown,
-  Clock, Globe, Sparkles, Send,
+  Clock, Globe, Sparkles, Send, Menu, X,
 } from 'lucide-react';
 import { NeoBotIcon as NeoLogo } from '@/components/ui/NeoBotLogo';
 
@@ -201,12 +201,12 @@ const STATS = [
 ];
 
 const FEATURES = [
-  { I:Bot,       t:'IA Contextualisée',       d:'Réponses personnalisées, gestion des objections — votre bot pense comme un vrai commercial.' },
-  { I:Clock,     t:'Disponible 24h/24',        d:'Répond à 2h du matin comme à 14h. Zéro client sans réponse, zéro vente manquée.' },
-  { I:Zap,       t:'Réponse en < 2 secondes',  d:'IA de dernière génération. Votre client a sa réponse avant même de poser son téléphone.' },
-  { I:Shield,    t:'Ultra Sécurisé',           d:'Données isolées par tenant, chiffrement JWT. Votre business reste entièrement confidentiel.' },
-  { I:BarChart3, t:'Analytics Temps Réel',     d:"Conversations, conversions — tout visible en un coup d'œil depuis votre dashboard." },
-  { I:Globe,     t:'Multi-Secteurs',            d:"Restaurants, boutiques, agences — NéoBot apprend votre vocabulaire et vos produits." },
+  { I:Bot,       t:'Répondez instantanément à tous vos clients',    d:'Chaque message reçoit une réponse immédiate — même la nuit, même le week-end. Aucun client ignoré.' },
+  { I:Clock,     t:'Ne perdez plus aucune opportunité',              d:'Répond à 2h du matin comme à 14h. Chaque conversation est une vente potentielle que vous ne ratez plus.' },
+  { I:Zap,       t:'Gagnez du temps chaque jour',                    d:'Plus besoin de répondre manuellement. NéoBot gère vos échanges — vous gérez votre business.' },
+  { I:Shield,    t:'Offrez une expérience professionnelle',           d:'Données isolées par client, chiffrement JWT. Votre business reste entièrement confidentiel.' },
+  { I:BarChart3, t:'Suivez vos résultats en temps réel',             d:"Conversations, conversions — tout visible en un coup d'œil depuis votre dashboard." },
+  { I:Globe,     t:'Fonctionne dans tous les secteurs',              d:"Restaurants, boutiques, agences — NéoBot apprend votre vocabulaire et vos produits." },
 ];
 
 const USE_CASES = [
@@ -221,10 +221,11 @@ const USE_CASES = [
 // Pas de témoignages fictifs — section early adopters à la place
 
 const FAQS = [
-  { q:'Comment fonctionne NéoBot avec WhatsApp ?',    a:"Scannez un QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro — le bot répond en votre nom." },
-  { q:'Puis-je personnaliser les réponses du bot ?',  a:"Absolument. Vous configurez sa personnalité, vos prix, horaires et FAQ. Il utilise exactement vos informations, jamais rien d'inventé." },
-  { q:'Mes données sont-elles sécurisées ?',          a:"Chaque client dispose d'un espace isolé. Vos données ne sont jamais partagées. Chiffrement JWT, pratiques RGPD." },
-  { q:'La limite de messages est-elle stricte ?',     a:'Non. En cas de dépassement, vous êtes notifié — le service continue sans coupure brutale.' },
+  { q:'Comment fonctionne NéoBot avec WhatsApp ?',                 a:"Scannez un QR Code (30 secondes). Vos clients continuent à vous écrire sur votre numéro — le bot répond en votre nom." },
+  { q:'Est-ce que NÉOBOT fonctionne avec WhatsApp Business ?',     a:"Oui, intégration simple et rapide. Votre numéro WhatsApp Business existant reste le vôtre — NÉOBOT s'y connecte en moins de 30 secondes." },
+  { q:'Puis-je personnaliser les réponses du bot ?',               a:"Absolument. Vous configurez sa personnalité, vos prix, horaires et FAQ. Il utilise exactement vos informations, jamais rien d'inventé." },
+  { q:'Mes données sont-elles sécurisées ?',                       a:"Chaque client dispose d'un espace isolé. Vos données ne sont jamais partagées. Chiffrement JWT, pratiques RGPD." },
+  { q:'La limite de messages est-elle stricte ?',                  a:'Non. En cas de dépassement, vous êtes notifié — le service continue sans coupure brutale.' },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────
@@ -414,6 +415,99 @@ const hoverCard = (el:HTMLElement, on:boolean) => {
 const CTA_GRAD = 'linear-gradient(135deg, #FF4D00 0%, #00E5CC 100%)';
 const CTA_GRAD_HOVER = 'linear-gradient(135deg, #CC3D00 0%, #00B5A0 100%)';
 
+// ─── Navbar ─────────────────────────────────────────────────────────────────
+
+function NavBar() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <nav className="neo-nav-pad" style={{
+        position:'fixed',top:0,left:0,right:0,zIndex:50,
+        borderBottom:'1px solid rgba(255,77,0,.1)',
+        backdropFilter:'blur(24px)',
+        background:'rgba(5,0,16,.82)',
+        padding:'13px 40px',
+        display:'flex',alignItems:'center',justifyContent:'space-between',
+      }}>
+        <Link href="/" className="neo-link" style={{display:'flex',alignItems:'center',gap:10}}>
+          <NeoLogo size={32} color="#FF9A6C"/>
+          <span style={{fontFamily:'"Syne",sans-serif',fontWeight:900,fontSize:19,color:'#FFF0E8',letterSpacing:3,textTransform:'uppercase'}}>
+            NEOBOT
+          </span>
+        </Link>
+
+        <div className="neo-nav-links" style={{display:'flex',alignItems:'center',gap:36}}>
+          {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
+            <a key={h} href={h} className="neo-link neo-nav-link" style={{fontSize:13,color:'rgba(237,233,254,.38)'}}>
+              {l}
+            </a>
+          ))}
+        </div>
+
+        <div className="neo-nav-desktop-cta" style={{display:'flex',alignItems:'center',gap:14}}>
+          <Link href="/login" className="neo-link" style={{fontSize:13,color:'rgba(237,233,254,.42)'}}>
+            Connexion
+          </Link>
+          <Link href="/signup" className="neo-link neo-glow" style={{
+            display:'flex',alignItems:'center',gap:7,
+            fontSize:13,fontWeight:800,fontFamily:'"Syne",sans-serif',
+            padding:'9px 22px',borderRadius:10,
+            background:CTA_GRAD,color:'#fff', letterSpacing:.4,
+          }}>
+            Essai gratuit <ArrowRight style={{width:13,height:13}}/>
+          </Link>
+        </div>
+
+        <div className="neo-nav-mobile-cta" style={{display:'none',alignItems:'center',gap:10}}>
+          <Link href="/signup" className="neo-link neo-glow" style={{
+            display:'flex',alignItems:'center',gap:6,
+            fontSize:12,fontWeight:800,fontFamily:'"Syne",sans-serif',
+            padding:'8px 16px',borderRadius:10,
+            background:CTA_GRAD,color:'#fff',letterSpacing:.4,
+          }}>
+            Essai gratuit
+          </Link>
+          <button
+            onClick={()=>setOpen(o=>!o)}
+            style={{background:'none',border:'1px solid rgba(255,77,0,.2)',borderRadius:8,padding:'7px 9px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+            aria-label="Menu"
+          >
+            {open ? <X style={{width:18,height:18,color:'#FF9A6C'}}/> : <Menu style={{width:18,height:18,color:'#FF9A6C'}}/>}
+          </button>
+        </div>
+      </nav>
+
+      {open && (
+        <div style={{
+          position:'fixed',top:57,left:0,right:0,zIndex:49,
+          background:'rgba(5,0,16,.97)',
+          backdropFilter:'blur(24px)',
+          borderBottom:'1px solid rgba(255,77,0,.15)',
+          padding:'16px 20px 24px',
+          display:'flex',flexDirection:'column',gap:0,
+        }}>
+          {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#pricing','Tarifs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
+            <a key={h} href={h} onClick={()=>setOpen(false)} className="neo-link"
+              style={{fontSize:15,color:'rgba(237,233,254,.72)',padding:'14px 8px',borderBottom:'1px solid rgba(255,255,255,.05)',fontFamily:'"DM Sans",sans-serif',display:'block'}}
+            >{l}</a>
+          ))}
+          <Link href="/login" onClick={()=>setOpen(false)} className="neo-link"
+            style={{fontSize:15,color:'rgba(237,233,254,.5)',padding:'14px 8px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'block'}}
+          >Connexion</Link>
+          <Link href="/signup" onClick={()=>setOpen(false)} className="neo-link neo-glow" style={{
+            display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+            marginTop:14,padding:'14px 0',borderRadius:12,
+            background:CTA_GRAD,color:'#fff',
+            fontWeight:900,fontSize:15,fontFamily:'"Syne",sans-serif',
+          }}>
+            Démarrer gratuitement <ArrowRight style={{width:15,height:15}}/>
+          </Link>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
@@ -442,8 +536,14 @@ export default function LandingPage() {
         .neo-nav-link:hover { color:#FFF0E8!important }
         .neo-galaxy-slow   { animation:galaxy-spin-slow   90s linear infinite }
         .neo-galaxy-medium { animation:galaxy-spin-medium 55s linear infinite reverse }
+        .neo-hamburger { display:none }
+        .neo-nav-login { display:flex }
+        .neo-mobile-dropdown { display:none; flex-direction:column }
+        .neo-mobile-dropdown.open { display:flex; flex-direction:column }
         @media (max-width:768px) {
           .neo-nav-links     { display:none }
+          .neo-hamburger     { display:flex !important }
+          .neo-nav-login     { display:none !important }
           .neo-nav-pad       { padding:11px 16px !important }
           .neo-grid-stats    { grid-template-columns:repeat(2,1fr) !important }
           .neo-grid-features { grid-template-columns:1fr !important }
@@ -453,6 +553,8 @@ export default function LandingPage() {
           .neo-footer-bottom { flex-direction:column !important; gap:8px !important; text-align:center }
           .neo-section-h2    { font-size:28px !important; line-height:1.2 !important }
           .neo-price-num     { font-size:36px !important }
+          .neo-nav-desktop-cta { display:none !important }
+          .neo-nav-mobile-cta  { display:flex !important }
         }
       `}</style>
 
@@ -461,43 +563,7 @@ export default function LandingPage() {
         <GalaxyBG/>
 
         {/* ══════════════════════════════════════════════════════ NAV ══ */}
-        <nav className="neo-nav-pad" style={{
-          position:'fixed',top:0,left:0,right:0,zIndex:50,
-          borderBottom:'1px solid rgba(255,77,0,.1)',
-          backdropFilter:'blur(24px)',
-          background:'rgba(5,0,16,.82)',
-          padding:'13px 40px',
-          display:'flex',alignItems:'center',justifyContent:'space-between',
-        }}>
-          <Link href="/" className="neo-link" style={{display:'flex',alignItems:'center',gap:10}}>
-            <NeoLogo size={32} color="#FF9A6C"/>
-            <span style={{fontFamily:'"Syne",sans-serif',fontWeight:900,fontSize:19,color:'#FFF0E8',letterSpacing:3,textTransform:'uppercase'}}>
-              NEOBOT
-            </span>
-          </Link>
-
-          <div className="neo-nav-links" style={{display:'flex',alignItems:'center',gap:36}}>
-            {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
-              <a key={h} href={h} className="neo-link neo-nav-link" style={{fontSize:13,color:'rgba(237,233,254,.38)'}}>
-                {l}
-              </a>
-            ))}
-          </div>
-
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
-            <Link href="/login" className="neo-link" style={{fontSize:13,color:'rgba(237,233,254,.42)'}}>
-              Connexion
-            </Link>
-            <Link href="/signup" className="neo-link neo-glow" style={{
-              display:'flex',alignItems:'center',gap:7,
-              fontSize:13,fontWeight:800,fontFamily:'"Syne",sans-serif',
-              padding:'9px 22px',borderRadius:10,
-              background:CTA_GRAD,color:'#fff', letterSpacing:.4,
-            }}>
-              Essai gratuit <ArrowRight style={{width:13,height:13}}/>
-            </Link>
-          </div>
-        </nav>
+        <NavBar/>
 
         {/* ════════════════════════════════════════════════════ HERO ═══ */}
         <section style={{
@@ -528,7 +594,7 @@ export default function LandingPage() {
               <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'6px 18px',borderRadius:30,background:'rgba(255,77,0,.08)',border:'1px solid rgba(255,77,0,.22)',marginBottom:24}}>
                 <Sparkles style={{width:12,height:12,color:'#FF9A6C'}}/>
                 <span style={{fontSize:11,color:'#FF9A6C',fontWeight:700,letterSpacing:2,textTransform:'uppercase',fontFamily:'"Syne",sans-serif'}}>
-                  IA de dernière génération · Conçu pour l&apos;Afrique
+                  Pensé pour transformer vos messages en clients
                 </span>
               </div>
             </div>
@@ -555,8 +621,8 @@ export default function LandingPage() {
             {/* Sub */}
             <div className="neo-fade" style={{animationDelay:'.4s'}}>
               <p style={{fontSize:18,color:'rgba(237,233,254,.46)',maxWidth:570,margin:'0 auto 36px',lineHeight:1.75}}>
-                Votre assistant WhatsApp IA répond, relance et convertit vos clients
-                — 24h/24, avec votre voix, vos prix, votre secteur.
+                Ne laissez plus aucun client sans réponse.<br/>
+                NÉOBOT répond et relance automatiquement vos prospects sur WhatsApp, 24h/24.
               </p>
             </div>
 
@@ -663,15 +729,15 @@ export default function LandingPage() {
                 </span>
               </h2>
               <p style={{fontSize:16,color:'rgba(237,233,254,.46)',marginBottom:28,lineHeight:1.72}}>
-                N&apos;importe quelle question sur le produit, les tarifs ou votre cas d&apos;usage.
-                N&apos;importe quand. C&apos;est exactement ce que vos clients vivront, construit pour vous.
+                Vos clients sont sur WhatsApp.<br/>
+                NÉOBOT vous permet de répondre immédiatement, qualifier les prospects et les convertir automatiquement.
               </p>
               <div style={{display:'flex',flexDirection:'column',gap:14}}>
                 {[
-                  'Demandez les tarifs, il répond au centime',
-                  'Demandez comment ça marche, il explique',
-                  "Demandez s'il gère votre secteur, il vous dit oui ou non",
-                  'Voir la démo, c\'est déjà utiliser le produit',
+                  'Réponses instantanées, même hors ligne',
+                  'Relances automatiques sans effort',
+                  'Moins de travail, plus de résultats',
+                  'Chaque message devient une opportunité',
                 ].map(t=>(
                   <div key={t} style={{display:'flex',alignItems:'center',gap:12}}>
                     <CheckCircle style={{width:17,height:17,color:'#00E5CC',flexShrink:0}}/>
@@ -689,10 +755,10 @@ export default function LandingPage() {
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:58}}>
               <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
-                Pour tous les secteurs
+                Peu importe votre activité, NÉOBOT s&apos;adapte
               </h2>
               <p style={{fontSize:16,color:'rgba(237,233,254,.36)'}}>
-                NéoBot s&apos;installe en moins de 5 minutes dans votre activité.
+                Commerce, services, formation… automatisez vos échanges et gagnez en efficacité.
               </p>
             </div>
             <div className="neo-grid-usecases" style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:14}}>
@@ -750,9 +816,13 @@ export default function LandingPage() {
             <div style={{textAlign:'center',marginBottom:48}}>
               <div style={PILL}>Tarifs</div>
               <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
-                Simple et transparent
+                Commencez gratuitement, évoluez à votre rythme
               </h2>
-              <p style={{fontSize:16,color:'rgba(237,233,254,.36)'}}>Un seul plan, tout inclus. Aucune surprise.</p>
+              <p style={{fontSize:16,color:'rgba(237,233,254,.36)',lineHeight:1.7}}>
+                Mise en place en quelques minutes.<br/>
+                Aucune compétence technique nécessaire.<br/>
+                Vous êtes opérationnel immédiatement.
+              </p>
             </div>
             <div style={{
               borderRadius:24,padding:'36px 32px',
@@ -794,7 +864,7 @@ export default function LandingPage() {
                 Démarrer l&apos;essai gratuit <ArrowRight style={{width:16,height:16}}/>
               </Link>
               <p style={{fontSize:11,color:'rgba(255,255,255,.2)',marginTop:16}}>
-                Résiliable à tout moment · Bientôt : plans Business &amp; Enterprise
+                Sans engagement · Activation rapide · Support inclus
               </p>
             </div>
           </div>
@@ -829,7 +899,7 @@ export default function LandingPage() {
               </div>
             </div>
             <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:46,fontWeight:900,color:'#F5F0FF',marginBottom:18,lineHeight:1.08}}>
-              Prêt à transformer<br/>votre WhatsApp ?
+              Prêt à automatiser vos ventes sur WhatsApp&nbsp;?
             </h2>
             <p style={{fontSize:17,color:'rgba(237,233,254,.46)',marginBottom:36,lineHeight:1.75}}>
               Automatisez vos ventes WhatsApp dès ce soir.<br/>Installation en moins de 30 minutes.
@@ -841,7 +911,7 @@ export default function LandingPage() {
               fontWeight:900,fontSize:16,fontFamily:'"Syne",sans-serif',
               letterSpacing:.4,
             }}>
-              Démarrer gratuitement <ArrowRight style={{width:18,height:18}}/>
+              Créer mon assistant maintenant <ArrowRight style={{width:18,height:18}}/>
             </Link>
             <p style={{fontSize:12,color:'rgba(255,255,255,.16)',marginTop:18}}>
               ✓ Sans carte &nbsp;·&nbsp; ✓ 14 jours gratuits &nbsp;·&nbsp; ✓ Annulation immédiate
