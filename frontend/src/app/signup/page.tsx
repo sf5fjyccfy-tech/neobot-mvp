@@ -4,13 +4,13 @@ import { NeoBotBrandmark } from '@/components/ui/NeoBotLogo';
 
 export const metadata = {
   title: 'Créer un compte - NéoBot',
-  description: 'Lancez votre assistant WhatsApp IA en 5 minutes. Essai gratuit 7 jours.',
+  description: 'Lancez votre assistant WhatsApp IA en 5 minutes. Essai gratuit 14 jours.',
 };
 
 const BENEFITS = [
-  { icon: CheckCircle, text: 'Essai gratuit 7 jours, sans carte bancaire' },
+  { icon: CheckCircle, text: 'Essai gratuit 14 jours, sans carte bancaire' },
   { icon: MessageSquare, text: 'Vos clients reçoivent des réponses en moins de 2s' },
-  { icon: TrendingUp, text: 'Augmentez vos ventes de 30% en moyenne' },
+  { icon: TrendingUp, text: 'Disponible 24h/24, 7j/7, même quand vous dormez' },
   { icon: Bot, text: 'Configuration en moins de 5 minutes' },
 ];
 
@@ -73,16 +73,16 @@ export default function SignupPage() {
 
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-white mb-2">Créer un compte</h2>
-            <p style={{ color: 'rgba(255,180,120,0.5)' }}>7 jours gratuits • Aucune carte requise</p>
+            <p style={{ color: 'rgba(255,180,120,0.5)' }}>14 jours gratuits • Aucune carte requise</p>
           </div>
 
           <SignupForm />
 
           <p className="text-center text-xs mt-8" style={{ color: 'rgba(0,229,204,0.5)' }}>
             En vous inscrivant, vous acceptez nos{' '}
-            <a href="#" style={{ color: 'rgba(0,229,204,0.7)' }} className="underline underline-offset-2">Conditions d'utilisation</a>
+            <a href="/legal?tab=cgu" style={{ color: 'rgba(0,229,204,0.7)' }} className="underline underline-offset-2">Conditions d'utilisation</a>
             {' '}et notre{' '}
-            <a href="#" style={{ color: 'rgba(0,229,204,0.7)' }} className="underline underline-offset-2">Politique de confidentialité</a>.
+            <a href="/legal?tab=confidentialite" style={{ color: 'rgba(0,229,204,0.7)' }} className="underline underline-offset-2">Politique de confidentialité</a>.
           </p>
         </div>
       </div>

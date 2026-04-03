@@ -34,11 +34,15 @@ export default function LoginForm() {
     setError('');
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 28_000);
+
     try {
       const response = await fetch(buildApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -53,9 +57,14 @@ export default function LoginForm() {
       setIsSuperadmin(data.is_superadmin ?? false);
       // Hard redirect : garantit que le cookie auth_session est envoyé avec la prochaine requête middleware
       window.location.href = data.is_superadmin ? '/admin' : '/dashboard';
-    } catch {
-      setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Le serveur met quelques secondes à démarrer. Patientez 30 secondes et réessayez.');
+      } else {
+        setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
+      }
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };

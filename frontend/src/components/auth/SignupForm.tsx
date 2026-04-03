@@ -48,11 +48,15 @@ export default function SignupForm() {
     setError('');
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 28_000);
+
     try {
       const response = await fetch(buildApiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -67,9 +71,14 @@ export default function SignupForm() {
       setIsSuperadmin(data.is_superadmin ?? false);
       setBusinessInfo({ tenant_name: formData.tenant_name, business_type: formData.business_type });
       setShowTrialModal(true);
-    } catch {
-      setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Le serveur met quelques secondes à démarrer. Patientez 30 secondes et réessayez.');
+      } else {
+        setError('Impossible de se connecter au serveur. Vérifiez votre connexion.');
+      }
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };

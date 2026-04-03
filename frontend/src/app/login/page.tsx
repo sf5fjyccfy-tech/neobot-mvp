@@ -8,9 +8,9 @@ export const metadata = {
 };
 
 const STATS = [
-  { value: '2 500+', label: 'Entreprises actives' },
-  { value: '98%', label: 'Satisfaction client' },
+  { value: '24/7', label: 'Disponible en continu' },
   { value: '< 2s', label: 'Temps de réponse' },
+  { value: '5 min', label: 'Pour configurer' },
 ];
 
 export default function LoginPage() {
@@ -55,7 +55,7 @@ export default function LoginPage() {
           <div className="space-y-3">
             {[
               { icon: Shield, text: 'Données sécurisées et isolées' },
-              { icon: Zap, text: 'IA ultra-rapide basée sur DeepSeek' },
+              { icon: Zap, text: 'IA de dernière génération, réponse < 2s' },
               { icon: Users, text: 'Support disponible 7j/7' },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-3">
