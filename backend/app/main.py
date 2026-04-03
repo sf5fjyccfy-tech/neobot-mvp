@@ -329,6 +329,19 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Handler global pour les exceptions non gérées (500)
+# CRITIQUE : sans ça, les 500 passent par ServerErrorMiddleware (plus externe que
+# CORSMiddleware) → réponse sans headers CORS → erreur "Access-Control-Allow-Origin manquant".
+# En enregistrant ce handler ICI, l'exception est capturée par ExceptionMiddleware
+# de FastAPI (qui est DANS le stack CORSMiddleware) → CORS headers ajoutés correctement.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception [%s %s]: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erreur interne du serveur. Veuillez réessayer."},
+    )
+
 # ========== INCLUDE ROUTERS ==========
 app.include_router(auth_router)
 app.include_router(whatsapp_router)

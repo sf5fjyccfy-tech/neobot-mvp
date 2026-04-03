@@ -1,9 +1,10 @@
 """
-Endpoint demo public — visiteurs de la landing page testent en direct.
+Endpoint demo public — visiteurs de la landing page testent NéoBot en direct.
 
 Sécurité :
 - Public par conception (aucun token requis) — rate limit par IP
-- Prompt système verrouillé côté serveur, non injectable par le client
+- Prompt système chargé depuis la DB (tenant configuré par DEMO_TENANT_ID)
+  ou fallback hard codé si absent — non injectable par le client
 - Sessions en mémoire uniquement (pas de DB, pas de PII persisté)
 - Max 5 échanges / session, messages tronqués à 480 chars en entrée
 - Max 200 tokens / réponse (coût maîtrisé)
@@ -11,12 +12,13 @@ Sécurité :
 Dette technique :
 - Session store in-memory = ne survit pas au redémarrage / multi-instance.
   À remplacer par Redis si on scale avant 6 mois.
+- Le prompt est mis en cache au premier appel (recharge au redémarrage uniquement).
 """
 
 import os
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel, Field
@@ -28,6 +30,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/demo", tags=["demo"])
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+# ID du tenant NeoBot admin dont on charge l'agent pour la démo.
+DEMO_TENANT_ID = int(os.getenv("DEMO_TENANT_ID", "13"))
 
 # ── Config ────────────────────────────────────────────────────────────────
 _SESSION_TTL_MINUTES = 30
@@ -37,20 +41,12 @@ _MAX_INPUT_CHARS = 480
 # ── Session store in-memory ───────────────────────────────────────────────
 # { session_id: { messages: [...], created_at: datetime, count: int } }
 _SESSIONS: Dict[str, dict] = {}
+# ── Cache du prompt (chargé une seule fois par démarrage) ─────────────────
+_cached_system_prompt: Optional[str] = None
 
 
-def _cleanup_expired() -> None:
-    """Nettoie les sessions expirées. Appelé à chaque requête (coût O(n) négligeable à MVP)."""
-    cutoff = datetime.utcnow() - timedelta(minutes=_SESSION_TTL_MINUTES)
-    expired = [sid for sid, s in _SESSIONS.items() if s["created_at"] < cutoff]
-    for sid in expired:
-        del _SESSIONS[sid]
-
-
-# ── Prompt système — verrouillé serveur ──────────────────────────────────
-# NéoBot joue son propre rôle : il répond aux visiteurs de la landing page
-# qui veulent comprendre le produit, les tarifs, comment démarrer.
-_SYSTEM_PROMPT = """\
+# ── Prompt fallback — si l'agent DB n'existe pas encore ────────────────
+_FALLBACK_SYSTEM_PROMPT = """\
 Tu es NéoBot, un agent IA WhatsApp conçu pour les PME africaines.
 Tu parles directement à un visiteur de ta landing page qui découvre le produit.
 Ton rôle : convaincre avec honnêteté, répondre aux questions produit, et guider
@@ -75,6 +71,67 @@ Règles absolues :
 - Si le visiteur semble intéressé, invite-le à démarrer l'essai gratuit (/signup)
 - Reste chaleureux mais va droit au but — les visiteurs sont sur mobile\
 """
+
+
+def _load_system_prompt_from_db() -> str:
+    """
+    Charge le prompt de l'agent du tenant DEMO_TENANT_ID depuis la DB.
+    Prend en priorité custom_prompt_override, puis system_prompt.
+    Retourne le fallback si aucun agent trouvé ou erreur DB.
+    Mis en cache après le premier appel réussi.
+    """
+    global _cached_system_prompt
+    if _cached_system_prompt is not None:
+        return _cached_system_prompt
+
+    try:
+        from ..database import SessionLocal
+        from sqlalchemy import text
+
+        db = SessionLocal()
+        try:
+            row = db.execute(
+                text("""
+                    SELECT
+                        COALESCE(custom_prompt_override, system_prompt) AS prompt,
+                        name
+                    FROM agent_templates
+                    WHERE tenant_id = :tid
+                      AND COALESCE(custom_prompt_override, system_prompt) IS NOT NULL
+                      AND COALESCE(custom_prompt_override, system_prompt) != ''
+                    ORDER BY id DESC
+                    LIMIT 1
+                """),
+                {"tid": DEMO_TENANT_ID},
+            ).fetchone()
+        finally:
+            db.close()
+
+        if row and row.prompt:
+            logger.info(
+                "Demo: prompt chargé depuis DB (tenant=%s, agent='%s', %d chars)",
+                DEMO_TENANT_ID, row.name, len(row.prompt),
+            )
+            _cached_system_prompt = row.prompt
+        else:
+            logger.info(
+                "Demo: aucun agent trouvé pour tenant=%s — fallback",
+                DEMO_TENANT_ID,
+            )
+            _cached_system_prompt = _FALLBACK_SYSTEM_PROMPT
+
+    except Exception as exc:
+        logger.warning("Demo: erreur chargement prompt DB (%s) — fallback", exc)
+        _cached_system_prompt = _FALLBACK_SYSTEM_PROMPT
+
+    return _cached_system_prompt
+
+def _cleanup_expired() -> None:
+    """Nettoie les sessions expirées. Appelé à chaque requête (coût O(n) négligeable à MVP)."""
+    cutoff = datetime.utcnow() - timedelta(minutes=_SESSION_TTL_MINUTES)
+    expired = [sid for sid, s in _SESSIONS.items() if s["created_at"] < cutoff]
+    for sid in expired:
+        del _SESSIONS[sid]
 
 
 # ── Schémas ───────────────────────────────────────────────────────────────
@@ -119,8 +176,9 @@ async def demo_chat(request: Request, body: DemoChatRequest):
     session["messages"].append({"role": "user", "content": user_text})
     session["count"] += 1
 
-    # Fenêtre de contexte : system + 10 derniers messages (5 échanges max de toute façon)
-    messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + session["messages"][-10:]
+    # Fenêtre de contexte : system + 10 derniers messages
+    system_prompt = _load_system_prompt_from_db()
+    messages = [{"role": "system", "content": system_prompt}] + session["messages"][-10:]
 
     client = DeepSeekClient(api_key=DEEPSEEK_API_KEY)
     try:
@@ -139,3 +197,14 @@ async def demo_chat(request: Request, body: DemoChatRequest):
         exchange_count=session["count"],
         max_exchanges=_MAX_EXCHANGES,
     )
+
+
+# ── Reset cache prompt (appelé après modification de l'agent dans le dashboard) ──
+@router.post("/reload-prompt")
+async def reload_demo_prompt():
+    """Force le rechargement du prompt depuis la DB (après modification de l'agent)."""
+    global _cached_system_prompt
+    _cached_system_prompt = None
+    new_prompt = _load_system_prompt_from_db()
+    source = "fallback" if new_prompt == _FALLBACK_SYSTEM_PROMPT else "db"
+    return {"status": "ok", "prompt_chars": len(new_prompt), "source": source}
