@@ -38,8 +38,8 @@ export default function SignupPage() {
             <span style={{ background: 'linear-gradient(90deg, #FF9A6C, #00E5CC)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>WhatsApp</span> dès aujourd'hui
           </h1>
           <p style={{ color: 'rgba(255,180,120,0.6)' }} className="text-lg leading-relaxed mb-12">
-            Des milliers d'entreprises africaines font confiance à NéoBot 
-            pour répondre à leurs clients 24h/24.
+            Votre agent WhatsApp IA opérationnel en moins de 30 minutes.
+            Disponible 24h/24, sans équipe support supplémentaire.
           </p>
 
           <div className="space-y-4">
@@ -54,20 +54,12 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Testimonial */}
-        <div className="relative z-10 backdrop-blur-sm rounded-2xl p-6" style={{ background: 'rgba(255,77,0,0.08)', border: '1px solid rgba(255,77,0,0.18)' }}>
-          <p style={{ color: 'rgba(255,180,120,0.8)' }} className="text-sm leading-relaxed mb-4">
-            "NéoBot a transformé notre service client. On répond maintenant à 
-            300+ messages par jour sans effort. Le ROI est incroyable."
+        {/* Essai gratuit — info clé */}
+        <div className="relative z-10 backdrop-blur-sm rounded-2xl p-6" style={{ background: 'rgba(0,229,204,0.05)', border: '1px solid rgba(0,229,204,0.15)' }}>
+          <p style={{ color: 'rgba(255,180,120,0.7)' }} className="text-sm leading-relaxed">
+            Essai gratuit 14 jours · Aucune carte bancaire requise · Résiliable à tout moment.
+            Votre numéro WhatsApp Business reste le vôtre.
           </p>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: 'linear-gradient(135deg, #FF4D00, #00E5CC)' }}>K</div>
-            <div>
-              <p className="text-white font-medium text-sm">Kevin M.</p>
-              <p style={{ color: 'rgba(255,180,120,0.4)' }} className="text-xs">Restaurant Le Festin, Douala</p>
-            </div>
-            <div className="ml-auto text-xs font-semibold" style={{ color: '#FF9A6C' }}>★★★★★</div>
-          </div>
         </div>
       </div>
 

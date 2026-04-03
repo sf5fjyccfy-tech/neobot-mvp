@@ -449,7 +449,6 @@ export default function LandingPage() {
           .neo-grid-features { grid-template-columns:1fr !important }
           .neo-grid-demo     { grid-template-columns:1fr !important; gap:36px !important }
           .neo-grid-usecases { grid-template-columns:repeat(3,1fr) !important }
-          .neo-grid-testimonials { grid-template-columns:1fr !important }
           .neo-grid-footer   { grid-template-columns:1fr 1fr !important; gap:20px !important }
           .neo-footer-bottom { flex-direction:column !important; gap:8px !important; text-align:center }
         }
