@@ -337,6 +337,7 @@ export function NeoAssistant() {
       <button
         onClick={handleNeoClick}
         title={isOnboarding ? 'Étape suivante' : 'Parler à Neo'}
+        className="neo-assistant-btn"
         style={{
           position: 'fixed',
           bottom: 24,

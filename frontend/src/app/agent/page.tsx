@@ -123,6 +123,8 @@ export default function AgentPage() {
   const [toggleLoadingPhone, setToggleLoadingPhone] = useState<string | null>(null);
   const [newExcludedPhone, setNewExcludedPhone] = useState('');
   const [excludeLoading, setExcludeLoading]     = useState(false);
+  const [selectedPhones, setSelectedPhones]     = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading]           = useState(false);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -229,6 +231,29 @@ export default function AgentPage() {
       showToast('Contact exclu ✓');
     } catch { showToast('Erreur exclusion', false); }
     setExcludeLoading(false);
+  };
+
+  const handleBulkExclude = async () => {
+    if (selectedPhones.size === 0) return;
+    const tid = getTenantId(); if (!tid) return;
+    setBulkLoading(true);
+    try {
+      await Promise.all(
+        Array.from(selectedPhones).map(phone =>
+          apiCall(`/api/tenants/${tid}/contacts/${encodeURIComponent(phone)}/ai-toggle`, {
+            method: 'PUT',
+            body: JSON.stringify({ ai_enabled: false }),
+          })
+        )
+      );
+      const n = selectedPhones.size;
+      setAllContacts(prev => prev.map(c =>
+        selectedPhones.has(c.phone_number) ? { ...c, ai_enabled: false } : c
+      ));
+      setSelectedPhones(new Set());
+      showToast(`${n} contact${n > 1 ? 's' : ''} exclus ✓`);
+    } catch { showToast('Erreur exclusion', false); }
+    setBulkLoading(false);
   };
 
   const handleCreateAgent = async () => {
@@ -965,11 +990,18 @@ export default function AgentPage() {
 
                   {/* Contacts exclus */}
                   <div className="rounded-2xl p-5 space-y-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                    <div>
-                      <h3 className="text-sm font-bold text-white">🚫 Contacts exclus</h3>
-                      <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                        Désactivez l&apos;IA contact par contact parmi vos vrais clients.
-                      </p>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">🚫 Contacts exclus</h3>
+                        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          Désactivez l&apos;IA contact par contact parmi vos vrais clients.
+                        </p>
+                      </div>
+                      {allContacts.length > 0 && (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0" style={{ background: 'rgba(255,77,0,0.1)', color: '#FF9A6C', border: '1px solid rgba(255,77,0,0.2)' }}>
+                          {allContacts.filter(c => !c.ai_enabled).length} exclu{allContacts.filter(c => !c.ai_enabled).length !== 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
 
                     {allContacts.length > 0 ? (
@@ -978,53 +1010,101 @@ export default function AgentPage() {
                         <input
                           type="search"
                           value={contactSearch}
-                          onChange={e => setContactSearch(e.target.value)}
+                          onChange={e => { setContactSearch(e.target.value); setSelectedPhones(new Set()); }}
                           placeholder="Rechercher un nom ou numéro..."
                           className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none placeholder:opacity-25"
                           style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', caretColor: '#FF4D00' }}
                         />
 
-                        {/* Liste des contacts du bot avec toggle */}
-                        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                          {allContacts
-                            .filter(c => {
-                              const q = contactSearch.toLowerCase();
-                              return !q || c.name.toLowerCase().includes(q) || c.phone_number.includes(q);
-                            })
-                            .map(c => (
-                              <div
-                                key={c.phone_number}
-                                className="flex items-center justify-between rounded-xl px-3 py-2.5"
-                                style={{ background: c.ai_enabled ? 'transparent' : 'rgba(255,77,0,0.06)', border: `1px solid ${c.ai_enabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,77,0,0.15)'}` }}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-semibold text-white truncate">{c.name}</p>
-                                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                    +{c.phone_number} · {c.message_count} message{c.message_count > 1 ? 's' : ''}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() => handleToggleContact(c.phone_number, c.ai_enabled)}
-                                  disabled={toggleLoadingPhone === c.phone_number}
-                                  className="ml-3 shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
-                                  style={{
-                                    background: c.ai_enabled ? 'rgba(255,255,255,0.07)' : 'rgba(255,77,0,0.15)',
-                                    color:      c.ai_enabled ? 'rgba(255,255,255,0.45)' : '#FF4D00',
-                                    opacity:    toggleLoadingPhone === c.phone_number ? 0.4 : 1,
-                                  }}
-                                >
-                                  {c.ai_enabled ? 'Exclure' : 'Réactiver'}
-                                </button>
-                              </div>
-                            ))
-                          }
-                          {allContacts.filter(c => {
+                        {/* Sélection en masse */}
+                        {(() => {
+                          const filtered = allContacts.filter(c => {
                             const q = contactSearch.toLowerCase();
                             return !q || c.name.toLowerCase().includes(q) || c.phone_number.includes(q);
-                          }).length === 0 && (
-                            <p className="text-xs text-center py-3" style={{ color: 'rgba(255,255,255,0.2)' }}>Aucun résultat pour &quot;{contactSearch}&quot;</p>
-                          )}
-                        </div>
+                          });
+                          return (
+                            <>
+                              <div className="flex items-center justify-between px-1">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={filtered.length > 0 && filtered.every(c => selectedPhones.has(c.phone_number))}
+                                    onChange={e => setSelectedPhones(e.target.checked ? new Set(filtered.map(c => c.phone_number)) : new Set())}
+                                    style={{ accentColor: '#FF4D00', cursor: 'pointer' }}
+                                  />
+                                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>Tout sélectionner</span>
+                                </label>
+                                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>{allContacts.length} contact{allContacts.length > 1 ? 's' : ''}</span>
+                              </div>
+
+                              {selectedPhones.size > 0 && (
+                                <div className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: 'rgba(255,77,0,0.08)', border: '1px solid rgba(255,77,0,0.2)' }}>
+                                  <span className="text-xs font-semibold" style={{ color: '#FF9A6C' }}>{selectedPhones.size} sélectionné{selectedPhones.size > 1 ? 's' : ''}</span>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => setSelectedPhones(new Set())}
+                                      className="text-xs px-2.5 py-1 rounded-lg"
+                                      style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}
+                                    >
+                                      Annuler
+                                    </button>
+                                    <button
+                                      onClick={handleBulkExclude}
+                                      disabled={bulkLoading}
+                                      className="text-xs px-3 py-1 rounded-lg font-semibold"
+                                      style={{ background: 'rgba(255,77,0,0.8)', color: 'white', opacity: bulkLoading ? 0.5 : 1 }}
+                                    >
+                                      {bulkLoading ? '…' : `Exclure (${selectedPhones.size})`}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Liste des contacts */}
+                              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                {filtered.map(c => (
+                                  <div
+                                    key={c.phone_number}
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                                    style={{ background: c.ai_enabled ? 'transparent' : 'rgba(255,77,0,0.06)', border: `1px solid ${c.ai_enabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,77,0,0.15)'}` }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedPhones.has(c.phone_number)}
+                                      onChange={e => setSelectedPhones(prev => {
+                                        const next = new Set(prev);
+                                        e.target.checked ? next.add(c.phone_number) : next.delete(c.phone_number);
+                                        return next;
+                                      })}
+                                      style={{ accentColor: '#FF4D00', cursor: 'pointer', flexShrink: 0 }}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-semibold text-white truncate">{c.name}</p>
+                                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                        +{c.phone_number} · {c.message_count} message{c.message_count > 1 ? 's' : ''}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={() => handleToggleContact(c.phone_number, c.ai_enabled)}
+                                      disabled={toggleLoadingPhone === c.phone_number}
+                                      className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                                      style={{
+                                        background: c.ai_enabled ? 'rgba(255,255,255,0.07)' : 'rgba(255,77,0,0.15)',
+                                        color:      c.ai_enabled ? 'rgba(255,255,255,0.45)' : '#FF4D00',
+                                        opacity:    toggleLoadingPhone === c.phone_number ? 0.4 : 1,
+                                      }}
+                                    >
+                                      {c.ai_enabled ? 'Exclure' : 'Réactiver'}
+                                    </button>
+                                  </div>
+                                ))}
+                                {filtered.length === 0 && (
+                                  <p className="text-xs text-center py-3" style={{ color: 'rgba(255,255,255,0.2)' }}>Aucun résultat pour &quot;{contactSearch}&quot;</p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </>
                     ) : (
                       <p className="text-xs text-center py-2" style={{ color: 'rgba(255,255,255,0.2)' }}>

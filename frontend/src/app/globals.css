@@ -234,4 +234,9 @@ body > * {
     justify-content: space-around;
     padding: 0 8px;
   }
+
+  /* Neo flottant : au-dessus de la bottom nav (64px) */
+  .neo-assistant-btn {
+    bottom: 80px !important;
+  }
 }
