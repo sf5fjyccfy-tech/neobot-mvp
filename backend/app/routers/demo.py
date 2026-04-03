@@ -180,14 +180,21 @@ async def demo_chat(request: Request, body: DemoChatRequest):
     system_prompt = _load_system_prompt_from_db()
     messages = [{"role": "system", "content": system_prompt}] + session["messages"][-10:]
 
-    client = DeepSeekClient(api_key=DEEPSEEK_API_KEY)
-    try:
-        reply = await client.call(messages, temperature=0.72, max_tokens=200)
-    except Exception as exc:
-        logger.error("Demo chat DeepSeek error: %s", exc)
-        # Rembourse le quota — l'échange n'a pas abouti
+    result = await DeepSeekClient.call(messages, temperature=0.72, max_tokens=200)
+
+    # DeepSeekClient.call() retourne {"error": "..."} en cas d'échec API (pas d'exception)
+    if "error" in result:
+        logger.error("Demo chat DeepSeek error: %s", result["error"])
         session["count"] -= 1
-        session["messages"].pop()  # retire le message utilisateur non traité
+        session["messages"].pop()
+        raise HTTPException(status_code=502, detail="Erreur lors de la génération de la réponse")
+
+    try:
+        reply = result["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.error("Demo: structure réponse DeepSeek inattendue (%s): %s", exc, result)
+        session["count"] -= 1
+        session["messages"].pop()
         raise HTTPException(status_code=502, detail="Erreur lors de la génération de la réponse")
 
     session["messages"].append({"role": "assistant", "content": reply})
