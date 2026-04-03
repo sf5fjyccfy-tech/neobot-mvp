@@ -419,34 +419,59 @@ const CTA_GRAD_HOVER = 'linear-gradient(135deg, #CC3D00 0%, #00B5A0 100%)';
 
 function NavBar() {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Bloque le scroll du body quand le menu est ouvert
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  // Ferme le menu au clic en dehors
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const NAV_STYLE: React.CSSProperties = {
+    position:'fixed',top:0,left:0,right:0,zIndex:50,
+    borderBottom:'1px solid rgba(255,77,0,.1)',
+    backdropFilter:'blur(24px)',
+    background:'rgba(5,0,16,.82)',
+    display:'flex',alignItems:'center',justifyContent:'space-between',
+  };
+
+  const LOGO = (
+    <Link href="/" className="neo-link" style={{display:'flex',alignItems:'center',gap:10}}>
+      <NeoLogo size={32} color="#FF9A6C"/>
+      <span style={{fontFamily:'"Syne",sans-serif',fontWeight:900,fontSize:19,color:'#FFF0E8',letterSpacing:3,textTransform:'uppercase'}}>
+        NEOBOT
+      </span>
+    </Link>
+  );
+
   return (
     <>
-      <nav className="neo-nav-pad" style={{
-        position:'fixed',top:0,left:0,right:0,zIndex:50,
-        borderBottom:'1px solid rgba(255,77,0,.1)',
-        backdropFilter:'blur(24px)',
-        background:'rgba(5,0,16,.82)',
-        padding:'13px 40px',
-        display:'flex',alignItems:'center',justifyContent:'space-between',
-      }}>
-        <Link href="/" className="neo-link" style={{display:'flex',alignItems:'center',gap:10}}>
-          <NeoLogo size={32} color="#FF9A6C"/>
-          <span style={{fontFamily:'"Syne",sans-serif',fontWeight:900,fontSize:19,color:'#FFF0E8',letterSpacing:3,textTransform:'uppercase'}}>
-            NEOBOT
-          </span>
-        </Link>
-
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <Link href="/login" className="neo-link neo-nav-login" style={{fontSize:13,color:'rgba(237,233,254,.42)'}}>
+      {/* ── DESKTOP nav (≥768px) ────────────────────────────────── */}
+      <nav className="neo-nav-desktop-bar" style={{...NAV_STYLE, padding:'13px 40px'}}>
+        {LOGO}
+        <div style={{display:'flex',alignItems:'center',gap:14}}>
+          <Link href="/login" className="neo-link" style={{fontSize:13,color:'rgba(237,233,254,.42)'}}>
             Connexion
           </Link>
-          <Link href="/signup" className="neo-link neo-glow neo-nav-signup" style={{
+          <Link href="/signup" className="neo-link neo-glow" style={{
             display:'flex',alignItems:'center',gap:7,
             fontSize:13,fontWeight:800,fontFamily:'"Syne",sans-serif',
             padding:'9px 22px',borderRadius:10,
             background:CTA_GRAD,color:'#fff',letterSpacing:.4,
           }}>
-            Essai gratuit <ArrowRight className="neo-nav-cta-arrow" style={{width:13,height:13}}/>
+            Essai gratuit <ArrowRight style={{width:13,height:13}}/>
           </Link>
           <button
             onClick={()=>setOpen(o=>!o)}
@@ -458,26 +483,67 @@ function NavBar() {
         </div>
       </nav>
 
+      {/* ── MOBILE nav (<768px) ─────────────────────────────────── */}
+      <nav className="neo-nav-mobile-bar" style={{...NAV_STYLE, padding:'11px 16px'}}>
+        {LOGO}
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button
+            onClick={()=>setOpen(o=>!o)}
+            style={{background:'none',border:'1px solid rgba(255,77,0,.2)',borderRadius:8,padding:'7px 9px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+            aria-label="Menu"
+          >
+            {open ? <X style={{width:18,height:18,color:'#FF9A6C'}}/> : <Menu style={{width:18,height:18,color:'#FF9A6C'}}/>}
+          </button>
+          <Link href="/signup" className="neo-link neo-glow" style={{
+            display:'flex',alignItems:'center',
+            fontSize:12,fontWeight:800,fontFamily:'"Syne",sans-serif',
+            padding:'8px 16px',borderRadius:10,
+            background:CTA_GRAD,color:'#fff',letterSpacing:.4,
+          }}>
+            Essai gratuit
+          </Link>
+        </div>
+      </nav>
+
+      {/* ── Menu déroulant (commun desktop + mobile) ─────────────── */}
       {open && (
-        <div style={{
+        <div ref={menuRef} style={{
           position:'fixed',top:57,left:0,right:0,zIndex:49,
           background:'rgba(5,0,16,.97)',
           backdropFilter:'blur(24px)',
           borderBottom:'1px solid rgba(255,77,0,.15)',
-          padding:'16px 20px 24px',
-          display:'flex',flexDirection:'column',gap:0,
+          padding:'8px 20px 24px',
+          display:'flex',flexDirection:'column',
         }}>
-          {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#pricing','Tarifs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
+          {([
+            ['#features','Fonctionnalités'],
+            ['#use-cases','Secteurs'],
+            ['#pricing','Tarifs'],
+            ['#faq','FAQ'],
+          ] as [string,string][]).map(([h,l])=>(
             <a key={h} href={h} onClick={()=>setOpen(false)} className="neo-link"
-              style={{fontSize:15,color:'rgba(237,233,254,.72)',padding:'14px 8px',borderBottom:'1px solid rgba(255,255,255,.05)',fontFamily:'"DM Sans",sans-serif',display:'block'}}
+              style={{
+                fontSize:15,color:'rgba(237,233,254,.72)',
+                padding:'0 8px',
+                borderBottom:'1px solid rgba(255,255,255,.05)',
+                fontFamily:'"DM Sans",sans-serif',
+                display:'flex',alignItems:'center',
+                minHeight:52,
+              }}
             >{l}</a>
           ))}
           <Link href="/login" onClick={()=>setOpen(false)} className="neo-link"
-            style={{fontSize:15,color:'rgba(237,233,254,.5)',padding:'14px 8px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'block'}}
+            style={{
+              fontSize:15,color:'rgba(237,233,254,.5)',
+              padding:'0 8px',
+              borderBottom:'1px solid rgba(255,255,255,.05)',
+              display:'flex',alignItems:'center',
+              minHeight:52,
+            }}
           >Connexion</Link>
           <Link href="/signup" onClick={()=>setOpen(false)} className="neo-link neo-glow" style={{
             display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-            marginTop:14,padding:'14px 0',borderRadius:12,
+            marginTop:16,padding:'15px 0',borderRadius:12,
             background:CTA_GRAD,color:'#fff',
             fontWeight:900,fontSize:15,fontFamily:'"Syne",sans-serif',
           }}>
@@ -517,12 +583,13 @@ export default function LandingPage() {
         .neo-nav-link:hover { color:#FFF0E8!important }
         .neo-galaxy-slow   { animation:galaxy-spin-slow   90s linear infinite }
         .neo-galaxy-medium { animation:galaxy-spin-medium 55s linear infinite reverse }
-        .neo-nav-login { display:flex }
+        /* Desktop nav visible, mobile nav cachée */
+        .neo-nav-desktop-bar { display:flex }
+        .neo-nav-mobile-bar  { display:none }
         @media (max-width:768px) {
-          .neo-nav-login     { display:none !important }
-          .neo-nav-cta-arrow { display:none !important }
-          .neo-nav-signup    { padding:8px 14px !important; font-size:12px !important }
-          .neo-nav-pad       { padding:11px 16px !important }
+          /* Swap les deux navbars */
+          .neo-nav-desktop-bar { display:none !important }
+          .neo-nav-mobile-bar  { display:flex !important }
           .neo-grid-stats    { grid-template-columns:repeat(2,1fr) !important }
           .neo-grid-features { grid-template-columns:1fr !important }
           .neo-grid-demo     { grid-template-columns:1fr !important; gap:36px !important }
