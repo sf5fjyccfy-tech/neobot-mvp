@@ -32,7 +32,7 @@ if (process.env.SENTRY_DSN && !Sentry.isInitialized()) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV || 'development',
-    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+    tracesSampleRate: 0,
     beforeSend(event, hint) {
       const err = hint?.originalException;
       if (err?.message?.includes('Connection Closed') ||
@@ -580,7 +580,9 @@ async function connectTenant(tenantId, options = {}) {
       version,
       auth: {
         creds: authState.creds,
-        keys: makeCacheableSignalKeyStore(authState.keys, bailLogger),
+        // Limite le cache Signal à 100 entrées (défaut Baileys = illimité) — évite l'OOM
+        // progressif sur le free tier Render 512MB lors de sessions longues.
+        keys: makeCacheableSignalKeyStore(authState.keys, bailLogger, 100),
       },
       // Fingerprint identique à WhatsApp Web officiel — affiche "WhatsApp Web" dans les
       // appareils liés Android. Neutre, indétectable par Meta.
@@ -588,7 +590,7 @@ async function connectTenant(tenantId, options = {}) {
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: false,
-      connectTimeoutMs: 20_000,
+      connectTimeoutMs: 30_000,
       keepAliveIntervalMs: 30_000,
       defaultQueryTimeoutMs: 60_000,
       retryRequestDelayMs: 250,
@@ -804,17 +806,18 @@ function startWatchdog() {
 const app = express();
 app.use(express.json());
 
-// DEBUG SENTRY — à protéger ou supprimer en production
-app.get('/debug-sentry', (req, res) => {
-  throw new Error('Test Sentry NéoBot WhatsApp — this is intentional');
-});
-
 app.get('/health', (req, res) => {
   const session = getTenantSession(DEFAULT_TENANT_ID);
+  const mem = process.memoryUsage();
   res.json({
     status: session.connected ? 'healthy' : 'degraded',
     defaultTenant: session.snapshot(),
     managedTenants: tenantSessions.size,
+    memoryMB: {
+      rss: Math.round(mem.rss / 1024 / 1024),
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -1044,7 +1047,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       version,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, bailLogger),
+        keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
       },
       browser: ['WhatsApp Web', 'Chrome', '2.2408.10'],
       printQRInTerminal: false,

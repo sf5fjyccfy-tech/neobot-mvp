@@ -18,7 +18,9 @@ if (!dsn) {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV || 'development',
-    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+    // APM tracing désactivé en prod : WA service n'a pas de HTTP incoming à mesurer,
+    // les spans Sentry consomment de la RAM inutilement sur le free tier 512MB.
+    tracesSampleRate: 0,
     // Filtre les erreurs de reconnexion WhatsApp normales qui spamment Sentry
     beforeSend(event, hint) {
       const err = hint?.originalException;
