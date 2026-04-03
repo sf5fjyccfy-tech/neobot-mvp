@@ -555,6 +555,15 @@ export default function LandingPage() {
           .neo-price-num     { font-size:36px !important }
           .neo-nav-desktop-cta { display:none !important }
           .neo-nav-mobile-cta  { display:flex !important }
+          .neo-s-feat     { padding:64px 20px !important }
+          .neo-s-demo     { padding:56px 20px !important }
+          .neo-s-uc       { padding:56px 20px !important }
+          .neo-s-early    { padding:44px 20px !important }
+          .neo-s-price    { padding:60px 20px !important }
+          .neo-s-faq      { padding:56px 20px !important }
+          .neo-s-cta      { padding:68px 20px !important }
+          .neo-price-card { padding:24px 20px !important }
+          .neo-hero-logo  { display:none !important }
         }
       `}</style>
 
@@ -577,8 +586,8 @@ export default function LandingPage() {
           }}/>
 
           <div style={{textAlign:'center',maxWidth:840,padding:'0 24px',position:'relative',zIndex:1}}>
-            {/* Logo */}
-            <div className="neo-float neo-fade" style={{display:'flex',justifyContent:'center',marginBottom:32,animationDelay:'.1s'}}>
+            {/* Logo — masqué sur mobile pour gagner de l'espace vertical */}
+            <div className="neo-float neo-fade neo-hero-logo" style={{display:'flex',justifyContent:'center',marginBottom:32,animationDelay:'.1s'}}>
               <div className="neo-glow" style={{
                 padding:'22px 24px',borderRadius:'50%',
                 background:'rgba(204,61,0,.07)',
@@ -686,7 +695,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════════════ FEATURES ══════ */}
-        <section id="features" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+        <section id="features" className="neo-s-feat" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:66}}>
               <div style={PILL}>Fonctionnalités</div>
@@ -714,7 +723,7 @@ export default function LandingPage() {
         </section>
 
         {/* ════════════════════════════════════════════════ DEMO ════════ */}
-        <section id="demo" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+        <section id="demo" className="neo-s-demo" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{
             position:'absolute',inset:0,pointerEvents:'none',
             background:'radial-gradient(ellipse 55% 55% at 50% 50%, rgba(204,61,0,.05) 0%, transparent 70%)',
@@ -751,7 +760,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════════ USE CASES ═════════ */}
-        <section id="use-cases" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+        <section id="use-cases" className="neo-s-uc" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:58}}>
               <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
@@ -781,7 +790,7 @@ export default function LandingPage() {
         </section>
 
         {/* ═══════════════════════════════════════ EARLY ADOPTERS ═════════ */}
-        <section style={{position:'relative',zIndex:1,padding:'90px 24px'}}>
+        <section className="neo-s-early" style={{position:'relative',zIndex:1,padding:'90px 24px'}}>
           <div style={{maxWidth:700,margin:'0 auto',textAlign:'center'}}>
             <div style={PILL}>Lancement</div>
             <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:40,fontWeight:900,color:'#F5F0FF',marginBottom:16}}>
@@ -807,7 +816,7 @@ export default function LandingPage() {
         </section>
 
         {/* ════════════════════════════════════════════════ PRICING ════ */}
-        <section id="pricing" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+        <section id="pricing" className="neo-s-price" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{
             position:'absolute',inset:0,pointerEvents:'none',
             background:'radial-gradient(ellipse 55% 55% at 50% 50%, rgba(0,229,204,.04) 0%, transparent 70%)',
@@ -824,7 +833,7 @@ export default function LandingPage() {
                 Vous êtes opérationnel immédiatement.
               </p>
             </div>
-            <div style={{
+            <div className="neo-price-card" style={{
               borderRadius:24,padding:'36px 32px',
               background:'rgba(255,255,255,.015)',
               border:'1px solid rgba(0,229,204,.25)',
@@ -871,7 +880,7 @@ export default function LandingPage() {
         </section>
 
         {/* ═════════════════════════════════════════════════ FAQ ════════ */}
-        <section id="faq" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
+        <section id="faq" className="neo-s-faq" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{maxWidth:680,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:52}}>
               <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF'}}>
@@ -883,7 +892,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════════ CTA FINAL ═════════ */}
-        <section style={{position:'relative',zIndex:1,padding:'130px 24px'}}>
+        <section className="neo-s-cta" style={{position:'relative',zIndex:1,padding:'130px 24px'}}>
           <div style={{position:'absolute',inset:0,pointerEvents:'none',
             background:'radial-gradient(ellipse 55% 55% at 50% 50%, rgba(204,61,0,.09) 0%, rgba(0,229,204,.03) 40%, transparent 70%)',
           }}/>

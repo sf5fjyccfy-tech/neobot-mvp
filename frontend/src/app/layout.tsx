@@ -21,6 +21,18 @@ export const metadata: Metadata = {
   title: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
   description: 'Automatisez vos conversations WhatsApp avec une IA qui parle comme vous. Répondez à vos clients 24h/24, augmentez vos ventes. 14 jours gratuits.',
   keywords: 'whatsapp, chatbot, cameroun, ia, automatisation, bot, enterprise, afrique',
+  openGraph: {
+    title: 'NéoBot — L\'IA WhatsApp qui vend pendant que vous dormez',
+    description: 'Automatisez vos conversations WhatsApp. Répondez à vos clients 24h/24. 14 jours gratuits, sans carte bancaire.',
+    type: 'website',
+    locale: 'fr_FR',
+    siteName: 'NéoBot',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'NéoBot — L\'IA WhatsApp qui vend pendant que vous dormez',
+    description: 'Automatisez vos conversations WhatsApp. 14 jours gratuits.',
+  },
 };
 
 export default function RootLayout({
