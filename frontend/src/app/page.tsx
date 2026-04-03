@@ -436,36 +436,17 @@ function NavBar() {
           </span>
         </Link>
 
-        <div className="neo-nav-links" style={{display:'flex',alignItems:'center',gap:36}}>
-          {([['#features','Fonctionnalités'],['#use-cases','Secteurs'],['#faq','FAQ']] as [string,string][]).map(([h,l])=>(
-            <a key={h} href={h} className="neo-link neo-nav-link" style={{fontSize:13,color:'rgba(237,233,254,.38)'}}>
-              {l}
-            </a>
-          ))}
-        </div>
-
-        <div className="neo-nav-desktop-cta" style={{display:'flex',alignItems:'center',gap:14}}>
-          <Link href="/login" className="neo-link" style={{fontSize:13,color:'rgba(237,233,254,.42)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <Link href="/login" className="neo-link neo-nav-login" style={{fontSize:13,color:'rgba(237,233,254,.42)'}}>
             Connexion
           </Link>
-          <Link href="/signup" className="neo-link neo-glow" style={{
+          <Link href="/signup" className="neo-link neo-glow neo-nav-signup" style={{
             display:'flex',alignItems:'center',gap:7,
             fontSize:13,fontWeight:800,fontFamily:'"Syne",sans-serif',
             padding:'9px 22px',borderRadius:10,
-            background:CTA_GRAD,color:'#fff', letterSpacing:.4,
-          }}>
-            Essai gratuit <ArrowRight style={{width:13,height:13}}/>
-          </Link>
-        </div>
-
-        <div className="neo-nav-mobile-cta" style={{display:'none',alignItems:'center',gap:10}}>
-          <Link href="/signup" className="neo-link neo-glow" style={{
-            display:'flex',alignItems:'center',gap:6,
-            fontSize:12,fontWeight:800,fontFamily:'"Syne",sans-serif',
-            padding:'8px 16px',borderRadius:10,
             background:CTA_GRAD,color:'#fff',letterSpacing:.4,
           }}>
-            Essai gratuit
+            Essai gratuit <ArrowRight className="neo-nav-cta-arrow" style={{width:13,height:13}}/>
           </Link>
           <button
             onClick={()=>setOpen(o=>!o)}
@@ -536,14 +517,11 @@ export default function LandingPage() {
         .neo-nav-link:hover { color:#FFF0E8!important }
         .neo-galaxy-slow   { animation:galaxy-spin-slow   90s linear infinite }
         .neo-galaxy-medium { animation:galaxy-spin-medium 55s linear infinite reverse }
-        .neo-hamburger { display:none }
         .neo-nav-login { display:flex }
-        .neo-mobile-dropdown { display:none; flex-direction:column }
-        .neo-mobile-dropdown.open { display:flex; flex-direction:column }
         @media (max-width:768px) {
-          .neo-nav-links     { display:none }
-          .neo-hamburger     { display:flex !important }
           .neo-nav-login     { display:none !important }
+          .neo-nav-cta-arrow { display:none !important }
+          .neo-nav-signup    { padding:8px 14px !important; font-size:12px !important }
           .neo-nav-pad       { padding:11px 16px !important }
           .neo-grid-stats    { grid-template-columns:repeat(2,1fr) !important }
           .neo-grid-features { grid-template-columns:1fr !important }
@@ -553,8 +531,7 @@ export default function LandingPage() {
           .neo-footer-bottom { flex-direction:column !important; gap:8px !important; text-align:center }
           .neo-section-h2    { font-size:28px !important; line-height:1.2 !important }
           .neo-price-num     { font-size:36px !important }
-          .neo-nav-desktop-cta { display:none !important }
-          .neo-nav-mobile-cta  { display:flex !important }
+
           .neo-s-feat     { padding:64px 20px !important }
           .neo-s-demo     { padding:56px 20px !important }
           .neo-s-uc       { padding:56px 20px !important }
