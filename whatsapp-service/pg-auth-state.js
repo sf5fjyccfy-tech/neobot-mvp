@@ -23,9 +23,11 @@ function getPool() {
     _pool = new Pool({
       connectionString: dbUrl,
       ssl: { rejectUnauthorized: false }, // requis pour Neon
-      max: 5,
+      max: 3,                             // 5→3 : économise ~30MB sur free tier 512MB
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
+      connectionTimeoutMillis: 15_000,    // 5→15s : Neon cold start peut prendre jusqu'à 10s
+      keepAlive: true,                    // évite les connexions stagnantes coupées par Neon
+      keepAliveInitialDelayMillis: 10_000,
     });
     _pool.on('error', (err) => {
       console.error('[pg-auth-state] pool error:', err.message);
@@ -134,4 +136,17 @@ export async function clearPgAuthState(tenantId) {
     'DELETE FROM whatsapp_auth_state WHERE tenant_id=$1',
     [tenantId]
   );
+}
+
+/**
+ * Keep-alive : évite que Neon suspende la connexion pendant les périodes d'inactivité WA.
+ * À appeler toutes les 4 minutes via setInterval dans le service.
+ */
+export async function pingPool() {
+  if (!_pool) return; // pool non encore créé, pas la peine de ping
+  try {
+    await _pool.query('SELECT 1');
+  } catch (err) {
+    console.warn('[pg-auth-state] keep-alive ping failed:', err.message);
+  }
 }

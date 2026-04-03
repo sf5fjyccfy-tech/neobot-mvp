@@ -80,7 +80,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=400"   # plafonne Node.js à 400MB (free tier = 512MB)
+        value: "--max-old-space-size=350 --max-semi-space-size=4"  # 350MB V8 heap + jeune génération réduite → GC plus agressif, laisse ~160MB pour buffers natifs Baileys (free tier = 512MB)
       - key: DATABASE_URL
         sync: false           # Même URL Neon que le backend
       - key: SENTRY_DSN

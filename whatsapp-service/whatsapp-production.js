@@ -13,7 +13,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
 } from '@whiskeysockets/baileys';
-import { usePgAuthState, clearPgAuthState } from './pg-auth-state.js';
+import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state.js';
 import qrcodeTerminal from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import pino from 'pino';
@@ -770,6 +770,14 @@ function getAllTenantSnapshots() {
 }
 
 function startWatchdog() {
+  // Keep-alive Neon : un SELECT 1 toutes les 4min empêche Neon de suspendre
+  // la connexion DB pendant les périodes sans activité WhatsApp.
+  setInterval(async () => {
+    if (process.env.DATABASE_URL) {
+      await pingPool();
+    }
+  }, 4 * 60 * 1000);
+
   setInterval(async () => {
     for (const session of tenantSessions.values()) {
       if (session.initializing || session.connected) {
