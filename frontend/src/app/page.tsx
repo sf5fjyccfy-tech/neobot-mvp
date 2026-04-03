@@ -448,9 +448,11 @@ export default function LandingPage() {
           .neo-grid-stats    { grid-template-columns:repeat(2,1fr) !important }
           .neo-grid-features { grid-template-columns:1fr !important }
           .neo-grid-demo     { grid-template-columns:1fr !important; gap:36px !important }
-          .neo-grid-usecases { grid-template-columns:repeat(3,1fr) !important }
+          .neo-grid-usecases { grid-template-columns:repeat(2,1fr) !important }
           .neo-grid-footer   { grid-template-columns:1fr 1fr !important; gap:20px !important }
           .neo-footer-bottom { flex-direction:column !important; gap:8px !important; text-align:center }
+          .neo-section-h2    { font-size:28px !important; line-height:1.2 !important }
+          .neo-price-num     { font-size:36px !important }
         }
       `}</style>
 
@@ -622,7 +624,7 @@ export default function LandingPage() {
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:66}}>
               <div style={PILL}>Fonctionnalités</div>
-              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
+              <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
                 Pourquoi NéoBot ?
               </h2>
               <p style={{fontSize:16,color:'rgba(237,233,254,.36)',maxWidth:500,margin:'0 auto'}}>
@@ -654,7 +656,7 @@ export default function LandingPage() {
           <div className="neo-grid-demo" style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'1fr 1fr',gap:64,alignItems:'center',position:'relative',zIndex:1}}>
             <div>
               <div style={PILL}>Essayez maintenant — démo live</div>
-              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:42,fontWeight:900,color:'#F5F0FF',marginBottom:20,lineHeight:1.1}}>
+              <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:42,fontWeight:900,color:'#F5F0FF',marginBottom:20,lineHeight:1.1}}>
                 Parlez-lui.<br/>
                 <span style={{background:'linear-gradient(to right,#FF9A6C,#00E5CC)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
                   Il vous répond maintenant.
@@ -686,7 +688,7 @@ export default function LandingPage() {
         <section id="use-cases" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:58}}>
-              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
+              <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
                 Pour tous les secteurs
               </h2>
               <p style={{fontSize:16,color:'rgba(237,233,254,.36)'}}>
@@ -716,7 +718,7 @@ export default function LandingPage() {
         <section style={{position:'relative',zIndex:1,padding:'90px 24px'}}>
           <div style={{maxWidth:700,margin:'0 auto',textAlign:'center'}}>
             <div style={PILL}>Lancement</div>
-            <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:40,fontWeight:900,color:'#F5F0FF',marginBottom:16}}>
+            <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:40,fontWeight:900,color:'#F5F0FF',marginBottom:16}}>
               Soyez parmi les premiers
             </h2>
             <p style={{fontSize:16,color:'rgba(237,233,254,.42)',lineHeight:1.75,marginBottom:36}}>
@@ -747,7 +749,7 @@ export default function LandingPage() {
           <div style={{maxWidth:520,margin:'0 auto',position:'relative',zIndex:1}}>
             <div style={{textAlign:'center',marginBottom:48}}>
               <div style={PILL}>Tarifs</div>
-              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
+              <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF',marginBottom:12}}>
                 Simple et transparent
               </h2>
               <p style={{fontSize:16,color:'rgba(237,233,254,.36)'}}>Un seul plan, tout inclus. Aucune surprise.</p>
@@ -761,7 +763,7 @@ export default function LandingPage() {
             }}>
               <div style={{fontSize:13,fontWeight:700,color:'#00E5CC',letterSpacing:2,textTransform:'uppercase',fontFamily:'"Syne",sans-serif',marginBottom:16}}>Essential</div>
               <div style={{display:'flex',alignItems:'baseline',justifyContent:'center',gap:6,marginBottom:8}}>
-                <span style={{fontSize:52,fontWeight:900,color:'#F5F0FF',fontFamily:'"Syne",sans-serif',lineHeight:1}}>20 000</span>
+                <span className="neo-price-num" style={{fontSize:52,fontWeight:900,color:'#F5F0FF',fontFamily:'"Syne",sans-serif',lineHeight:1}}>20 000</span>
                 <span style={{fontSize:16,color:'rgba(237,233,254,.5)'}}>FCFA / mois</span>
               </div>
               <p style={{fontSize:13,color:'rgba(237,233,254,.3)',marginBottom:32}}>Après 14 jours d&apos;essai gratuit — aucune carte requise</p>
@@ -802,7 +804,7 @@ export default function LandingPage() {
         <section id="faq" style={{position:'relative',zIndex:1,padding:'110px 24px'}}>
           <div style={{maxWidth:680,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:52}}>
-              <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF'}}>
+              <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:44,fontWeight:900,color:'#F5F0FF'}}>
                 Questions fréquentes
               </h2>
             </div>
@@ -826,7 +828,7 @@ export default function LandingPage() {
                 <NeoLogo size={60} color="#FF9A6C"/>
               </div>
             </div>
-            <h2 style={{fontFamily:'"Syne",sans-serif',fontSize:46,fontWeight:900,color:'#F5F0FF',marginBottom:18,lineHeight:1.08}}>
+            <h2 className="neo-section-h2" style={{fontFamily:'"Syne",sans-serif',fontSize:46,fontWeight:900,color:'#F5F0FF',marginBottom:18,lineHeight:1.08}}>
               Prêt à transformer<br/>votre WhatsApp ?
             </h2>
             <p style={{fontSize:17,color:'rgba(237,233,254,.46)',marginBottom:36,lineHeight:1.75}}>
