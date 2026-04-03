@@ -8,6 +8,10 @@ services:
     buildCommand: "pip install -r backend/requirements.txt"
     startCommand: "cd backend && bash start.sh"
     healthCheckPath: /health
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
     envVars:
       - key: APP_ENV
         value: production
@@ -68,9 +72,15 @@ services:
     buildCommand: "npm install"
     startCommand: "node --import ./instrument.js whatsapp-production.js"
     healthCheckPath: /health
+    buildFilter:
+      paths:
+        - whatsapp-service/**
+        - render.yaml
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=400"   # plafonne Node.js à 400MB (free tier = 512MB)
       - key: DATABASE_URL
         sync: false           # Même URL Neon que le backend
       - key: SENTRY_DSN
@@ -96,6 +106,10 @@ services:
     buildCommand: "npm install --include=dev && npm run build"
     startCommand: "npx next start -p $PORT"
     healthCheckPath: /
+    buildFilter:
+      paths:
+        - frontend/**
+        - render.yaml
     envVars:
       - key: NODE_ENV
         value: production
