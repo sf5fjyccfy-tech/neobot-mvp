@@ -207,8 +207,11 @@ async def get_whatsapp_qr(
             state = qr_payload.get("state", "unknown")
             qr_image = qr_payload.get("qrImageDataUrl")
 
-            # 2) If not connected and no QR yet, ask service to initialize connection and refetch once
-            if not is_connected and not has_qr:
+            # 2) If not connected, no QR yet, and NOT in an active pairing/init flow
+            # → demander au service d'initialiser la connexion et repolled une fois
+            # Ne pas déclencher POST /connect pendant state='initializing' pour éviter
+            # d'interférer avec un code de pairing en cours de génération.
+            if not is_connected and not has_qr and state not in ('initializing',):
                 logger.info(f"🔄 No QR yet for tenant {tenant_id}, requesting connect")
                 connect_resp = await client.post(service_connect_url)
                 connect_resp.raise_for_status()

@@ -1171,27 +1171,29 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     // Pattern Baileys correct : attendre 'open' AVANT d'appeler requestPairingCode.
     // Appeler avant 'open' provoque "Connection Closed" si le WS ne s'établit pas
     // assez vite (très fréquent sur les plans Render free avec cold-start).
+    let codeGenerated = false; // garde : évite double requestPairingCode sur second 'open' (Baileys v6+)
     const formatted = await new Promise((resolveCode, rejectCode) => {
-      // Timeout de sécurité — 55s max pour que WA ouvre le WS (cloud + cold start)
+      // Timeout 25s < 30s (timeout httpx backend) — garanti que le service répond
+      // avant que le backend abandonne la requête, élimine les sockets fantômes.
       const connectionTimer = setTimeout(() => {
-        rejectCode(new Error('Connexion WhatsApp expirée (55s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
-      }, 55_000);
+        rejectCode(new Error('Connexion WhatsApp expirée (25s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
+      }, 25_000);
 
       pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
+          if (codeGenerated) return; // second 'open' (Baileys v6+, post-pairing-accept) — ignoré ici
           // WS établi — demander le code maintenant, ça marche à coup sûr
           try {
             const code = await pairSock.requestPairingCode(phone);
             clearTimeout(connectionTimer);
             const fmt = code?.match(/.{1,4}/g)?.join('-') || code;
             logger.info('Pairing code generated successfully', { tenantId, phone, code: fmt });
+            codeGenerated = true;
             resolveCode(fmt);
           } catch (codeErr) {
             clearTimeout(connectionTimer);
             rejectCode(codeErr);
           }
-        } else if (connection === 'open') {
-          // Branche morte — jsut au cas où une future version Baileys duplique l'event
         } else if (connection === 'close') {
           clearTimeout(connectionTimer);
           // Déverrouiller la session
@@ -1218,14 +1220,16 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       });
 
       // Après-code handler : relancer la session complète une fois le code entré par l'user
-      // On réabonne ici pour le cas 'open' POST-pairing (après que l'user a tapé le code)
-      // Ce handler est distinct — il s'exécute sur l'event suivant 'open' (après renvoi HTTP)
+      // On réabonne ici pour le cas 'open' POST-pairing (Baileys v6+ : second 'open' après auth)
     });
 
-    // Réabonner pour détecter quand l'utilisateur entre le code → relancer la session complète
+    // Détecter quand l'utilisateur entre le code → second 'open' Baileys v6+ → relancer session
     pairSock.ev.on('connection.update', async ({ connection }) => {
-      if (connection === 'open') {
-        logger.info('Pairing code connection open — reinitializing full session', { tenantId });
+      if (connection === 'open' && codeGenerated) {
+        logger.info('Pairing code accepted — reinitializing full session', { tenantId });
+        // Lever le guard initializing AVANT d'appeler connectTenant — sinon la guard bloque
+        session.initializing = false;
+        clearReconnectTimer(session);
         session.scheduledReconnect = setTimeout(() => {
           session.scheduledReconnect = null;
           connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
