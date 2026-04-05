@@ -1146,8 +1146,18 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     // Réutiliser getBaileysVersion() — même logique que connectTenant (cache + fallback)
     const version = await getBaileysVersion();
 
+    // Retry interne : 2 tentatives avec 4s de pause si le socket WA ne s'établit pas.
+    // Nécessaire sur Render free (0.1 CPU) quand les sessions tenant existantes saturent
+    // la bande passante ou quand Meta rate-limit les nouvelles connexions.
+    let formatted;
+    let lastPairError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        logger.info(`Pairing attempt ${attempt + 1}/2 — waiting 4s before retry`, { tenantId });
+        await new Promise(r => setTimeout(r, 4000));
+      }
+
     // Créer le socket — Baileys queue les messages en interne jusqu'à l'ouverture WS
-    // Doc officielle Baileys : appeler requestPairingCode immédiatement, sans sleep
     const pairSock = makeWASocket({
       version,
       auth: {
@@ -1158,7 +1168,11 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       printQRInTerminal: false,
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
-      connectTimeoutMs: 60_000,
+      // IMPORTANT : connectTimeoutMs doit être < notre timer (55s) pour que Baileys
+      // émette connection.close avec le vrai code d'erreur avant que notre timer fire.
+      // Ancienne valeur 60s > timer 50s → Baileys n'émettait jamais close → on ne
+      // voyait que "expirée (50s)" sans savoir pourquoi.
+      connectTimeoutMs: 40_000,
     });
 
     pairSock.ev.on('creds.update', saveCreds);
@@ -1168,22 +1182,20 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     session.initializing = true;
     session.state = 'initializing';
 
-    // Pattern Baileys correct : attendre 'open' AVANT d'appeler requestPairingCode.
-    // Appeler avant 'open' provoque "Connection Closed" si le WS ne s'établit pas
-    // assez vite (très fréquent sur les plans Render free avec cold-start).
+    // Pattern Baileys : attendre 'open' AVANT d'appeler requestPairingCode.
     let codeGenerated = false; // garde : évite double requestPairingCode sur second 'open' (Baileys v6+)
-    const formatted = await new Promise((resolveCode, rejectCode) => {
-      // Timeout 50s < 65s (timeout httpx backend) — laisse le temps à Baileys de
-      // s'établir même si le service vient de redémarrer (Render free cold start,
-      // sessions parallèles qui saturent le 0.1 CPU). Ancienne valeur 25s trop courte.
+    try {
+    formatted = await new Promise((resolveCode, rejectCode) => {
+      // Timer de sécurité 55s > connectTimeoutMs 40s → normalement Baileys émet
+      // connection.close à 40s avec le vrai code d'erreur. Ce timer ne fire que si
+      // Baileys lui-même reste muet au-delà de 55s (cas extrême).
       const connectionTimer = setTimeout(() => {
-        rejectCode(new Error('Connexion WhatsApp expirée (50s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
-      }, 50_000);
+        rejectCode(new Error('Connexion WhatsApp expirée (55s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
+      }, 55_000);
 
       pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
           if (codeGenerated) return; // second 'open' (Baileys v6+, post-pairing-accept) — ignoré ici
-          // WS établi — demander le code maintenant, ça marche à coup sûr
           try {
             const code = await pairSock.requestPairingCode(phone);
             clearTimeout(connectionTimer);
@@ -1197,32 +1209,41 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
           }
         } else if (connection === 'close') {
           clearTimeout(connectionTimer);
-          // Déverrouiller la session
           session.initializing = false;
           session.socket = null;
           session.state = 'disconnected';
           const statusCode = lastDisconnect?.error?.output?.statusCode;
+          const reason = lastDisconnect?.error?.message || 'unknown';
+          // Log du vrai code d'erreur Baileys pour diagnostic
+          logger.warn('Pairing socket closed', { tenantId, statusCode, reason, attempt });
           const isLoggedOut = statusCode === 401 || statusCode === 440;
           if (!isLoggedOut) {
-            logger.info('Pairing socket closed, scheduling reconnect', { tenantId, statusCode });
             clearReconnectTimer(session);
-            session.scheduledReconnect = setTimeout(() => {
-              session.scheduledReconnect = null;
-              connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' });
-            }, 3000);
           } else {
-            logger.info('Pairing rejected (logged out), cleaning state', { tenantId, statusCode });
             clearReconnectTimer(session);
           }
-          // La Promise sera rejetée par le timeout ou par codeErr — ne pas rejeter ici
-          // aussi sinon on risque un "unhandled rejection" double.
-          rejectCode(new Error(`Connection Closed (code ${statusCode ?? 'unknown'}) — réessayez dans quelques secondes`));
+          rejectCode(new Error(`Connection Closed (code=${statusCode ?? 'unknown'}, reason=${reason})`));
         }
       });
 
       // Après-code handler : relancer la session complète une fois le code entré par l'user
       // On réabonne ici pour le cas 'open' POST-pairing (Baileys v6+ : second 'open' après auth)
     });
+      lastPairError = null;
+      break; // succès
+    } catch (pairAttemptErr) {
+      lastPairError = pairAttemptErr;
+      logger.warn(`Pairing attempt ${attempt + 1}/2 failed`, { tenantId, error: pairAttemptErr.message });
+      // Nettoyer le socket avant la prochaine tentative
+      if (session.socket) {
+        try { session.socket.end(undefined); } catch (_) {}
+        session.socket = null;
+      }
+      session.initializing = false;
+      session.state = 'idle';
+    }
+    } // fin boucle retry
+    if (lastPairError) throw lastPairError;
 
     // Détecter quand l'utilisateur entre le code → second 'open' Baileys v6+ → relancer session
     pairSock.ev.on('connection.update', async ({ connection }) => {

@@ -340,7 +340,13 @@ async def request_pairing_code(
             last_err = None
             break  # succès — on sort de la boucle
         except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
+            # 503 du service WA = socket WA timeout (pas une erreur fatale) → on retry
+            if e.response.status_code == 503 and attempt < 2:
+                last_err = e
+                logger.info(f"WA service 503 (socket WA timeout), tentative {attempt + 1}/3 dans 5s...")
+                await asyncio.sleep(5)
+            else:
+                raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
         except httpx.RequestError as e:
             last_err = e
             if attempt < 2:
