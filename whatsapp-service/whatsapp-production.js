@@ -1173,11 +1173,12 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     // assez vite (très fréquent sur les plans Render free avec cold-start).
     let codeGenerated = false; // garde : évite double requestPairingCode sur second 'open' (Baileys v6+)
     const formatted = await new Promise((resolveCode, rejectCode) => {
-      // Timeout 25s < 30s (timeout httpx backend) — garanti que le service répond
-      // avant que le backend abandonne la requête, élimine les sockets fantômes.
+      // Timeout 50s < 65s (timeout httpx backend) — laisse le temps à Baileys de
+      // s'établir même si le service vient de redémarrer (Render free cold start,
+      // sessions parallèles qui saturent le 0.1 CPU). Ancienne valeur 25s trop courte.
       const connectionTimer = setTimeout(() => {
-        rejectCode(new Error('Connexion WhatsApp expirée (25s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
-      }, 25_000);
+        rejectCode(new Error('Connexion WhatsApp expirée (50s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
+      }, 50_000);
 
       pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
