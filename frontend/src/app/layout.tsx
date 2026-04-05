@@ -17,6 +17,7 @@ const dmSans = DM_Sans({
   variable: '--font-dm-sans',
 });
 
+// VERSION_MARKER: 929b345 — modifié le 5 avril 2026
 export const metadata: Metadata = {
   title: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
   description: 'Automatisez vos conversations WhatsApp avec une IA qui parle comme vous. Répondez à vos clients 24h/24, augmentez vos ventes. 14 jours gratuits.',

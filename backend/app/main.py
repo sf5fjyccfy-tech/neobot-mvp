@@ -408,11 +408,17 @@ app.add_middleware(SecurityHeadersMiddleware)
 # ========== HEALTH CHECKS ==========
 @app.get("/health")
 async def health():
-    """Health check simple"""
+    """Health check simple — expose le commit hash pour vérifier ce qui tourne en prod"""
+    import subprocess
+    try:
+        commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True).strip()
+    except Exception:
+        commit = os.getenv("RENDER_GIT_COMMIT", "unknown")[:7]
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "commit": commit,
     }
 
 @app.head("/health")
