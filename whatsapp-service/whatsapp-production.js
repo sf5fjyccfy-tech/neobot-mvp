@@ -1234,30 +1234,91 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     codeGenerated = true;
     logger.info('Pairing code generated successfully', { tenantId, phone, code: formatted });
 
-    // Handler post-pairing : second 'open' quand l'user entre le code dans WA
-    pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-      if (connection === 'open' && codeGenerated) {
-        logger.info('Pairing code accepted — reinitializing full session', { tenantId });
-        session.initializing = false;
-        clearReconnectTimer(session);
-        session.scheduledReconnect = setTimeout(() => {
-          session.scheduledReconnect = null;
-          connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
-        }, 500);
-      } else if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        logger.warn('Pairing socket closed after code generation', { tenantId, statusCode, codeGenerated });
-        session.initializing = false;
-        session.socket = null;
-        session.state = 'disconnected';
-        clearReconnectTimer(session);
-        // NE PAS appeler connectTenant ici : les creds ont été vidés en début de
-        // tentative. Que le code ait été généré ou non, le tenant est maintenant
-        // sans session valide. L'utilisateur doit attendre le cooldown Meta (65s)
-        // puis redemander un code depuis le dashboard.
-        // → Le rate limiter lui indiquera exactement combien de temps attendre.
-      }
-    });
+    // Handler post-pairing avec reconnexion automatique.
+    //
+    // POURQUOI : Meta ferme INTENTIONNELLEMENT le WebSocket Baileys après avoir
+    // émis le code (comportement documenté : fin du handshake de demande de code,
+    // la socket passe en mode "en attente de validation"). Si on ne reconnecte pas,
+    // la socket est morte quand l'utilisateur entre le code dans WA → WA dit
+    // "impossible de connecter l'appareil" même avec un code valide.
+    //
+    // COMMENT : on reconnecte la socket (sans rappeler requestPairingCode — Meta
+    // connaît déjà le code) jusqu'à ce que :
+    //   • connection === 'open' → l'utilisateur a entré le code → succès
+    //   • DisconnectReason.loggedOut / 401 → code expiré ou refusé → stop
+    //   • MAX_PAIR_RECONNECTS atteint (~3 min) → abandon
+    let pairDone = false;
+    let pairReconnectCount = 0;
+    const MAX_PAIR_RECONNECTS = 10;
+
+    const watchPairSock = (sock) => {
+      sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+        if (pairDone) return;
+
+        if (connection === 'open') {
+          pairDone = true;
+          logger.info('Pairing code accepted — reinitializing full session', { tenantId, reconnects: pairReconnectCount });
+          session.initializing = false;
+          clearReconnectTimer(session);
+          session.scheduledReconnect = setTimeout(() => {
+            session.scheduledReconnect = null;
+            connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
+          }, 500);
+
+        } else if (connection === 'close') {
+          const statusCode = lastDisconnect?.error?.output?.statusCode;
+          session.socket = null;
+
+          const isTerminal = statusCode === DisconnectReason.loggedOut
+            || statusCode === 401
+            || pairReconnectCount >= MAX_PAIR_RECONNECTS;
+
+          logger.warn('Pairing socket closed', { tenantId, statusCode, pairReconnectCount, isTerminal });
+
+          if (isTerminal) {
+            pairDone = true;
+            session.initializing = false;
+            session.state = 'disconnected';
+            return;
+          }
+
+          // Reconnexion avec les creds partiels sauvegardés pendant le handshake initial.
+          // Ne PAS rappeler requestPairingCode — Meta connaît déjà le code et attend
+          // que l'utilisateur le saisisse. On reconnecte juste pour être "là" quand
+          // Meta envoie la confirmation.
+          pairReconnectCount++;
+          setTimeout(async () => {
+            if (pairDone) return;
+            try {
+              const { state: s2, saveCreds: sc2 } = process.env.DATABASE_URL
+                ? await usePgAuthState(tenantId)
+                : await useMultiFileAuthState(authDir);
+              const sock2 = makeWASocket({
+                version,
+                auth: { creds: s2.creds, keys: makeCacheableSignalKeyStore(s2.keys, bailLogger, 100) },
+                usePairingCode: true,
+                browser: Browsers.macOS('Chrome'),
+                printQRInTerminal: false,
+                logger: bailLogger,
+                keepAliveIntervalMs: 10_000,
+                defaultQueryTimeoutMs: 0,
+                connectTimeoutMs: 60_000,
+              });
+              sock2.ev.on('creds.update', sc2);
+              session.socket = sock2;
+              watchPairSock(sock2);
+            } catch (err) {
+              logger.error('Pairing reconnect failed', { tenantId, err: err.message });
+              pairDone = true;
+              session.initializing = false;
+              session.state = 'disconnected';
+            }
+          }, 1500);
+        }
+      });
+    };
+
+    watchPairSock(pairSock);
 
     return res.json({
       status: 'code_generated',
