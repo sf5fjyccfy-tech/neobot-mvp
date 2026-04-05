@@ -1158,8 +1158,9 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
       },
-      // Browsers.macOS génère un User-Agent réaliste (macOS + Chrome)
-      // Évite que Meta flag la connexion comme bot automatisé
+      // OBLIGATOIRE Baileys v6 : sans usePairingCode:true, Baileys entre en mode QR
+      // et requestPairingCode() provoque "Connection Closed" immédiat côté Meta.
+      usePairingCode: true,
       browser: Browsers.macOS('Chrome'),
       printQRInTerminal: false,
       logger: bailLogger,
