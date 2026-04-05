@@ -12,6 +12,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  Browsers,
 } from '@whiskeysockets/baileys';
 import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state.js';
 import qrcodeTerminal from 'qrcode-terminal';
@@ -1157,7 +1158,9 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
       },
-      browser: ['WhatsApp Web', 'Chrome', '2.2408.10'],
+      // Browsers.macOS génère un User-Agent réaliste (macOS + Chrome)
+      // Évite que Meta flag la connexion comme bot automatisé
+      browser: Browsers.macOS('Chrome'),
       printQRInTerminal: false,
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
@@ -1171,16 +1174,30 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     session.state = 'initializing';
 
     let codeGenerated = false;
+    let metaDisconnectCode = null;
 
-    // Appel immédiat — Baileys gère l'envoi du numéro pendant le handshake WA,
-    // la Promise se résout quand Meta renvoie le code (< 10s en général).
+    // Capturer le code d'erreur Meta en temps réel pour l'inclure dans l'erreur finale
+    pairSock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+      if (connection === 'close') {
+        metaDisconnectCode = lastDisconnect?.error?.output?.statusCode
+          ?? lastDisconnect?.error?.output?.payload?.statusCode
+          ?? null;
+        logger.warn('Pairing socket closed during code generation', { tenantId, metaDisconnectCode });
+      }
+    });
+
+    // Appel immédiat — Baileys gère l'envoi du numéro pendant le handshake WA.
     const codeRaw = await Promise.race([
       pairSock.requestPairingCode(phone),
       new Promise((_, reject) => setTimeout(
         () => reject(new Error('Pairing code timeout (30s) — réessayez dans 30 secondes')),
         30_000
       )),
-    ]);
+    ]).catch(err => {
+      // Enrichir l'erreur avec le code Meta si disponible
+      const suffix = metaDisconnectCode ? ` [Meta code: ${metaDisconnectCode}]` : '';
+      throw new Error(`${err.message}${suffix}`);
+    });
 
     const formatted = codeRaw?.match(/.{1,4}/g)?.join('-') || codeRaw;
     codeGenerated = true;
