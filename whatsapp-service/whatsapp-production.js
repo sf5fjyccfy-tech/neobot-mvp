@@ -1262,15 +1262,17 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     //   • MAX_PAIR_RECONNECTS atteint (~3 min) → abandon
     let pairDone = false;
     let pairReconnectCount = 0;
-    const MAX_PAIR_RECONNECTS = 10;
+    const MAX_PAIR_RECONNECTS = 15; // ~3 min de fenêtre pour saisir le code
 
-    const watchPairSock = (sock) => {
+    const watchPairSock = (sock, label) => {
+      logger.info(`[PAIRING] watchPairSock attaché`, { tenantId, label, pairDone });
       sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+        logger.info(`[PAIRING] connection.update`, { tenantId, label, connection, pairDone, pairReconnectCount });
         if (pairDone) return;
 
         if (connection === 'open') {
           pairDone = true;
-          logger.info('Pairing code accepted — reinitializing full session', { tenantId, reconnects: pairReconnectCount });
+          logger.info('[PAIRING] ✅ Code accepté par WA — reconnecter session complète', { tenantId, pairReconnectCount });
           session.initializing = false;
           clearReconnectTimer(session);
           session.scheduledReconnect = setTimeout(() => {
@@ -1286,29 +1288,30 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
             || statusCode === 401
             || pairReconnectCount >= MAX_PAIR_RECONNECTS;
 
-          logger.warn('Pairing socket closed', { tenantId, statusCode, pairReconnectCount, isTerminal });
+          logger.warn('[PAIRING] Socket fermée', { tenantId, label, statusCode, pairReconnectCount, isTerminal });
 
           if (isTerminal) {
             pairDone = true;
             session.initializing = false;
             session.state = 'disconnected';
+            logger.error('[PAIRING] ❌ Abandon — MAX_PAIR_RECONNECTS atteint ou refus définitif', { tenantId, statusCode, pairReconnectCount });
             return;
           }
 
-          // Reconnexion avec les creds partiels sauvegardés pendant le handshake initial.
-          // Ne PAS rappeler requestPairingCode — Meta connaît déjà le code et attend
-          // que l'utilisateur le saisisse. On reconnecte juste pour être "là" quand
-          // Meta envoie la confirmation.
+          // Reconnexion RAPIDE (200ms) avec les CREDS ORIGINAUX (pas un re-read PG
+          // qui pourrait donner des clés différentes si creds.update a muté entre-temps).
+          // Meta associe le code de couplage à l'identité (noiseKey+signedIdentityKey)
+          // envoyée lors du requestPairingCode initial. Pour que Meta valide l'entrée
+          // du code par l'utilisateur, notre socket doit présenter LA MÊMe identité.
           pairReconnectCount++;
           setTimeout(async () => {
             if (pairDone) return;
+            logger.info('[PAIRING] Reconnexion sock avec creds originaux', { tenantId, pairReconnectCount });
             try {
-              const { state: s2, saveCreds: sc2 } = process.env.DATABASE_URL
-                ? await usePgAuthState(tenantId)
-                : await useMultiFileAuthState(aDir);
+              // Réutiliser state + saveCreds de l'attempt original — clés identiques garanties
               const sock2 = makeWASocket({
                 version,
-                auth: { creds: s2.creds, keys: makeCacheableSignalKeyStore(s2.keys, bailLogger, 100) },
+                auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100) },
                 usePairingCode: true,
                 browser: Browsers.macOS('Chrome'),
                 printQRInTerminal: false,
@@ -1317,21 +1320,22 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
                 defaultQueryTimeoutMs: 0,
                 connectTimeoutMs: 60_000,
               });
-              sock2.ev.on('creds.update', sc2);
+              sock2.ev.on('creds.update', saveCreds);
               session.socket = sock2;
-              watchPairSock(sock2);
+              watchPairSock(sock2, `sock${pairReconnectCount + 1}`);
             } catch (err) {
-              logger.error('Pairing reconnect failed', { tenantId, err: err.message });
+              logger.error('[PAIRING] Reconnect échoué', { tenantId, err: err.message });
               pairDone = true;
               session.initializing = false;
               session.state = 'disconnected';
             }
-          }, 1500);
+          }, 200); // 200ms au lieu de 1500 — fenêtre morte minimale
         }
       });
     };
 
-    watchPairSock(pairSock);
+    logger.info('[PAIRING] ▶ Code généré, watchPairSock actif', { tenantId, code: formatted, phone });
+    watchPairSock(pairSock, 'sock1');
 
     return res.json({
       status: 'code_generated',

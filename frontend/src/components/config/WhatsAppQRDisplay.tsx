@@ -316,8 +316,16 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                   <div style={{ background: BG, border: `2px solid ${NEON}`, borderRadius: 12, padding: '14px 20px', letterSpacing: 6, fontSize: 28, fontWeight: 900, color: NEON, fontFamily: 'monospace' }}>
                     {pairingCode}
                   </div>
+                  {/* Instruction critique : éviter que l'utilisateur demande un nouveau code inutilement */}
+                  <div style={{ background: '#FF9A6C15', border: '1px solid #FF9A6C40', borderRadius: 8, padding: '8px 12px', marginTop: 10, textAlign: 'left' }}>
+                    <p style={{ color: '#FF9A6C', fontSize: 12, fontWeight: 700, margin: '0 0 3px' }}>⚠️ Si WA dit &quot;impossible de connecter&quot; :</p>
+                    <p style={{ color: MUTED, fontSize: 11, margin: 0, lineHeight: 1.5 }}>
+                      Attendez <strong style={{ color: TEXT }}>3 secondes</strong> puis appuyez sur <strong style={{ color: TEXT }}>&quot;Saisir le code à nouveau&quot;</strong> dans WA.<br />
+                      <span style={{ color: '#888' }}>Ne demandez PAS un nouveau code ici — le code est valide, le serveur se reconnecte.</span>
+                    </p>
+                  </div>
                   {/* Boutons copier + régénérer */}
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 10 }}>
                     <button
                       onClick={handleCopyCode}
                       style={{ flex: 1, padding: '9px 0', background: copied ? '#00E5CC20' : '#00E5CC15', border: `1px solid ${copied ? '#00E5CC' : '#00E5CC60'}`, borderRadius: 8, color: copied ? '#00E5CC' : '#A0D8D0', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' }}>
@@ -329,7 +337,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                       🔄 Nouveau code
                     </button>
                   </div>
-                  <p style={{ color: MUTED, fontSize: 11, marginTop: 8 }}>Code valide quelques minutes · Sur WA : ⋮ → Appareils connectés → Associer → Code téléphonique</p>
+                  <p style={{ color: MUTED, fontSize: 11, marginTop: 8 }}>Code valide 3 min · Sur WA : ⋮ → Appareils connectés → Associer → Code téléphonique</p>
                 </div>
               ) : (
                 <form onSubmit={handleRequestPairingCode} style={{ display: 'flex', gap: 8, maxWidth: 320, margin: '0 auto 12px' }}>
