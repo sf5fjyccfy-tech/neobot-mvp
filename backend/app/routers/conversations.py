@@ -300,13 +300,16 @@ async def toggle_bot_pause(
         human_state.human_active = body.paused
         if body.paused:
             human_state.ai_paused_at = now
-            human_state.last_human_message_at = now
+            # NULL = pause manuelle indéfinie (pas de fenêtre de 30 min)
+            human_state.last_human_message_at = None
+        else:
+            human_state.last_human_message_at = None
     else:
         human_state = ConversationHumanState(
             conversation_id=conv_id,
             human_active=body.paused,
             ai_paused_at=now if body.paused else None,
-            last_human_message_at=now if body.paused else None,
+            last_human_message_at=None,  # pause manuelle = indéfinie
         )
         db.add(human_state)
 

@@ -464,20 +464,24 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             logger.info(f"🚫 IA désactivée pour {phone} (tenant {tenant_id}) — réponse ignorée")
             return {"status": "skipped", "reason": "ai_disabled_for_contact"}
 
-        # Check human takeover — opérateur actif dans les 30 dernières minutes?
+        # Check human takeover — pause manuelle (indéfinie) ou temporaire (30 min) ?
         human_state = db.query(ConversationHumanState).filter(
             ConversationHumanState.conversation_id == conversation.id
         ).first()
         if human_state and human_state.human_active:
+            if human_state.last_human_message_at is None:
+                # Pause manuelle indéfinie (toggle) — respecter sans limite de temps
+                logger.info(f"🔇 Bot en pause manuelle conv {conversation.id} — opérateur doit reprendre manuellement")
+                return {"status": "skipped", "reason": "human_takeover"}
             pause_window = timedelta(minutes=30)
-            if human_state.last_human_message_at and (datetime.utcnow() - human_state.last_human_message_at) < pause_window:
-                logger.info(f"🔇 Bot en pause conv {conversation.id} — opérateur actif depuis {human_state.last_human_message_at}")
+            if (datetime.utcnow() - human_state.last_human_message_at) < pause_window:
+                logger.info(f"🔇 Bot en pause temporaire conv {conversation.id} — opérateur actif depuis {human_state.last_human_message_at}")
                 return {"status": "skipped", "reason": "human_takeover"}
             else:
-                # Pause expirée — réactiver le bot automatiquement
+                # Pause temporaire expirée — réactiver le bot automatiquement
                 human_state.human_active = False
                 db.commit()
-                logger.info(f"🔄 Pause expirée conv {conversation.id} — bot réactivé")
+                logger.info(f"🔄 Pause temporaire expirée conv {conversation.id} — bot réactivé")
 
         # Fetch agent settings (delay + typing) before generating response
         active_agent = AgentService.get_active_agent(tenant_id, db)
@@ -650,7 +654,7 @@ async def save_message_to_db(
     conversation = db.query(Conversation).filter(
         Conversation.tenant_id == tenant_id,
         Conversation.customer_phone == phone,
-    ).first()
+    ).order_by(Conversation.id.desc()).first()
 
     if not conversation:
         conversation = Conversation(
