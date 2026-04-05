@@ -1152,86 +1152,99 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       fs.mkdirSync(authDir, { recursive: true });
     }
 
-    // Vider les credentials existants — Baileys rejette requestPairingCode si
-    // state.creds.registered === true (device déjà enregistré / session précédente).
-    // On force un départ propre : nouvelle paire de clés, nouveau pairing.
-    if (process.env.DATABASE_URL) {
-      await clearPgAuthState(tenantId);
-    } else {
-      // Supprime le contenu du répertoire auth sans supprimer le répertoire lui-même
-      for (const file of fs.readdirSync(authDir)) {
-        fs.rmSync(path.join(authDir, file), { force: true });
+    // Helper : crée un socket + demande le code. Appelé une fois, retenté une fois
+    // si Meta ferme la connexion immédiatement (transitoire sur Render).
+    const attemptGetCode = async () => {
+      // Effacer les creds — requestPairingCode échoue si creds.registered === true.
+      if (process.env.DATABASE_URL) {
+        await clearPgAuthState(tenantId);
+      } else {
+        for (const file of fs.readdirSync(authDir)) {
+          fs.rmSync(path.join(authDir, file), { force: true });
+        }
       }
+
+      const { state, saveCreds } = process.env.DATABASE_URL
+        ? await usePgAuthState(tenantId)
+        : await useMultiFileAuthState(authDir);
+
+      const version = await getBaileysVersion();
+
+      const sock = makeWASocket({
+        version,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
+        },
+        usePairingCode: true,
+        browser: Browsers.macOS('Chrome'),
+        printQRInTerminal: false,
+        logger: bailLogger,
+        generateHighQualityLinkPreview: false,
+        connectTimeoutMs: 60_000,
+        keepAliveIntervalMs: 10_000,
+        defaultQueryTimeoutMs: 0,
+      });
+      sock.ev.on('creds.update', saveCreds);
+
+      let metaCode = null;
+      sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+        if (connection === 'close') {
+          metaCode = lastDisconnect?.error?.output?.statusCode
+            ?? lastDisconnect?.error?.output?.payload?.statusCode
+            ?? null;
+          logger.warn('Pairing sock closed during code request', { tenantId, metaCode });
+        }
+      });
+
+      // Attendre ~300ms que le handshake WS interne démarre avant d'envoyer la demande.
+      // Sans ce délai, certains environnements (Render cold start) obtiennent
+      // "Connection Closed" immédiat car le transport n'est pas encore prêt.
+      await new Promise(r => setTimeout(r, 300));
+
+      const raw = await Promise.race([
+        sock.requestPairingCode(phone),
+        new Promise((_, reject) => setTimeout(
+          () => reject(new Error('Pairing code timeout (30s)')), 30_000
+        )),
+      ]).catch(err => {
+        const suffix = metaCode ? ` [Meta code: ${metaCode}]` : '';
+        // Propager le metaCode pour que le retry décide quoi faire
+        const e = new Error(`${err.message}${suffix}`);
+        e.metaCode = metaCode;
+        throw e;
+      });
+
+      return { raw, sock, saveCreds, state, version, authDir };
+    };
+
+    // --- Tentative 1 ---
+    let attempt;
+    try {
+      attempt = await attemptGetCode();
+    } catch (err1) {
+      // Retry unique : si Meta a fermé la connexion (transitoire / cold start Render),
+      // on attend 8s et on réessaie. Les refus définitifs (401, 403) ne sont pas retentés.
+      const isTransient = err1.message.includes('Connection Closed') && err1.metaCode !== 401 && err1.metaCode !== 403;
+      if (!isTransient) throw err1;
+
+      logger.warn('requestPairingCode transient fail — retrying in 8s', { tenantId, err: err1.message });
+      await new Promise(r => setTimeout(r, 8_000));
+
+      // Augmenter le cooldown à 120s en cas d'échec (Meta se souvient des tentatives
+      // même après un restart Render — on lui laisse plus de temps pour "oublier").
+      _pairingRateLimit.set(tenantId, { phone, ts: Date.now() - (PAIRING_COOLDOWN_MS - 120_000) });
+
+      attempt = await attemptGetCode(); // laisse remonter si ça échoue encore
     }
 
-    const { state, saveCreds } = process.env.DATABASE_URL
-      ? await usePgAuthState(tenantId)
-      : await useMultiFileAuthState(authDir);
-
-    // Réutiliser getBaileysVersion() — même logique que connectTenant (cache + fallback)
-    const version = await getBaileysVersion();
-
-    // Pattern officiel Baileys v6 pour le pairing code :
-    // requestPairingCode() est appelé IMMÉDIATEMENT après makeWASocket, PAS après 'open'.
-    // 'connection.update' === 'open' ne se déclenche qu'après authentication complète —
-    // ce qui, lors d'un pairing initial, n'arrive jamais avant que le code soit généré.
-    // Attendre 'open' avant d'appeler requestPairingCode = deadlock garanti.
-    const pairSock = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
-      },
-      // OBLIGATOIRE Baileys v6 : sans usePairingCode:true, Baileys entre en mode QR
-      // et requestPairingCode() provoque "Connection Closed" immédiat côté Meta.
-      usePairingCode: true,
-      browser: Browsers.macOS('Chrome'),
-      printQRInTerminal: false,
-      logger: bailLogger,
-      generateHighQualityLinkPreview: false,
-      connectTimeoutMs: 60_000,
-      // CRITIQUE : sans keepAlive, Meta ferme le WebSocket après ~15s d'inactivité
-      // (entre la génération du code et la saisie par l'utilisateur dans WA).
-      // Le socket doit rester vivant pendant toute la fenêtre de saisie (~60-90s).
-      keepAliveIntervalMs: 10_000,
-      // Désactiver les timeouts de query — la saisie humaine peut prendre du temps
-      defaultQueryTimeoutMs: 0,
-    });
-
-    pairSock.ev.on('creds.update', saveCreds);
+    const { raw, sock: pairSock, saveCreds, state, version, authDir: aDir } = attempt;
 
     session.socket = pairSock;
     session.initializing = true;
     session.state = 'initializing';
 
-    let codeGenerated = false;
-    let metaDisconnectCode = null;
-
-    // Capturer le code d'erreur Meta en temps réel pour l'inclure dans l'erreur finale
-    pairSock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-      if (connection === 'close') {
-        metaDisconnectCode = lastDisconnect?.error?.output?.statusCode
-          ?? lastDisconnect?.error?.output?.payload?.statusCode
-          ?? null;
-        logger.warn('Pairing socket closed during code generation', { tenantId, metaDisconnectCode });
-      }
-    });
-
-    // Appel immédiat — Baileys gère l'envoi du numéro pendant le handshake WA.
-    const codeRaw = await Promise.race([
-      pairSock.requestPairingCode(phone),
-      new Promise((_, reject) => setTimeout(
-        () => reject(new Error('Pairing code timeout (30s) — réessayez dans 30 secondes')),
-        30_000
-      )),
-    ]).catch(err => {
-      // Enrichir l'erreur avec le code Meta si disponible
-      const suffix = metaDisconnectCode ? ` [Meta code: ${metaDisconnectCode}]` : '';
-      throw new Error(`${err.message}${suffix}`);
-    });
-
-    const formatted = codeRaw?.match(/.{1,4}/g)?.join('-') || codeRaw;
-    codeGenerated = true;
+    const formatted = raw?.match(/.{1,4}/g)?.join('-') || raw;
     logger.info('Pairing code generated successfully', { tenantId, phone, code: formatted });
 
     // Handler post-pairing avec reconnexion automatique.
@@ -1292,7 +1305,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
             try {
               const { state: s2, saveCreds: sc2 } = process.env.DATABASE_URL
                 ? await usePgAuthState(tenantId)
-                : await useMultiFileAuthState(authDir);
+                : await useMultiFileAuthState(aDir);
               const sock2 = makeWASocket({
                 version,
                 auth: { creds: s2.creds, keys: makeCacheableSignalKeyStore(s2.keys, bailLogger, 100) },
