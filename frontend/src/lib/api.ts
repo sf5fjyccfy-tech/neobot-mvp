@@ -174,8 +174,17 @@ export const clearAuth = (): void => {
 
 // ─── Impersonation helpers ────────────────────────────────────────────────────
 
-export const startImpersonation = (token: string, tenantName: string): void => {
+export const startImpersonation = (token: string, tenantName: string, tenantId?: number): void => {
   if (typeof window !== 'undefined') {
+    // Sauvegarder le tenant_id original de l'admin avant de le remplacer
+    const originalTenantId = localStorage.getItem('tenant_id');
+    if (originalTenantId) {
+      sessionStorage.setItem('admin_tenant_id', originalTenantId);
+    }
+    // Synchroniser tenant_id avec le tenant impersonifié
+    if (tenantId !== undefined) {
+      localStorage.setItem('tenant_id', String(tenantId));
+    }
     // Double stockage : sessionStorage (onglet) + localStorage (résiste au refresh)
     sessionStorage.setItem('impersonate_token', token);
     sessionStorage.setItem('impersonate_tenant', tenantName);
@@ -186,6 +195,12 @@ export const startImpersonation = (token: string, tenantName: string): void => {
 
 export const stopImpersonation = (): void => {
   if (typeof window !== 'undefined') {
+    // Restaurer le tenant_id original de l'admin
+    const originalTenantId = sessionStorage.getItem('admin_tenant_id');
+    if (originalTenantId) {
+      localStorage.setItem('tenant_id', originalTenantId);
+      sessionStorage.removeItem('admin_tenant_id');
+    }
     sessionStorage.removeItem('impersonate_token');
     sessionStorage.removeItem('impersonate_tenant');
     localStorage.removeItem('impersonate_token');

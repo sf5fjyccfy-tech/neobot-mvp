@@ -55,10 +55,17 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         setPairingCode(null);
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Erreur d'accès (403) — stop immédiat, pas la peine de réessayer
+      const isAccessError = msg.toLowerCase().includes('access') || msg.includes('403');
+      if (isAccessError) {
+        stopPolling();
+        return; // pas d'état d'erreur affiché : le composant parent doit gérer l'auth
+      }
       errorCountRef.current += 1;
       // Logger une seule fois pour ne pas spammer la console
       if (errorCountRef.current === 1) {
-        console.warn('WhatsApp QR fetch failed:', err instanceof Error ? err.message : err);
+        console.warn('WhatsApp QR fetch failed:', msg);
       }
       if (errorCountRef.current >= MAX_ERRORS) {
         stopPolling(); // stopper le polling — l'utilisateur a un bouton Réessayer

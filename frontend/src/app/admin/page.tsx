@@ -130,7 +130,7 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const token = getToken();
+    const token = getAdminToken();
     if (!token) { router.push('/login'); return; }
     // Vérification superadmin côté serveur (source de vérité — non contournable)
     fetch(buildApiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${token}` } })
@@ -173,7 +173,7 @@ export default function AdminPage() {
   const impersonate = async (tenantId: number) => {
     try {
       const data = await adminCall(`/api/admin/tenants/${tenantId}/impersonate`, { method: 'POST' }).then(r => r.json());
-      startImpersonation(data.access_token, data.tenant_name);
+      startImpersonation(data.access_token, data.tenant_name, data.tenant_id);
       window.open('/dashboard', '_blank');
     } catch (e: any) {
       Sentry.captureException(e, { tags: { admin_action: 'impersonate' }, extra: { tenantId } });
