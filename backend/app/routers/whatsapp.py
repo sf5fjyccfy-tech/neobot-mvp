@@ -2,9 +2,11 @@
 WhatsApp Router - Gestion des sessions et QR codes
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+import asyncio
 import logging
 import os
 import httpx
@@ -324,35 +326,40 @@ async def request_pairing_code(
     if not phone.isdigit() or not (7 <= len(phone) <= 15):
         raise HTTPException(status_code=422, detail="Numéro invalide — format international sans +, ex: 22612345678")
 
-    try:
-        # Timeout 40s : WA service a 35s pour répondre (timer interne Baileys 30s + marge).
-        # Un seul retry si le service est en cold start (connexion refusée = RequestError).
+    async def _call_wa_service() -> httpx.Response:
         async with httpx.AsyncClient(timeout=40.0) as client:
-            resp = await client.post(
+            return await client.post(
                 f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
                 json={"phone_number": phone},
             )
-            resp.raise_for_status()
-            data = resp.json()
+
+    try:
+        resp = await _call_wa_service()
     except httpx.RequestError as e:
         # Connexion refusée = cold start Render. Un seul retry après 5s.
         logger.info(f"WA service cold start, retry après 5s: {e}")
         await asyncio.sleep(5)
         try:
-            async with httpx.AsyncClient(timeout=40.0) as client:
-                resp = await client.post(
-                    f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
-                    json={"phone_number": phone},
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            resp = await _call_wa_service()
         except httpx.RequestError as e2:
             logger.error(f"WA service inaccessible: {e2}")
             raise HTTPException(status_code=503, detail="Service WhatsApp inaccessible — réessayez dans 1 minute")
-        except httpx.HTTPStatusError as e2:
-            raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e2.response.text}")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
+
+    # 429 : rate limit Meta — renvoyer tel quel avec wait_seconds dans le body pour le frontend
+    if resp.status_code == 429:
+        wa_data = resp.json()
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": wa_data.get("error", "Trop de tentatives — attendez avant de réessayer"),
+                "wait_seconds": wa_data.get("wait_seconds", 65),
+            },
+        )
+
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {resp.text}")
+
+    data = resp.json()
 
     if data.get("status") == "already_connected":
         return {"status": "already_connected", "message": "WhatsApp déjà connecté"}

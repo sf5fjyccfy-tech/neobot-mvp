@@ -24,6 +24,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const [pairingLoading, setPairingLoading] = useState(false);
   const [pairingError, setPairingError] = useState('');
   const [showPairing, setShowPairing] = useState(false);
+  const [pairingCooldown, setPairingCooldown] = useState(0); // secondes restantes avant retry
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sur mobile, le QR code est inutilisable (scanner son propre téléphone) — basculer sur le code de jumelage
   useEffect(() => {
@@ -88,6 +90,12 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   };
 
   useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     fetchQRCode();
     intervalRef.current = setInterval(fetchQRCode, 5000);
     return () => stopPolling();
@@ -108,9 +116,25 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     } finally { setLoading(false); }
   };
 
+  const startCooldown = (seconds: number) => {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setPairingCooldown(seconds);
+    cooldownRef.current = setInterval(() => {
+      setPairingCooldown(prev => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const handleRequestPairingCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pairingPhone) { setPairingError('Entrez le numéro de téléphone lié à ce WhatsApp'); return; }
+    if (pairingCooldown > 0) return;
     setPairingLoading(true); setPairingError(''); setPairingCode(null);
     try {
       const res = await apiCall(`/api/tenants/${tenantId}/whatsapp/request-pairing-code`, {
@@ -118,9 +142,15 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         body: JSON.stringify({ phone_number: pairingPhone.replace(/\D/g, '') }),
       });
       const data = await res.json();
+      if (res.status === 429) {
+        const wait = data.wait_seconds ?? 65;
+        const msg = data.error || 'Trop de tentatives — attendez avant de réessayer';
+        setPairingError(`⏳ ${msg}`);
+        startCooldown(wait);
+        return;
+      }
       if (!res.ok) {
-        // 429 = rate limit Meta, 503 = erreur WA service
-        setPairingError(`❌ ${data.error || 'Erreur service WhatsApp'}`);
+        setPairingError(`❌ ${data.detail || data.error || 'Erreur service WhatsApp'}`);
         return;
       }
       if (data.status === 'already_connected') {
@@ -310,9 +340,9 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                     placeholder="22612345678 (sans +)"
                     style={{ flex: 1, padding: '8px 12px', background: BG, border: `1px solid ${BORDER}`, borderRadius: 8, color: TEXT, fontSize: 13, outline: 'none' }}
                   />
-                  <button type="submit" disabled={pairingLoading}
-                    style={{ padding: '8px 14px', background: '#00E5CC', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: pairingLoading ? 'not-allowed' : 'pointer' }}>
-                    {pairingLoading ? '⏳ ~30s...' : 'Code'}
+                  <button type="submit" disabled={pairingLoading || pairingCooldown > 0}
+                    style={{ padding: '8px 14px', background: pairingCooldown > 0 ? '#555' : '#00E5CC', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: (pairingLoading || pairingCooldown > 0) ? 'not-allowed' : 'pointer', minWidth: 72, transition: 'background .3s' }}>
+                    {pairingLoading ? '⏳ ~30s...' : pairingCooldown > 0 ? `⏳ ${pairingCooldown}s` : 'Code'}
                   </button>
                 </form>
               )}
