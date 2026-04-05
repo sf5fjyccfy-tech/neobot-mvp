@@ -1055,6 +1055,31 @@ app.post('/api/whatsapp/tenants/:tenantId/disconnect', async (req, res) => {
   }
 });
 
+// ── Envoi de message pour un tenant spécifique ─────────────────────────────
+// POST /api/whatsapp/tenants/:tenantId/send-message
+// Body: { to: "22612345678", message: "Bonjour" }
+// Utilisé par le backend pour les réponses bot ET les messages opérateur
+app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
+  const tenantId = Number.parseInt(req.params.tenantId, 10);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    return res.status(400).json({ error: 'Invalid tenantId' });
+  }
+
+  const { to, message } = req.body || {};
+  if (!to || !message) {
+    return res.status(400).json({ error: 'Missing required fields: to, message' });
+  }
+
+  try {
+    const result = await sendMessageForTenant(tenantId, to, message);
+    logger.info('Outgoing message sent', { tenantId, to, msgId: result?.key?.id || null });
+    res.json({ status: 'sent', tenantId, id: result?.key?.id || null });
+  } catch (error) {
+    logger.error('Failed to send message for tenant', { tenantId, to, error: error.message });
+    res.status(503).json({ error: error.message });
+  }
+});
+
 // ── Pairing code (alternative au QR — pas sujet au rate-limit WA) ──────────
 // POST /api/whatsapp/tenants/:tenantId/request-pairing-code
 // Body: { phone_number: "22612345678" }  ← sans le +

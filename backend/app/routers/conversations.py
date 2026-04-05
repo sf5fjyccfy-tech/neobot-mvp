@@ -251,6 +251,12 @@ async def send_manual_message(
                 json={"to": conv.customer_phone, "message": body.message},
                 headers={"x-api-key": INTERNAL_API_KEY},
             )
+            # Fallback : endpoint multi-tenant absent (service WA plus ancien)
+            if r.status_code == 404:
+                r = await client.post(
+                    f"{WHATSAPP_SERVICE_URL}/send",
+                    json={"to": conv.customer_phone, "text": body.message},
+                )
             wa_ok = r.status_code == 200
             if not wa_ok:
                 wa_error = r.text[:200]
