@@ -53,6 +53,8 @@ const MAX_RETRIES = Number.parseInt(process.env.WHATSAPP_MAX_RETRIES || '10', 10
 const BASE_RECONNECT_DELAY_MS = Number.parseInt(process.env.WHATSAPP_RECONNECT_TIMEOUT || '5000', 10);
 const MAX_RECONNECT_DELAY_MS = 300000; // 5min max entre retries
 const ERROR_AUTORECOVERY_MS = 15 * 60 * 1000; // 15min avant auto-recovery depuis état error
+// Debounce messages entrants : agréger les messages rapides d'un même expéditeur avant de les envoyer au backend
+const MSG_DEBOUNCE_MS = Number(process.env.MSG_DEBOUNCE_MS) || 2500;
 const QR_TTL_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 30_000;
 const BAILEYS_VERSION_CACHE_MS = 4 * 60 * 60 * 1000;
@@ -113,6 +115,10 @@ class TenantSession {
     this.qrExpiresAt = null;
     this.scheduledReconnect = null;
     this.connectedPhone = null; // JID extrait des creds Baileys au moment de la connexion
+    // Debounce messages entrants : buffer par expéditeur, aggrège les bursts avant d'appeler le backend
+    this.msgBuffers = new Map();         // phone → string[]
+    this.msgDebounceTimers = new Map();  // phone → setTimeout handle
+    this.msgDebounceLastMsg = new Map(); // phone → dernier objet msg Baileys brut
   }
 
   snapshot() {
@@ -652,7 +658,67 @@ async function connectTenant(tenantId, options = {}) {
           }
         }
 
-        await forwardIncomingMessage(session.tenantId, msg);
+        // --- Debounce par expéditeur ---
+        // Extraire le texte ici pour décider si c'est un message textuel avant de buffuriser
+        const rawText =
+          msg?.message?.conversation ||
+          msg?.message?.extendedTextMessage?.text ||
+          msg?.message?.imageMessage?.caption ||
+          msg?.message?.videoMessage?.caption ||
+          '';
+
+        if (!rawText) continue; // pas de texte → on skippe (même comportement qu'avant)
+
+        const senderJid = msg?.key?.remoteJid || '';
+        const senderPhone = extractPhoneFromJid(senderJid);
+
+        // Si on ne peut pas extraire le numéro → fallback direct sans debounce
+        if (!senderPhone) {
+          await forwardIncomingMessage(session.tenantId, msg);
+          continue;
+        }
+
+        // Bufferiser le texte
+        if (!session.msgBuffers.has(senderPhone)) {
+          session.msgBuffers.set(senderPhone, []);
+        }
+        session.msgBuffers.get(senderPhone).push(rawText);
+        session.msgDebounceLastMsg.set(senderPhone, msg);
+
+        // Réinitialiser le timer
+        clearTimeout(session.msgDebounceTimers.get(senderPhone));
+        session.msgDebounceTimers.set(
+          senderPhone,
+          setTimeout(async () => {
+            const texts = session.msgBuffers.get(senderPhone) || [];
+            const lastMsg = session.msgDebounceLastMsg.get(senderPhone);
+
+            // Nettoyer immédiatement pour éviter les fuites mémoire
+            session.msgBuffers.delete(senderPhone);
+            session.msgDebounceTimers.delete(senderPhone);
+            session.msgDebounceLastMsg.delete(senderPhone);
+
+            if (!lastMsg || texts.length === 0) return;
+
+            if (texts.length === 1) {
+              // Cas fréquent : 1 seul message → pas de merge inutile
+              await forwardIncomingMessage(session.tenantId, lastMsg);
+            } else {
+              // Plusieurs messages → merger en un seul objet avec conversation concaténée
+              logger.info('Debounce merge', {
+                tenantId: session.tenantId,
+                phone: senderPhone,
+                count: texts.length,
+              });
+              const mergedMsg = {
+                ...lastMsg,
+                message: { conversation: texts.join('\n') },
+              };
+              await forwardIncomingMessage(session.tenantId, mergedMsg);
+            }
+          }, MSG_DEBOUNCE_MS)
+        );
+        // --- Fin debounce ---
       }
     });
 
@@ -693,6 +759,12 @@ async function resetTenant(tenantId, options = {}) {
   session.qrRaw = null;
   session.qrImageDataUrl = null;
   session.qrExpiresAt = null;
+
+  // Annuler les timers de debounce en cours pour éviter les fire-after-reset
+  for (const timer of session.msgDebounceTimers.values()) clearTimeout(timer);
+  session.msgDebounceTimers.clear();
+  session.msgBuffers.clear();
+  session.msgDebounceLastMsg.clear();
 
   if (!keepSessionObject) {
     tenantSessions.delete(tenantId);
