@@ -1146,18 +1146,8 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     // Réutiliser getBaileysVersion() — même logique que connectTenant (cache + fallback)
     const version = await getBaileysVersion();
 
-    // Retry interne : 2 tentatives avec 4s de pause si le socket WA ne s'établit pas.
-    // Nécessaire sur Render free (0.1 CPU) quand les sessions tenant existantes saturent
-    // la bande passante ou quand Meta rate-limit les nouvelles connexions.
-    let formatted;
-    let lastPairError;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) {
-        logger.info(`Pairing attempt ${attempt + 1}/2 — waiting 4s before retry`, { tenantId });
-        await new Promise(r => setTimeout(r, 4000));
-      }
-
-    // Créer le socket — Baileys queue les messages en interne jusqu'à l'ouverture WS
+    // Créer le socket de pairing — connectTimeoutMs 30s (Baileys émet connection.close
+    // avec le vrai code d'erreur avant notre timer de 35s si Meta refuse la connexion).
     const pairSock = makeWASocket({
       version,
       auth: {
@@ -1168,34 +1158,28 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       printQRInTerminal: false,
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
-      // IMPORTANT : connectTimeoutMs doit être < notre timer (55s) pour que Baileys
-      // émette connection.close avec le vrai code d'erreur avant que notre timer fire.
-      // Ancienne valeur 60s > timer 50s → Baileys n'émettait jamais close → on ne
-      // voyait que "expirée (50s)" sans savoir pourquoi.
-      connectTimeoutMs: 40_000,
+      connectTimeoutMs: 30_000,  // < timer de 35s → Baileys émet close avant que notre timer fire
     });
 
     pairSock.ev.on('creds.update', saveCreds);
 
-    // Stocker dans la session pour que les événements connection.update soient traités
     session.socket = pairSock;
     session.initializing = true;
     session.state = 'initializing';
 
-    // Pattern Baileys : attendre 'open' AVANT d'appeler requestPairingCode.
-    let codeGenerated = false; // garde : évite double requestPairingCode sur second 'open' (Baileys v6+)
-    try {
-    formatted = await new Promise((resolveCode, rejectCode) => {
-      // Timer de sécurité 55s > connectTimeoutMs 40s → normalement Baileys émet
-      // connection.close à 40s avec le vrai code d'erreur. Ce timer ne fire que si
-      // Baileys lui-même reste muet au-delà de 55s (cas extrême).
+    // codeGenerated déclaré ICI (hors Promise et hors loop) — accessible partout après
+    let codeGenerated = false;
+
+    const formatted = await new Promise((resolveCode, rejectCode) => {
+      // Timer de sécurité 35s > connectTimeoutMs 30s → normalement Baileys émet
+      // connection.close à 30s avec le vrai code d'erreur Meta (ex: 515, 401, 408).
       const connectionTimer = setTimeout(() => {
-        rejectCode(new Error('Connexion WhatsApp expirée (55s) — serveurs WA inaccessibles, réessayez dans quelques secondes'));
-      }, 55_000);
+        rejectCode(new Error('Timeout 35s — serveurs WA inaccessibles, réessayez dans 30 secondes'));
+      }, 35_000);
 
       pairSock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
-          if (codeGenerated) return; // second 'open' (Baileys v6+, post-pairing-accept) — ignoré ici
+          if (codeGenerated) return; // second 'open' post-pairing (Baileys v6+) — ignoré ici
           try {
             const code = await pairSock.requestPairingCode(phone);
             clearTimeout(connectionTimer);
@@ -1214,42 +1198,19 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
           session.state = 'disconnected';
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const reason = lastDisconnect?.error?.message || 'unknown';
-          // Log du vrai code d'erreur Baileys pour diagnostic
-          logger.warn('Pairing socket closed', { tenantId, statusCode, reason, attempt });
-          const isLoggedOut = statusCode === 401 || statusCode === 440;
-          if (!isLoggedOut) {
-            clearReconnectTimer(session);
-          } else {
-            clearReconnectTimer(session);
-          }
+          logger.warn('Pairing socket closed', { tenantId, statusCode, reason });
+          clearReconnectTimer(session);
+          // Propagation du vrai code d'erreur Meta pour diagnostic côté user
           rejectCode(new Error(`Connection Closed (code=${statusCode ?? 'unknown'}, reason=${reason})`));
         }
       });
-
-      // Après-code handler : relancer la session complète une fois le code entré par l'user
-      // On réabonne ici pour le cas 'open' POST-pairing (Baileys v6+ : second 'open' après auth)
     });
-      lastPairError = null;
-      break; // succès
-    } catch (pairAttemptErr) {
-      lastPairError = pairAttemptErr;
-      logger.warn(`Pairing attempt ${attempt + 1}/2 failed`, { tenantId, error: pairAttemptErr.message });
-      // Nettoyer le socket avant la prochaine tentative
-      if (session.socket) {
-        try { session.socket.end(undefined); } catch (_) {}
-        session.socket = null;
-      }
-      session.initializing = false;
-      session.state = 'idle';
-    }
-    } // fin boucle retry
-    if (lastPairError) throw lastPairError;
 
-    // Détecter quand l'utilisateur entre le code → second 'open' Baileys v6+ → relancer session
+    // Handler post-pairing : quand l'user entre le code dans WA → second 'open' Baileys v6+
+    // pairSock EST en scope ici (déclaré dans le même bloc try, pas dans une boucle)
     pairSock.ev.on('connection.update', async ({ connection }) => {
       if (connection === 'open' && codeGenerated) {
         logger.info('Pairing code accepted — reinitializing full session', { tenantId });
-        // Lever le guard initializing AVANT d'appeler connectTenant — sinon la guard bloque
         session.initializing = false;
         clearReconnectTimer(session);
         session.scheduledReconnect = setTimeout(() => {

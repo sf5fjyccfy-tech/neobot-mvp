@@ -324,41 +324,35 @@ async def request_pairing_code(
     if not phone.isdigit() or not (7 <= len(phone) <= 15):
         raise HTTPException(status_code=422, detail="Numéro invalide — format international sans +, ex: 22612345678")
 
-    # Retry sur cold start Render free tier : le service peut refuser la connexion
-    # pendant 30-60s au démarrage. On tente 3 fois avec 20s d'intervalle.
-    last_err: Exception | None = None
-    data: dict = {}
-    for attempt in range(3):
+    try:
+        # Timeout 40s : WA service a 35s pour répondre (timer interne Baileys 30s + marge).
+        # Un seul retry si le service est en cold start (connexion refusée = RequestError).
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            resp = await client.post(
+                f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
+                json={"phone_number": phone},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.RequestError as e:
+        # Connexion refusée = cold start Render. Un seul retry après 5s.
+        logger.info(f"WA service cold start, retry après 5s: {e}")
+        await asyncio.sleep(5)
         try:
-            async with httpx.AsyncClient(timeout=65.0) as client:
+            async with httpx.AsyncClient(timeout=40.0) as client:
                 resp = await client.post(
                     f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
                     json={"phone_number": phone},
                 )
                 resp.raise_for_status()
                 data = resp.json()
-            last_err = None
-            break  # succès — on sort de la boucle
-        except httpx.HTTPStatusError as e:
-            # 503 du service WA = socket WA timeout (pas une erreur fatale) → on retry
-            if e.response.status_code == 503 and attempt < 2:
-                last_err = e
-                logger.info(f"WA service 503 (socket WA timeout), tentative {attempt + 1}/3 dans 5s...")
-                await asyncio.sleep(5)
-            else:
-                raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
-        except httpx.RequestError as e:
-            last_err = e
-            if attempt < 2:
-                logger.info(f"WA service unreachable (cold start?), tentative {attempt + 1}/3 dans 20s...")
-                await asyncio.sleep(20)
-
-    if last_err is not None:
-        logger.error(f"WA service inaccessible après 3 tentatives: {last_err}")
-        raise HTTPException(
-            status_code=503,
-            detail="Service WhatsApp inaccessible après 3 tentatives — réessayez dans 1 minute"
-        )
+        except httpx.RequestError as e2:
+            logger.error(f"WA service inaccessible: {e2}")
+            raise HTTPException(status_code=503, detail="Service WhatsApp inaccessible — réessayez dans 1 minute")
+        except httpx.HTTPStatusError as e2:
+            raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e2.response.text}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
 
     if data.get("status") == "already_connected":
         return {"status": "already_connected", "message": "WhatsApp déjà connecté"}
