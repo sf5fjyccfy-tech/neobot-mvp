@@ -1190,6 +1190,12 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       logger: bailLogger,
       generateHighQualityLinkPreview: false,
       connectTimeoutMs: 60_000,
+      // CRITIQUE : sans keepAlive, Meta ferme le WebSocket après ~15s d'inactivité
+      // (entre la génération du code et la saisie par l'utilisateur dans WA).
+      // Le socket doit rester vivant pendant toute la fenêtre de saisie (~60-90s).
+      keepAliveIntervalMs: 10_000,
+      // Désactiver les timeouts de query — la saisie humaine peut prendre du temps
+      defaultQueryTimeoutMs: 0,
     });
 
     pairSock.ev.on('creds.update', saveCreds);
