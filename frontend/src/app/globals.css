@@ -35,7 +35,7 @@
 body {
   color: var(--neo-text);
   background-color: var(--neo-bg);
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
 }
 
 /* Z-index layering : canvas galaxy = 0, contenu = 1+ */
