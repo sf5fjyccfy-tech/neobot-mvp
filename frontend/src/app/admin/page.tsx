@@ -2,8 +2,22 @@
 import React from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiCall, getToken, startImpersonation, buildApiUrl } from '@/lib/api';
+import { apiCall, getAdminToken, startImpersonation, buildApiUrl } from '@/lib/api';
 import * as Sentry from '@sentry/nextjs';
+
+// Wrapper qui force le JWT admin (ignore les tokens d'impersonation actifs)
+// Nécessaire pour que les appels /api/admin/* fonctionnent même quand le superadmin
+// a une impersonation en cours — sinon getToken() retourne le token impersonné (is_superadmin=False → 403)
+const adminCall = (endpoint: string, opts?: RequestInit) => {
+  const token = getAdminToken();
+  return apiCall(endpoint, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    } as HeadersInit,
+  });
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TenantRow = {
@@ -102,8 +116,8 @@ export default function AdminPage() {
   const loadData = useCallback(async () => {
     try {
       const [s, t] = await Promise.all([
-        apiCall('/api/admin/stats').then(r => r.json()),
-        apiCall('/api/admin/tenants').then(r => r.json()),
+        adminCall('/api/admin/stats').then(r => r.json()),
+        adminCall('/api/admin/tenants').then(r => r.json()),
       ]);
       setStats(s);
       setTenants(t);
@@ -134,7 +148,7 @@ export default function AdminPage() {
     setSelectedId(id);
     setDetailLoading(true);
     try {
-      const d = await apiCall(`/api/admin/tenants/${id}`).then(r => r.json());
+      const d = await adminCall(`/api/admin/tenants/${id}`).then(r => r.json());
       setDetail(d);
     } catch (e: any) {
       Sentry.captureException(e, { tags: { admin_action: 'selectTenant' }, extra: { tenantId: id } });
@@ -146,7 +160,7 @@ export default function AdminPage() {
 
   const action = async (url: string, method = 'POST', body?: object) => {
     try {
-      await apiCall(url, { method, body: body ? JSON.stringify(body) : undefined });
+      await adminCall(url, { method, body: body ? JSON.stringify(body) : undefined });
       showToast('✅ Action effectuée');
       await loadData();
       if (selectedId) await selectTenant(selectedId);
@@ -158,7 +172,7 @@ export default function AdminPage() {
 
   const impersonate = async (tenantId: number) => {
     try {
-      const data = await apiCall(`/api/admin/tenants/${tenantId}/impersonate`, { method: 'POST' }).then(r => r.json());
+      const data = await adminCall(`/api/admin/tenants/${tenantId}/impersonate`, { method: 'POST' }).then(r => r.json());
       startImpersonation(data.access_token, data.tenant_name);
       window.open('/dashboard', '_blank');
     } catch (e: any) {

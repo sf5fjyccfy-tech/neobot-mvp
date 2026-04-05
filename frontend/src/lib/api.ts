@@ -46,6 +46,15 @@ export const getToken = (): string | null => {
   return null;
 };
 
+/** Retourne toujours le JWT de l'admin connecté, jamais le token d'impersonation.
+ * À utiliser pour les appels /api/admin/* qui nécessitent is_superadmin=True. */
+export const getAdminToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('jwt_token');
+  }
+  return null;
+};
+
 export const clearToken = (): void => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('jwt_token');
