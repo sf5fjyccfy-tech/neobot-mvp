@@ -238,8 +238,12 @@ _last_alert_sent: dict[str, datetime] = {}
 ALERT_COOLDOWN_HOURS = {"green": 999, "orange": 6, "red": 2, "critical": 1, "unknown": 6}
 
 
-def _should_send_alert(provider: str, level: str) -> bool:
+def _should_send_alert(provider: str, level: str, days_left: Optional[int] = None) -> bool:
     if level == "green":
+        return False
+    # Niveau orange : alerter seulement si < 50 jours restants.
+    # Si days_left est None, la consommation est nulle → pas d'urgence.
+    if level == "orange" and (days_left is None or days_left >= 50):
         return False
     key = f"{provider}:{level}"
     last = _last_alert_sent.get(key)
@@ -340,7 +344,7 @@ async def check_and_store_credits(db: Session) -> dict:
         )
         db.add(credit)
 
-        if _should_send_alert("deepseek", ds_level):
+        if _should_send_alert("deepseek", ds_level, ds_days):
             await _send_credits_alert("deepseek", ds_balance, ds_level, ds_daily, ds_days)
 
         results["deepseek"] = {
@@ -367,7 +371,7 @@ async def check_and_store_credits(db: Session) -> dict:
         )
         db.add(credit_an)
 
-        if _should_send_alert("anthropic", an_level):
+        if _should_send_alert("anthropic", an_level, an_days):
             await _send_credits_alert("anthropic", an_balance, an_level, an_daily, an_days)
 
         results["anthropic"] = {
