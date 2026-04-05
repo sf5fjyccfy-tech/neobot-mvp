@@ -1081,6 +1081,11 @@ app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
   }
 });
 
+// Rate limiter inter-requêtes : Meta bloque les demandes de code consécutives
+// sur le même tenant en moins de ~60s ("Connection Closed" immédiat sinon).
+const _pairingRateLimit = new Map(); // tenantId → { phone, ts }
+const PAIRING_COOLDOWN_MS = 65_000; // 5s de marge par rapport aux 60s Meta
+
 // ── Pairing code (alternative au QR — pas sujet au rate-limit WA) ──────────
 // POST /api/whatsapp/tenants/:tenantId/request-pairing-code
 // Body: { phone_number: "22612345678" }  ← sans le +
@@ -1095,6 +1100,18 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
   const phone = String(req.body?.phone_number || '').replace(/\D/g, '');
   if (!phone || phone.length < 7 || phone.length > 15) {
     return res.status(400).json({ error: 'phone_number requis (format international sans +, ex: 22612345678)' });
+  }
+
+  // ── Rate limit : Meta refuse un 2ème code < 60s après le précédent ──
+  const _rl = _pairingRateLimit.get(tenantId);
+  const _now = Date.now();
+  if (_rl && (_now - _rl.ts) < PAIRING_COOLDOWN_MS) {
+    const waitSec = Math.ceil((PAIRING_COOLDOWN_MS - (_now - _rl.ts)) / 1000);
+    logger.warn('Pairing rate limited — too soon after previous attempt', { tenantId, waitSec });
+    return res.status(429).json({
+      error: `Attendez encore ${waitSec}s avant de demander un nouveau code — Meta bloque les tentatives consécutives`,
+      wait_seconds: waitSec,
+    });
   }
 
   const session = getTenantSession(tenantId);
@@ -1115,12 +1132,19 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     if (session.socket) {
       try { session.socket.end(undefined); } catch (_) {}
       session.socket = null;
+      // Laisser 300ms à Baileys pour libérer les event emitters internes
+      // avant de créer un nouveau socket — évite les listeners orphelins
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
     session.state = 'idle';
   }
   session.initializing = false;
   session.retryCount = 0;
   session.authResetCount = 0;
+
+  // Enregistrer la tentative AVANT l'appel Baileys
+  // (même si ça échoue, Meta a comptabilisé la tentative)
+  _pairingRateLimit.set(tenantId, { phone, ts: Date.now() });
 
   try {
     const authDir = path.join(__dirname, 'auth_info_baileys', `tenant_${tenantId}`);
@@ -1216,15 +1240,16 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         }, 500);
       } else if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        logger.warn('Pairing socket closed', { tenantId, statusCode });
+        logger.warn('Pairing socket closed after code generation', { tenantId, statusCode, codeGenerated });
         session.initializing = false;
         session.socket = null;
         session.state = 'disconnected';
         clearReconnectTimer(session);
-        if (!codeGenerated) {
-          // Fermeture avant génération du code → échec, reconnecter proprement
-          setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'pairing-socket-close' }), 3000);
-        }
+        // NE PAS appeler connectTenant ici : les creds ont été vidés en début de
+        // tentative. Que le code ait été généré ou non, le tenant est maintenant
+        // sans session valide. L'utilisateur doit attendre le cooldown Meta (65s)
+        // puis redemander un code depuis le dashboard.
+        // → Le rate limiter lui indiquera exactement combien de temps attendre.
       }
     });
 
@@ -1237,11 +1262,18 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     });
   } catch (error) {
     logger.error('requestPairingCode failed', { tenantId, error: error.message });
-    // Relancer connexion normale en background — ne pas laisser tenant sans session
-    // Réinitialiser l'état pour que connectTenant ne soit pas bloqué par le guard
+    // Réinitialiser l'état — les creds ont déjà été vidés donc on ne reconnecte
+    // pas automatiquement (pas de creds valides = QR socket inutile qui spamme).
+    // L'utilisateur redemandera un code après le cooldown de 65s.
     session.initializing = false;
     session.socket = null;
-    setTimeout(() => connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-fail' }), 3000);
+    session.state = 'disconnected';
+    // Effacer le rate limit pour cet échec early (avant même connexion Meta)
+    // seulement si l'erreur est locale (pas un refus Meta)
+    const isMetaRefusal = error.message.includes('Connection Closed') || error.message.includes('Meta code');
+    if (!isMetaRefusal) {
+      _pairingRateLimit.delete(tenantId);
+    }
     return res.status(503).json({ error: `Impossible de générer le code de couplage : ${error.message}` });
   }
 });

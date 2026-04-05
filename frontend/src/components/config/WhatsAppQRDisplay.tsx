@@ -118,6 +118,11 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         body: JSON.stringify({ phone_number: pairingPhone.replace(/\D/g, '') }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        // 429 = rate limit Meta, 503 = erreur WA service
+        setPairingError(`❌ ${data.error || 'Erreur service WhatsApp'}`);
+        return;
+      }
       if (data.status === 'already_connected') {
         fetchQRCode();
       } else {
