@@ -324,30 +324,45 @@ async def request_pairing_code(
     if not phone.isdigit() or not (7 <= len(phone) <= 15):
         raise HTTPException(status_code=422, detail="Numéro invalide — format international sans +, ex: 22612345678")
 
-    try:
-        # Timeout élevé (65s) : le WS WhatsApp peut prendre du temps à s'établir
-        # sur Render free (cold start + connexion Meta). 30s défaut coupait trop tôt.
-        async with httpx.AsyncClient(timeout=65.0) as client:
-            resp = await client.post(
-                f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
-                json={"phone_number": phone},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+    # Retry sur cold start Render free tier : le service peut refuser la connexion
+    # pendant 30-60s au démarrage. On tente 3 fois avec 20s d'intervalle.
+    last_err: Exception | None = None
+    data: dict = {}
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=65.0) as client:
+                resp = await client.post(
+                    f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
+                    json={"phone_number": phone},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            last_err = None
+            break  # succès — on sort de la boucle
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
+        except httpx.RequestError as e:
+            last_err = e
+            if attempt < 2:
+                logger.info(f"WA service unreachable (cold start?), tentative {attempt + 1}/3 dans 20s...")
+                await asyncio.sleep(20)
 
-        if data.get("status") == "already_connected":
-            return {"status": "already_connected", "message": "WhatsApp déjà connecté"}
+    if last_err is not None:
+        logger.error(f"WA service inaccessible après 3 tentatives: {last_err}")
+        raise HTTPException(
+            status_code=503,
+            detail="Service WhatsApp inaccessible après 3 tentatives — réessayez dans 1 minute"
+        )
 
-        return {
-            "status": "code_generated",
-            "code": data.get("code"),
-            "instructions": data.get("instructions"),
-            "phone": phone,
-        }
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Erreur service WhatsApp: {e.response.text}")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail="Service WhatsApp inaccessible")
+    if data.get("status") == "already_connected":
+        return {"status": "already_connected", "message": "WhatsApp déjà connecté"}
+
+    return {
+        "status": "code_generated",
+        "code": data.get("code"),
+        "instructions": data.get("instructions"),
+        "phone": phone,
+    }
 
 
 class MarkConnectedBody(BaseModel):

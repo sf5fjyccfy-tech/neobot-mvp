@@ -300,13 +300,34 @@ async def _db_cleanup_loop():
             db.close()
 
 
+async def _wa_keepalive_loop():
+    """Ping le service WhatsApp toutes les 10 min pour l'empêcher de dormir.
+    Sur Render free tier, les services dorment après 15 min d'inactivité,
+    ce qui provoque un cold start de 30-60s à la prochaine requête.
+    """
+    wa_url = os.getenv("WHATSAPP_SERVICE_URL", "")
+    if not wa_url:
+        logger.info("WA keep-alive désactivé : WHATSAPP_SERVICE_URL non défini")
+        return
+    await asyncio.sleep(60)  # laisser le service démarrer complètement
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.get(f"{wa_url}/health")
+            logger.debug("WA keep-alive OK")
+        except Exception as e:
+            logger.debug(f"WA keep-alive ping échoué (normal au démarrage): {e}")
+        await asyncio.sleep(600)  # 10 min
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await _startup_tasks()
-    retry_task    = asyncio.create_task(_retry_webhooks_loop())
-    credits_task  = asyncio.create_task(_credits_check_loop())
-    morning_task  = asyncio.create_task(_morning_summary_loop())
-    cleanup_task  = asyncio.create_task(_db_cleanup_loop())
+    retry_task     = asyncio.create_task(_retry_webhooks_loop())
+    credits_task   = asyncio.create_task(_credits_check_loop())
+    morning_task   = asyncio.create_task(_morning_summary_loop())
+    cleanup_task   = asyncio.create_task(_db_cleanup_loop())
+    keepalive_task = asyncio.create_task(_wa_keepalive_loop())
     try:
         yield
     finally:
@@ -314,6 +335,7 @@ async def lifespan(_app: FastAPI):
         credits_task.cancel()
         morning_task.cancel()
         cleanup_task.cancel()
+        keepalive_task.cancel()
         await _shutdown_tasks()
 
 

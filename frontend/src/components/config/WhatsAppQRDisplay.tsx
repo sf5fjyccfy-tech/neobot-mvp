@@ -307,7 +307,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                   />
                   <button type="submit" disabled={pairingLoading}
                     style={{ padding: '8px 14px', background: '#00E5CC', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: pairingLoading ? 'not-allowed' : 'pointer' }}>
-                    {pairingLoading ? '...' : 'Code'}
+                    {pairingLoading ? '⏳ ~30s...' : 'Code'}
                   </button>
                 </form>
               )}
