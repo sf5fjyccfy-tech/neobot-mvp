@@ -325,7 +325,9 @@ async def request_pairing_code(
         raise HTTPException(status_code=422, detail="Numéro invalide — format international sans +, ex: 22612345678")
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Timeout élevé (65s) : le WS WhatsApp peut prendre du temps à s'établir
+        # sur Render free (cold start + connexion Meta). 30s défaut coupait trop tôt.
+        async with httpx.AsyncClient(timeout=65.0) as client:
             resp = await client.post(
                 f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/request-pairing-code",
                 json={"phone_number": phone},

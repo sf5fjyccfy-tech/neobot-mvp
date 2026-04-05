@@ -263,14 +263,16 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
               </p>
               <button onClick={() => setShowPairing(true)}
                 style={{ marginTop: 12, padding: '6px 14px', background: 'transparent', border: '1px solid #7B61FF60', borderRadius: 8, color: '#FF9A6C', fontSize: 12, cursor: 'pointer' }}>
-                QR ne fonctionne pas ? Associer par code →
+                📲 Sur mobile ou sans caméra : connecter par code
               </button>
             </>
           ) : (
             <>
-              <p style={{ color: '#FF9A6C', fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>🔑 Association par code</p>
+              <p style={{ color: '#FF9A6C', fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>
+                {isMobile ? '📱 Connectez WhatsApp sur ce téléphone' : '🔑 Code de connexion'}
+              </p>
               <p style={{ color: MUTED, fontSize: 12, margin: '0 0 14px', lineHeight: 1.5 }}>
-                Sur votre téléphone :<br />
+                Sur votre téléphone WhatsApp :<br />
                 <strong style={{ color: TEXT }}>WA → ⋮ → Appareils connectés → Associer → Code téléphonique</strong>
               </p>
               {pairingCode ? (
@@ -310,10 +312,13 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                 </form>
               )}
               {pairingError && <p style={{ color: '#FF8888', fontSize: 12 }}>{pairingError}</p>}
-              <button onClick={() => { setShowPairing(false); setPairingCode(null); setPairingError(''); }}
-                style={{ marginTop: 4, padding: '6px 14px', background: 'transparent', border: '1px solid #7B61FF60', borderRadius: 8, color: '#FF9A6C', fontSize: 12, cursor: 'pointer' }}>
-                ← Retour au QR
-              </button>
+              {/* Retour QR uniquement sur desktop — inutile sur mobile (pas de caméra secondaire) */}
+              {!isMobile && (
+                <button onClick={() => { setShowPairing(false); setPairingCode(null); setPairingError(''); }}
+                  style={{ marginTop: 4, padding: '6px 14px', background: 'transparent', border: '1px solid #7B61FF60', borderRadius: 8, color: '#FF9A6C', fontSize: 12, cursor: 'pointer' }}>
+                  ← Retour au QR
+                </button>
+              )}
             </>
           )}
         </div>
