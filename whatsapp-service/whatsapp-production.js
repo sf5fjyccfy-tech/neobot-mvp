@@ -116,6 +116,8 @@ class TenantSession {
     this.qrExpiresAt = null;
     this.scheduledReconnect = null;
     this.connectedPhone = null; // JID extrait des creds Baileys au moment de la connexion
+    this.consecutive405 = 0;   // compteur de 405 consécutifs (ban IP WA)
+    this.errorSince = null;    // timestamp entrée dans state='error'
     // Debounce messages entrants : buffer par expéditeur, aggrège les bursts avant d'appeler le backend
     this.msgBuffers = new Map();         // phone → string[]
     this.msgDebounceTimers = new Map();  // phone → setTimeout handle
@@ -774,6 +776,8 @@ async function resetTenant(tenantId, options = {}) {
   session.initializing = false;
   session.retryCount = 0;
   session.authResetCount = 0;
+  session.consecutive405 = 0;
+  session.errorSince = null;
   session.connectedAt = null;
   session.connectedPhone = null;
   session.lastError = null;
@@ -1081,6 +1085,9 @@ app.post('/api/whatsapp/tenants/:tenantId/disconnect', async (req, res) => {
     session.connected = false;
     session.state = 'disconnected';
     session.connectedPhone = null;
+    // Notifier le backend — stopTenantSocket ne déclenche pas l'event 'close'
+    // donc notifyBackendConnection(false) ne s'appellerait jamais sans ça.
+    await notifyBackendConnection(tenantId, false);
     logger.info('Tenant disconnected by user request', { tenantId });
     res.json({ status: 'disconnected', tenantId });
   } catch (error) {
