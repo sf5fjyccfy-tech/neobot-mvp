@@ -1247,95 +1247,53 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     const formatted = raw?.match(/.{1,4}/g)?.join('-') || raw;
     logger.info('Pairing code generated successfully', { tenantId, phone, code: formatted });
 
-    // Handler post-pairing avec reconnexion automatique.
+    logger.info('[PAIRING] ▶ Code généré — socket active en attente de validation', { tenantId, code: formatted, phone });
+
+    // Handler post-pairing — SANS reconnexion.
     //
-    // POURQUOI : Meta ferme INTENTIONNELLEMENT le WebSocket Baileys après avoir
-    // émis le code (comportement documenté : fin du handshake de demande de code,
-    // la socket passe en mode "en attente de validation"). Si on ne reconnecte pas,
-    // la socket est morte quand l'utilisateur entre le code dans WA → WA dit
-    // "impossible de connecter l'appareil" même avec un code valide.
+    // ANALYSE DES LOGS (tenant 1) :
+    //   sock1 → 408 (connectionLost, 20s) → Meta a annulé la session côté serveur
+    //   sock2 → 401 (loggedOut) → session Meta morte, reconnexion impossible
     //
-    // COMMENT : on reconnecte la socket (sans rappeler requestPairingCode — Meta
-    // connaît déjà le code) jusqu'à ce que :
-    //   • connection === 'open' → l'utilisateur a entré le code → succès
-    //   • DisconnectReason.loggedOut / 401 → code expiré ou refusé → stop
-    //   • MAX_PAIR_RECONNECTS atteint (~3 min) → abandon
-    let pairDone = false;
-    let pairReconnectCount = 0;
-    const MAX_PAIR_RECONNECTS = 15; // ~3 min de fenêtre pour saisir le code
+    // 408 = Meta ferme la session de pairing après timeout (20s sous rate-limit,
+    // 2-3 min normalement). Quand le socket ferme, Meta détruit la session côté
+    // serveur. Tout reconnect obtient 401 — il n'y a plus rien à rejoindre.
+    //
+    // LA RECONNEXION NE FONCTIONNE PAS. On gère proprement :
+    //   • 'open' → pairing réussi avant expiry → lancer connectTenant
+    //   • 'close' 408 → session expirée → cooldown 5min + log clair
+    //   • 'close' 401 → session morte (rate-limit sévère) → cooldown 10min
+    pairSock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+      logger.info('[PAIRING] connection.update', { tenantId, connection });
+      if (connection === 'open') {
+        logger.info('[PAIRING] ✅ Code accepté par WA — session complète', { tenantId });
+        session.initializing = false;
+        clearReconnectTimer(session);
+        session.scheduledReconnect = setTimeout(() => {
+          session.scheduledReconnect = null;
+          connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
+        }, 500);
+      } else if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        session.socket = null;
+        session.initializing = false;
+        session.state = 'disconnected';
 
-    const watchPairSock = (sock, label) => {
-      logger.info(`[PAIRING] watchPairSock attaché`, { tenantId, label, pairDone });
-      sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-        logger.info(`[PAIRING] connection.update`, { tenantId, label, connection, pairDone, pairReconnectCount });
-        if (pairDone) return;
-
-        if (connection === 'open') {
-          pairDone = true;
-          logger.info('[PAIRING] ✅ Code accepté par WA — reconnecter session complète', { tenantId, pairReconnectCount });
-          session.initializing = false;
-          clearReconnectTimer(session);
-          session.scheduledReconnect = setTimeout(() => {
-            session.scheduledReconnect = null;
-            connectTenant(tenantId, { forceReset: false, reason: 'after-pairing-success' });
-          }, 500);
-
-        } else if (connection === 'close') {
-          const statusCode = lastDisconnect?.error?.output?.statusCode;
-          session.socket = null;
-
-          const isTerminal = statusCode === DisconnectReason.loggedOut
-            || statusCode === 401
-            || pairReconnectCount >= MAX_PAIR_RECONNECTS;
-
-          logger.warn('[PAIRING] Socket fermée', { tenantId, label, statusCode, pairReconnectCount, isTerminal });
-
-          if (isTerminal) {
-            pairDone = true;
-            session.initializing = false;
-            session.state = 'disconnected';
-            logger.error('[PAIRING] ❌ Abandon — MAX_PAIR_RECONNECTS atteint ou refus définitif', { tenantId, statusCode, pairReconnectCount });
-            return;
-          }
-
-          // Reconnexion RAPIDE (200ms) avec les CREDS ORIGINAUX (pas un re-read PG
-          // qui pourrait donner des clés différentes si creds.update a muté entre-temps).
-          // Meta associe le code de couplage à l'identité (noiseKey+signedIdentityKey)
-          // envoyée lors du requestPairingCode initial. Pour que Meta valide l'entrée
-          // du code par l'utilisateur, notre socket doit présenter LA MÊMe identité.
-          pairReconnectCount++;
-          setTimeout(async () => {
-            if (pairDone) return;
-            logger.info('[PAIRING] Reconnexion sock avec creds originaux', { tenantId, pairReconnectCount });
-            try {
-              // Réutiliser state + saveCreds de l'attempt original — clés identiques garanties
-              const sock2 = makeWASocket({
-                version,
-                auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100) },
-                usePairingCode: true,
-                browser: Browsers.macOS('Chrome'),
-                printQRInTerminal: false,
-                logger: bailLogger,
-                keepAliveIntervalMs: 10_000,
-                defaultQueryTimeoutMs: 0,
-                connectTimeoutMs: 60_000,
-              });
-              sock2.ev.on('creds.update', saveCreds);
-              session.socket = sock2;
-              watchPairSock(sock2, `sock${pairReconnectCount + 1}`);
-            } catch (err) {
-              logger.error('[PAIRING] Reconnect échoué', { tenantId, err: err.message });
-              pairDone = true;
-              session.initializing = false;
-              session.state = 'disconnected';
-            }
-          }, 200); // 200ms au lieu de 1500 — fenêtre morte minimale
+        if (statusCode === 401) {
+          // Rate-limit sévère Meta — session annulée avant même que l'user puisse saisir.
+          // Cooldown 10 min pour laisser Meta réinitialiser.
+          logger.error('[PAIRING] ❌ Session annulée (401) — rate-limit Meta sévère', { tenantId });
+          _pairingRateLimit.set(tenantId, { phone, ts: Date.now() - (PAIRING_COOLDOWN_MS - 600_000) });
+        } else if (statusCode === 408) {
+          // Timeout Meta — fenêtre de validation expirée (20s sous rate-limit, 2-3min normal).
+          // Cooldown 5 min.
+          logger.warn('[PAIRING] ⏱ Session expirée (408) — code non saisi à temps', { tenantId });
+          _pairingRateLimit.set(tenantId, { phone, ts: Date.now() - (PAIRING_COOLDOWN_MS - 300_000) });
+        } else {
+          logger.warn('[PAIRING] Socket fermée', { tenantId, statusCode });
         }
-      });
-    };
-
-    logger.info('[PAIRING] ▶ Code généré, watchPairSock actif', { tenantId, code: formatted, phone });
-    watchPairSock(pairSock, 'sock1');
+      }
+    });
 
     return res.json({
       status: 'code_generated',
