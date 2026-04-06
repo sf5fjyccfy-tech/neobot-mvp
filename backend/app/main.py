@@ -53,7 +53,8 @@ from .services import neopay_service
 from .services import monitoring_service
 from .services.email_service import send_internal_alert
 from .services.business_kb_service import BusinessKBService
-from .http_client import close_http_client
+from .http_client import close_http_client as _close_root_http_client
+from .services.http_client import close_http_client as _close_services_http_client
 from .middleware_subscription import SubscriptionMiddleware
 from .limiter import limiter
 
@@ -162,7 +163,8 @@ async def _startup_tasks():
 
 async def _shutdown_tasks():
     """Cleanup au shutdown"""
-    await close_http_client()
+    await _close_root_http_client()
+    await _close_services_http_client()
     logger.info("🛑 Application arrêtée")
 
 

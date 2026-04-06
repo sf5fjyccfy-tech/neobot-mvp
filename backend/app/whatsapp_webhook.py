@@ -617,7 +617,7 @@ async def send_whatsapp_response(
         response = await client.post(
             f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
             json={"to": phone, "message": text},
-            timeout=10,
+            timeout=25,  # 10s était trop court sur connexion lente / free tier
         )
 
         # Backward compatibility with older service contracts.
@@ -625,7 +625,7 @@ async def send_whatsapp_response(
             response = await client.post(
                 f"{whatsapp_service_url}/send",
                 json={"to": phone, "text": text},
-                timeout=10,
+                timeout=25,
             )
 
         if response.status_code == 200:

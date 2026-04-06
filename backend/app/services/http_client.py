@@ -91,11 +91,15 @@ class DeepSeekClient:
             "Content-Type": "application/json"
         }
         
+        # Timeout AI-spécifique : DeepSeek peut prendre 30-45s pour des réponses
+        # complexes. Le client global a read=25s — trop court, coupe les réponses.
+        ai_timeout = httpx.Timeout(timeout=65.0, connect=5.0, read=60.0, write=5.0)
         try:
             response = await client.post(
                 f"{self.base_url}/v1/chat/completions",
                 json=payload,
-                headers=headers
+                headers=headers,
+                timeout=ai_timeout,
             )
             response.raise_for_status()
             
