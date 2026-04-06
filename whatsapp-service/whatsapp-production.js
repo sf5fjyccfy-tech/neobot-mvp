@@ -335,7 +335,7 @@ async function forwardIncomingMessage(tenantId, msg) {
     : {};
 
   try {
-    await axios.post(`${BACKEND_URL}/api/v1/webhooks/whatsapp`, payloadV1, { timeout: 30_000, headers });
+    await axios.post(`${BACKEND_URL}/api/v1/webhooks/whatsapp`, payloadV1, { timeout: 55_000, headers });
     return;
   } catch (errorV1) {
     logger.error('Primary webhook endpoint failed', {
@@ -617,7 +617,7 @@ async function connectTenant(tenantId, options = {}) {
       browser: Browsers.macOS('Chrome'),
       printQRInTerminal: false,
       syncFullHistory: false,
-      markOnlineOnConnect: false,
+      markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
       keepAliveIntervalMs: 30_000,
       defaultQueryTimeoutMs: 60_000,
@@ -872,6 +872,17 @@ function startWatchdog() {
     }
   }, 4 * 60 * 1000);
 
+  // Keep-alive backend : un GET /health toutes les 14min empêche Render free tier
+  // de mettre le backend en veille. Sans ça, le 1er webhook après idle prend 30-60s
+  // → timeout → message perdu sans réponse.
+  if (BACKEND_URL && !BACKEND_URL.includes('localhost')) {
+    setInterval(async () => {
+      try {
+        await axios.get(`${BACKEND_URL}/health`, { timeout: 10_000 });
+      } catch (_) { /* non bloquant — juste un ping */ }
+    }, 14 * 60 * 1000);
+  }
+
   setInterval(async () => {
     for (const session of tenantSessions.values()) {
       if (session.initializing || session.connected) {
@@ -1078,30 +1089,6 @@ app.post('/api/whatsapp/tenants/:tenantId/disconnect', async (req, res) => {
 });
 
 // ── Envoi de message pour un tenant spécifique ─────────────────────────────
-// POST /api/whatsapp/tenants/:tenantId/send-message
-// Body: { to: "22612345678", message: "Bonjour" }
-// Utilisé par le backend pour les réponses bot ET les messages opérateur
-app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
-  const tenantId = Number.parseInt(req.params.tenantId, 10);
-  if (!Number.isInteger(tenantId) || tenantId <= 0) {
-    return res.status(400).json({ error: 'Invalid tenantId' });
-  }
-
-  const { to, message } = req.body || {};
-  if (!to || !message) {
-    return res.status(400).json({ error: 'Missing required fields: to, message' });
-  }
-
-  try {
-    const result = await sendMessageForTenant(tenantId, to, message);
-    logger.info('Outgoing message sent', { tenantId, to, msgId: result?.key?.id || null });
-    res.json({ status: 'sent', tenantId, id: result?.key?.id || null });
-  } catch (error) {
-    logger.error('Failed to send message for tenant', { tenantId, to, error: error.message });
-    res.status(503).json({ error: error.message });
-  }
-});
-
 // Rate limiter inter-requêtes : Meta bloque les demandes de code consécutives
 // sur le même tenant en moins de ~60s ("Connection Closed" immédiat sinon).
 const _pairingRateLimit = new Map(); // tenantId → { phone, ts }
