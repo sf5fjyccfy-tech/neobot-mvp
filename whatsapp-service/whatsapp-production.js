@@ -477,7 +477,12 @@ async function onConnectionUpdate(session, update) {
       statusCode,
     });
 
-    await notifyBackendConnection(session.tenantId, false);
+    // 515 = transition de reconnexion après scan QR / validation pairing code.
+    // Pas une vraie déconnexion — ne pas notifier le backend pour éviter
+    // le flash "déconnecté" pendant les 3-5s de reconnexion.
+    if (statusCode !== 515) {
+      await notifyBackendConnection(session.tenantId, false);
+    }
 
     if (shouldResetAuthFromCode(statusCode)) {
       logger.warn('Disconnect requires auth reset, regenerating QR', {
