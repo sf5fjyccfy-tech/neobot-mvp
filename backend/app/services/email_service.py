@@ -139,12 +139,13 @@ async def send_password_reset_email(to_email: str, reset_link: str) -> bool:
 <html lang="fr">
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0f0f0f;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0f0f;">
-    <tr><td align="center" style="padding:40px 20px;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;background:#0f0f0f;">
       <table width="600" cellpadding="0" cellspacing="0"
-             style="background:#1a1a1a;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+             style="background:#1a1a1a;border-radius:12px;overflow:hidden;max-width:600px;width:100%;"
+             bgcolor="#1a1a1a">
         <tr>
-          <td style="background:linear-gradient(135deg,#FF4D00,#FF7A40);padding:32px;text-align:center;">
+          <td bgcolor="#FF4D00" style="background:linear-gradient(135deg,#FF4D00,#FF7A40);padding:32px;text-align:center;">
             <h1 style="color:#fff;margin:0;font-size:24px;font-weight:800;">
               NéoBot — Réinitialisation de mot de passe
             </h1>
@@ -200,12 +201,13 @@ async def send_confirmation_email(to_email: str, confirmation_link: str) -> bool
 <html lang="fr">
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0f0f0f;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0f0f;">
-    <tr><td align="center" style="padding:40px 20px;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;background:#0f0f0f;">
       <table width="600" cellpadding="0" cellspacing="0"
-             style="background:#1a1a1a;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+             style="background:#1a1a1a;border-radius:12px;overflow:hidden;max-width:600px;width:100%;"
+             bgcolor="#1a1a1a">
         <tr>
-          <td style="background:linear-gradient(135deg,#FF4D00,#FF7A40);padding:32px;text-align:center;">
+          <td bgcolor="#FF4D00" style="background:linear-gradient(135deg,#FF4D00,#FF7A40);padding:32px;text-align:center;">
             <h1 style="color:#fff;margin:0;font-size:24px;font-weight:800;">
               NéoBot — Confirmez votre email
             </h1>

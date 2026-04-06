@@ -545,6 +545,22 @@ async function onConnectionUpdate(session, update) {
       return;
     }
 
+    // 515 = DisconnectReason.restartRequired = succès scan QR ou validation pairing code.
+    // Meta ferme proprement la socket pour dire "reconnecte-toi avec les nouveaux creds".
+    // C'est un signal de SUCCÈS, pas une erreur. Reconnexion immédiate, retryCount reset.
+    if (statusCode === 515) {
+      logger.info('restartRequired (515) — reconnexion immédiate avec nouveaux creds', {
+        tenantId: session.tenantId,
+      });
+      session.retryCount = 0;
+      clearReconnectTimer(session);
+      session.scheduledReconnect = setTimeout(() => {
+        session.scheduledReconnect = null;
+        connectTenant(session.tenantId, { forceReset: false, reason: 'restart-required-515' });
+      }, 300);
+      return;
+    }
+
     scheduleReconnect(session, reason);
   }
 }
@@ -593,7 +609,7 @@ async function connectTenant(tenantId, options = {}) {
       },
       // Fingerprint identique à WhatsApp Web officiel — affiche "WhatsApp Web" dans les
       // appareils liés Android. Neutre, indétectable par Meta.
-      browser: ['WhatsApp Web', 'Chrome', '2.2408.10'],
+      browser: Browsers.macOS('Chrome'),
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: false,
@@ -1279,7 +1295,20 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         session.initializing = false;
         session.state = 'disconnected';
 
-        if (statusCode === 401) {
+        if (statusCode === 515) {
+          // Pairing code validé par le téléphone de l'utilisateur.
+          // Meta ferme la socket de pairing et demande une reconnexion avec les nouveaux creds
+          // (déjà sauvegardés en PG via creds.update → saveCreds).
+          // C'est un SUCCÈS — reconnecter immédiatement, retryCount reset.
+          logger.info('[PAIRING] ✅ 515 restartRequired — code validé, reconnexion avec nouveaux creds', { tenantId });
+          session.initializing = false;
+          session.retryCount = 0;
+          clearReconnectTimer(session);
+          session.scheduledReconnect = setTimeout(() => {
+            session.scheduledReconnect = null;
+            connectTenant(tenantId, { forceReset: false, reason: 'pairing-restart-515' });
+          }, 300);
+        } else if (statusCode === 401) {
           // Rate-limit sévère Meta — session annulée avant même que l'user puisse saisir.
           // Cooldown 10 min pour laisser Meta réinitialiser.
           logger.error('[PAIRING] ❌ Session annulée (401) — rate-limit Meta sévère', { tenantId });
