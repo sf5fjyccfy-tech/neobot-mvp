@@ -122,6 +122,10 @@ class TenantSession {
     this.msgBuffers = new Map();         // phone → string[]
     this.msgDebounceTimers = new Map();  // phone → setTimeout handle
     this.msgDebounceLastMsg = new Map(); // phone → dernier objet msg Baileys brut
+    // Protège contre les connexions QR automatiques quand aucun cred enregistré n'existe.
+    // Mis à true par : startup (creds présents), /connect explicite, ou succès pairing.
+    // Empêche le service de spammer Meta avec des sockets QR dès le boot → rate-limit.
+    this.autoConnectEnabled = false;
   }
 
   snapshot() {
@@ -894,6 +898,11 @@ function startWatchdog() {
         continue;
       }
 
+      // Ne pas relancer un tenant qui n'a jamais eu de session enregistrée.
+      // Évite d'accumuler des échecs QR qui déclenchent le rate-limit Meta
+      // et invalident les codes de pairing ultérieurs.
+      if (!session.autoConnectEnabled) continue;
+
       if (session.state === 'waiting_qr' && session.qrExpiresAt) {
         const expiresAt = new Date(session.qrExpiresAt).getTime();
         if (Date.now() > expiresAt) {
@@ -1024,6 +1033,8 @@ app.post('/api/whatsapp/tenants/:tenantId/connect', async (req, res) => {
   }
 
   try {
+    // Action explicite utilisateur — autoriser l'auto-connect et le watchdog pour ce tenant
+    getTenantSession(tenantId).autoConnectEnabled = true;
     const state = await connectTenant(tenantId, { reason: 'api-connect' });
     res.json({ status: 'initializing', state });
   } catch (error) {
@@ -1284,6 +1295,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
       logger.info('[PAIRING] connection.update', { tenantId, connection });
       if (connection === 'open') {
         logger.info('[PAIRING] ✅ Code accepté par WA — session complète', { tenantId });
+        session.autoConnectEnabled = true; // Activer l'auto-reconnect : creds valides désormais
         session.initializing = false;
         clearReconnectTimer(session);
         session.scheduledReconnect = setTimeout(() => {
@@ -1302,6 +1314,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
           // (déjà sauvegardés en PG via creds.update → saveCreds).
           // C'est un SUCCÈS — reconnecter immédiatement, retryCount reset.
           logger.info('[PAIRING] ✅ 515 restartRequired — code validé, reconnexion avec nouveaux creds', { tenantId });
+          session.autoConnectEnabled = true; // Activer l'auto-reconnect : creds valides désormais
           session.initializing = false;
           session.retryCount = 0;
           clearReconnectTimer(session);
@@ -1483,7 +1496,28 @@ async function start() {
     console.log('  GET  /api/whatsapp/tenants/:tenantId/qr');
     console.log('  POST /api/whatsapp/tenants/:tenantId/reset');
 
-    await connectTenant(DEFAULT_TENANT_ID, { reason: 'startup' });
+    // Vérifier si des credentials enregistrés existent AVANT de démarrer la connexion.
+    // Sans ce check, le service ouvre un socket QR dès le boot, accumule 9 échecs 408
+    // et déclenche un rate-limit Meta qui invalide les codes de pairing — même valides.
+    let startupHasCreds = false;
+    try {
+      const { state: startupState } = process.env.DATABASE_URL
+        ? await usePgAuthState(DEFAULT_TENANT_ID)
+        : await useMultiFileAuthState(tenantAuthDir(DEFAULT_TENANT_ID));
+      startupHasCreds = Boolean(startupState.creds?.registered);
+    } catch (e) {
+      logger.warn('Could not read startup creds — defaulting to no-auto-connect', { error: e.message });
+    }
+
+    if (startupHasCreds) {
+      logger.info('Registered WA session found — connecting on startup', { tenantId: DEFAULT_TENANT_ID });
+      getTenantSession(DEFAULT_TENANT_ID).autoConnectEnabled = true;
+      await connectTenant(DEFAULT_TENANT_ID, { reason: 'startup' });
+    } else {
+      logger.info('No registered WA session — skipping auto-connect, waiting for user action (QR or pairing code)', {
+        tenantId: DEFAULT_TENANT_ID,
+      });
+    }
     startWatchdog();
   });
 
