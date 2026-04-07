@@ -15,6 +15,7 @@ import makeWASocket, {
   Browsers,
 } from '@whiskeysockets/baileys';
 import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state.js';
+import NodeCache from '@cacheable/node-cache';
 import qrcodeTerminal from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import pino from 'pino';
@@ -616,7 +617,9 @@ async function connectTenant(tenantId, options = {}) {
         creds: authState.creds,
         // Limite le cache Signal à 100 entrées (défaut Baileys = illimité) — évite l'OOM
         // progressif sur le free tier Render 512MB lors de sessions longues.
-        keys: makeCacheableSignalKeyStore(authState.keys, bailLogger, 100),
+        // NodeCache avec maxKeys=100 pour éviter l'OOM sur Render free tier 512MB.
+        // NE PAS passer un nombre brut — Baileys attend une instance NodeCache.
+        keys: makeCacheableSignalKeyStore(authState.keys, bailLogger, new NodeCache({ maxKeys: 100, stdTTL: 30, useClones: false })),
       },
       // Fingerprint identique à WhatsApp Web officiel — affiche "WhatsApp Web" dans les
       // appareils liés Android. Neutre, indétectable par Meta.
@@ -1208,7 +1211,7 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
         version,
         auth: {
           creds: state.creds,
-          keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
+          keys: makeCacheableSignalKeyStore(state.keys, bailLogger, new NodeCache({ maxKeys: 100, stdTTL: 30, useClones: false })),
         },
         usePairingCode: true,
         // 'Google Chrome' obligatoire — Meta rejette 'Chrome' lors de requestPairingCode
