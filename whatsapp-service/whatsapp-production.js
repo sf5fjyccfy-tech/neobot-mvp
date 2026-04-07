@@ -1435,6 +1435,40 @@ app.post('/api/whatsapp/tenants/:tenantId/send-message', async (req, res) => {
   }
 });
 
+app.post('/api/whatsapp/tenants/:tenantId/send-image', async (req, res) => {
+  const tenantId = Number.parseInt(req.params.tenantId, 10);
+  const { to, imageBase64, caption, mimetype } = req.body || {};
+
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    return res.status(400).json({ error: 'Invalid tenantId' });
+  }
+  if (!to || !imageBase64) {
+    return res.status(400).json({ error: 'Missing required fields: to, imageBase64' });
+  }
+
+  const session = getTenantSession(tenantId);
+  if (!session.connected || !session.socket) {
+    return res.status(503).json({ error: 'WhatsApp not connected for this tenant' });
+  }
+
+  try {
+    const jid = normalizeJid(to);
+    // Supprimer le préfixe data URI si présent (ex: "data:image/jpeg;base64,...")
+    const rawBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(rawBase64, 'base64');
+    const result = await session.socket.sendMessage(jid, {
+      image: buffer,
+      caption: caption || '',
+      mimetype: mimetype || 'image/jpeg',
+    });
+    logger.info('Outgoing image sent', { tenantId, to, msgId: result?.key?.id || null });
+    res.json({ status: 'sent', id: result?.key?.id || null });
+  } catch (error) {
+    logger.error('Failed to send image', { tenantId, to, error: error.message });
+    res.status(503).json({ error: error.message });
+  }
+});
+
 app.delete('/api/whatsapp/tenants/:tenantId', async (req, res) => {
   const tenantId = Number.parseInt(req.params.tenantId, 10);
   if (!Number.isInteger(tenantId) || tenantId <= 0) {

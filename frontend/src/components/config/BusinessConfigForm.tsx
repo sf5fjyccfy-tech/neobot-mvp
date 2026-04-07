@@ -8,6 +8,7 @@ interface ProductServiceItem {
   price: number;
   description: string;
   category?: string;
+  image_url?: string; // base64 — envoyé par le bot si le client demande ce produit
 }
 
 interface BusinessConfigData {
@@ -64,6 +65,8 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [rawActivity, setRawActivity] = useState('');
+  const [genLoading, setGenLoading] = useState(false);
 
   useEffect(() => {
     // Pré-remplir depuis localStorage uniquement côté client, après hydratation
@@ -110,7 +113,7 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
   const handleProductAdd = () => {
     setConfig(prev => ({
       ...prev,
-      products_services: [...prev.products_services, { name: '', price: 0, description: '' }],
+      products_services: [...prev.products_services, { name: '', price: 0, description: '', image_url: '' }],
     }));
   };
 
@@ -125,6 +128,41 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
       ...prev,
       products_services: prev.products_services.filter((_, i) => i !== index),
     }));
+  };
+
+  const handleProductImage = (index: number, file: File) => {
+    if (file.size > 500 * 1024) {
+      alert('Image trop lourde — maximum 500 Ko.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      handleProductChange(index, 'image_url', e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!rawActivity.trim()) return;
+    setGenLoading(true);
+    try {
+      const res = await apiCall(`/api/tenants/${tenantId}/business/generate-description`, {
+        method: 'POST',
+        body: JSON.stringify({
+          raw_activity: rawActivity,
+          company_name: config.company_name,
+          business_type: config.business_type_slug,
+        }),
+      });
+      const data = await res.json();
+      if (data.description) {
+        setConfig(prev => ({ ...prev, company_description: data.description }));
+      }
+    } catch {
+      // silencieux — le champ description reste modifiable manuellement
+    } finally {
+      setGenLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -241,12 +279,38 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
         <input type="text" name="company_name" value={config.company_name} onChange={handleChange} placeholder="La Saveur Restaurant" style={fieldStyle} />
       </div>
       <div>
-        <label style={labelStyle}>Description</label>
-        <textarea name="company_description" value={config.company_description} onChange={handleChange} placeholder="Restaurant authentique avec les meilleures pizzas..." rows={3} maxLength={1000} style={{ ...fieldStyle, resize: 'vertical' as const }} />
+        <label style={labelStyle}>Description de votre agent</label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input
+            type="text"
+            value={rawActivity}
+            onChange={e => setRawActivity(e.target.value)}
+            placeholder="Ex : je vends des chaussures de sport à Douala, principalement en ligne"
+            style={{ ...fieldStyle, flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={handleGenerateDescription}
+            disabled={genLoading || !rawActivity.trim()}
+            style={{
+              padding: '10px 14px',
+              background: genLoading || !rawActivity.trim() ? `${NEON}10` : `${NEON}20`,
+              border: `1px solid ${genLoading || !rawActivity.trim() ? `${NEON}15` : `${NEON}50`}`,
+              borderRadius: 8, color: genLoading || !rawActivity.trim() ? MUTED : NEON,
+              fontSize: 12, fontWeight: 700, cursor: genLoading || !rawActivity.trim() ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap' as const,
+            }}
+          >
+            {genLoading ? '⏳...' : '✨ Générer'}
+          </button>
+        </div>
+        <p style={{ color: MUTED, fontSize: 11, margin: '0 0 6px' }}>Décrivez votre activité en quelques mots, l&apos;IA génère la description — vous pouvez la modifier ensuite</p>
+        <textarea name="company_description" value={config.company_description} onChange={handleChange} placeholder="Description générée automatiquement ou saisissez la vôtre..." rows={3} maxLength={1000} style={{ ...fieldStyle, resize: 'vertical' as const }} />
       </div>
       <div>
-        <label style={labelStyle}>Focus commercial</label>
-        <input type="text" name="selling_focus" value={config.selling_focus} onChange={handleChange} placeholder="Qualité, Service, Prix" style={fieldStyle} />
+        <label style={labelStyle}>Vos points forts</label>
+        <input type="text" name="selling_focus" value={config.selling_focus} onChange={handleChange} placeholder="Livraison rapide, produits 100% locaux, service 7j/7" style={fieldStyle} />
+        <p style={{ color: MUTED, fontSize: 11, margin: '4px 0 0' }}>Ce que votre bot mettra en avant dans ses réponses</p>
       </div>
 
       {/* Restaurant Specific */}
@@ -285,11 +349,33 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
           {config.products_services.map((item, index) => (
-            <div key={index} style={{ display: 'flex', gap: 8, padding: '8px 10px', background: BG, borderRadius: 8, border: `1px solid ${BORDER}` }}>
-              <input type="text" placeholder="Nom" value={item.name} onChange={(e) => handleProductChange(index, 'name', e.target.value)} style={{ ...fieldStyle, flex: 1, padding: '6px 10px' }} />
-              <input type="number" placeholder="Prix" value={item.price} onChange={(e) => handleProductChange(index, 'price', parseFloat(e.target.value))} style={{ ...fieldStyle, width: 80, padding: '6px 10px' }} />
-              <input type="text" placeholder="Description" value={item.description} onChange={(e) => handleProductChange(index, 'description', e.target.value)} style={{ ...fieldStyle, flex: 2, padding: '6px 10px' }} />
-              <button type="button" onClick={() => handleProductRemove(index)} style={{ padding: '6px 10px', background: '#FF444420', border: '1px solid #FF444440', borderRadius: 6, color: '#FF8888', fontSize: 12, cursor: 'pointer' }}>✕</button>
+            <div key={index} style={{ padding: '10px', background: BG, borderRadius: 8, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" placeholder="Nom" value={item.name} onChange={(e) => handleProductChange(index, 'name', e.target.value)} style={{ ...fieldStyle, flex: 1, padding: '6px 10px' }} />
+                <input type="number" placeholder="Prix" value={item.price} onChange={(e) => handleProductChange(index, 'price', parseFloat(e.target.value))} style={{ ...fieldStyle, width: 80, padding: '6px 10px' }} />
+                <input type="text" placeholder="Description" value={item.description} onChange={(e) => handleProductChange(index, 'description', e.target.value)} style={{ ...fieldStyle, flex: 2, padding: '6px 10px' }} />
+                <button type="button" onClick={() => handleProductRemove(index)} style={{ padding: '6px 10px', background: '#FF444420', border: '1px solid #FF444440', borderRadius: 6, color: '#FF8888', fontSize: 12, cursor: 'pointer' }}>✕</button>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                {item.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.image_url} alt={item.name} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: `1px solid ${BORDER}`, flexShrink: 0 }} />
+                )}
+                <label style={{ ...fieldStyle, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', width: 'auto', fontSize: 12, color: MUTED, boxSizing: 'border-box' as const }}>
+                  📷 {item.image_url ? 'Changer la photo' : 'Ajouter une photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files?.[0]) handleProductImage(index, e.target.files[0]); }}
+                  />
+                </label>
+                {item.image_url && (
+                  <button type="button" onClick={() => handleProductChange(index, 'image_url', '')} style={{ padding: '4px 10px', background: '#FF444420', border: '1px solid #FF444440', borderRadius: 6, color: '#FF8888', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>
+                    Supprimer
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

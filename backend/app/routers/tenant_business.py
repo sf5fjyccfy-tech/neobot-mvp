@@ -15,6 +15,8 @@ from app.models import (
     BusinessTypeModel
 )
 from app.services.business_kb_service import BusinessKBService
+from ..http_client import DeepSeekClient
+import os
 import json
 import logging
 
@@ -29,6 +31,7 @@ class ProductServiceItem(BaseModel):
     price: float
     description: Optional[str] = None
     category: Optional[str] = None
+    image_url: Optional[str] = None  # base64 — envoyé par le bot si le client demande ce produit
 
 class BusinessConfigRequest(BaseModel):
     business_type_slug: str
@@ -113,7 +116,8 @@ async def configure_business(
                     "name": p.name,
                     "price": p.price,
                     "description": p.description,
-                    "category": p.category
+                    "category": p.category,
+                    "image_url": p.image_url,
                 }
                 for p in config.products_services
             ]
@@ -306,4 +310,59 @@ async def delete_business_config(
     except Exception as e:
         logger.error(f"❌ Error deleting business config: {e}")
         db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class GenerateDescriptionRequest(BaseModel):
+    raw_activity: str
+    company_name: Optional[str] = ""
+    business_type: Optional[str] = ""
+
+
+@router.post("/{tenant_id}/business/generate-description")
+async def generate_business_description(
+    tenant_id: int,
+    body: GenerateDescriptionRequest,
+    _: bool = Depends(verify_tenant_access)
+):
+    """Génère une description professionnelle via DeepSeek à partir d'une description brute"""
+    try:
+        if not os.getenv("DEEPSEEK_API_KEY"):
+            raise HTTPException(status_code=503, detail="Service IA indisponible")
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es un expert en communication commerciale. Tu génères des descriptions courtes, "
+                    "professionnelles et engageantes pour des agents IA WhatsApp de petites entreprises africaines. "
+                    "La description doit décrire ce que fait l'entreprise et comment l'agent aide les clients. "
+                    "Réponds uniquement avec la description, sans introduction ni explication. Maximum 120 mots."
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Entreprise : {body.company_name or 'mon entreprise'}\n"
+                    f"Secteur : {body.business_type or 'non précisé'}\n"
+                    f"Activité : {body.raw_activity}\n\n"
+                    "Génère une description professionnelle pour l'agent WhatsApp de cette entreprise."
+                )
+            },
+        ]
+
+        result = await DeepSeekClient.call(messages, temperature=0.7, max_tokens=200)
+        if "error" in result:
+            raise HTTPException(status_code=503, detail="Erreur de génération IA")
+
+        description = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        if not description:
+            raise HTTPException(status_code=503, detail="Réponse IA vide")
+
+        return {"description": description}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error generating description for tenant {tenant_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

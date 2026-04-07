@@ -26,6 +26,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const [showPairing, setShowPairing] = useState(false);
   const [pairingCooldown, setPairingCooldown] = useState(0); // secondes restantes avant retry
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [codeTimer, setCodeTimer] = useState<number>(0); // 0 = inactif
+  const codeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sur mobile, le QR code est inutilisable (scanner son propre téléphone) — basculer sur le code de jumelage
   useEffect(() => {
@@ -92,8 +94,25 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   useEffect(() => {
     return () => {
       if (cooldownRef.current) clearInterval(cooldownRef.current);
+      if (codeTimerRef.current) clearInterval(codeTimerRef.current);
     };
   }, []);
+
+  const startCodeTimer = () => {
+    if (codeTimerRef.current) clearInterval(codeTimerRef.current);
+    setCodeTimer(60);
+    codeTimerRef.current = setInterval(() => {
+      setCodeTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(codeTimerRef.current!);
+          codeTimerRef.current = null;
+          setPairingCode(null); // code expiré — forcer un nouveau
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   useEffect(() => {
     fetchQRCode();
@@ -157,6 +176,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         fetchQRCode();
       } else {
         setPairingCode(data.code);
+        startCodeTimer(); // démarre le compteur 60s
       }
     } catch (err) {
       setPairingError(`❌ ${err instanceof Error ? err.message : 'Erreur'}`);
@@ -184,6 +204,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   };
 
   const handleRegenerateCode = () => {
+    if (codeTimerRef.current) { clearInterval(codeTimerRef.current); codeTimerRef.current = null; }
+    setCodeTimer(0);
     setPairingCode(null);
     setPairingError('');
     // Garder pairingPhone pré-rempli pour ne pas re-saisir le numéro
@@ -222,7 +244,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         <div style={{ background: '#FF6B3510', border: '1px solid #FF6B3530', borderRadius: 12, padding: 20, textAlign: 'center' }}>
           <p style={{ color: '#FF8C6B', margin: '0 0 4px', fontSize: 13 }}>{qrData.message}</p>
           <p style={{ color: MUTED, fontSize: 12, margin: '0 0 14px' }}>
-            Le service se réveille peut-être (Render cold start) — attendez 30s puis réessayez.
+            Le service démarre — patientez 30 secondes puis réessayez.
           </p>
           {/* Bouton Réessayer — relance le polling après arrêt sur MAX_ERRORS */}
           <button
@@ -306,10 +328,21 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
               <p style={{ color: '#FF9A6C', fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>
                 {isMobile ? '📱 Connectez WhatsApp sur ce téléphone' : '🔑 Code de connexion'}
               </p>
-              <p style={{ color: MUTED, fontSize: 12, margin: '0 0 14px', lineHeight: 1.5 }}>
-                Sur votre téléphone WhatsApp :<br />
-                <strong style={{ color: TEXT }}>WA → ⋮ → Appareils connectés → Associer → Code téléphonique</strong>
-              </p>
+              <div style={{ margin: '0 0 14px', textAlign: 'left' }}>
+                {[
+                  { n: '1', text: 'Ouvre WhatsApp sur ce téléphone' },
+                  { n: '2', text: 'Appuie sur ⋮ (en haut à droite) → Appareils liés' },
+                  { n: '3', text: '"Associer un appareil" → "Entrer un code"' },
+                ].map(s => (
+                  <div key={s.n} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
+                    <span style={{ background: NEON, color: '#000', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{s.n}</span>
+                    <span style={{ color: TEXT, fontSize: 12, lineHeight: 1.5 }}>{s.text}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 6, padding: '7px 12px', background: '#FF9A6C12', border: '1px solid #FF9A6C30', borderRadius: 8 }}>
+                  <span style={{ color: '#FF9A6C', fontSize: 11 }}>⚠️ Le code expire en 60 secondes — préparez WhatsApp avant de générer</span>
+                </div>
+              </div>
               {pairingCode ? (
                 <div style={{ margin: '0 auto 14px', maxWidth: 300 }}>
                   <p style={{ color: MUTED, fontSize: 12, margin: '0 0 8px' }}>Entrez ce code dans l&apos;app WhatsApp :</p>
@@ -318,10 +351,10 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                   </div>
                   {/* Instruction critique : éviter que l'utilisateur demande un nouveau code inutilement */}
                   <div style={{ background: '#FF9A6C15', border: '1px solid #FF9A6C40', borderRadius: 8, padding: '8px 12px', marginTop: 10, textAlign: 'left' }}>
-                    <p style={{ color: '#FF9A6C', fontSize: 12, fontWeight: 700, margin: '0 0 3px' }}>⚠️ Si WA dit &quot;impossible de connecter&quot; :</p>
+                    <p style={{ color: '#FF9A6C', fontSize: 12, fontWeight: 700, margin: '0 0 3px' }}>⚠️ WhatsApp affiche &quot;impossible de connecter&quot; ?</p>
                     <p style={{ color: MUTED, fontSize: 11, margin: 0, lineHeight: 1.5 }}>
-                      Attendez <strong style={{ color: TEXT }}>3 secondes</strong> puis appuyez sur <strong style={{ color: TEXT }}>&quot;Saisir le code à nouveau&quot;</strong> dans WA.<br />
-                      <span style={{ color: '#888' }}>Ne demandez PAS un nouveau code ici — le code est valide, le serveur se reconnecte.</span>
+                      Patientez quelques secondes, puis saisissez à nouveau ce code dans WhatsApp.<br />
+                      <span style={{ color: '#888' }}>Ne générez pas un nouveau code ici — ce code reste valide, WhatsApp va le réaccepter.</span>
                     </p>
                   </div>
                   {/* Boutons copier + régénérer */}
@@ -337,7 +370,13 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                       🔄 Nouveau code
                     </button>
                   </div>
-                  <p style={{ color: MUTED, fontSize: 11, marginTop: 8 }}>Code valide 3 min · Sur WA : ⋮ → Appareils connectés → Associer → Code téléphonique</p>
+                  {codeTimer > 0 ? (
+                    <p style={{ color: codeTimer <= 15 ? '#FF4D00' : '#00E5CC', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
+                      ⏱ Ce code expire dans {codeTimer}s — entrez-le vite dans WhatsApp
+                    </p>
+                  ) : (
+                    <p style={{ color: '#FF8888', fontSize: 12, fontWeight: 700, marginTop: 8 }}>⌛ Code expiré — générez-en un nouveau</p>
+                  )}
                 </div>
               ) : (
                 <form onSubmit={handleRequestPairingCode} style={{ display: 'flex', gap: 8, maxWidth: 320, margin: '0 auto 12px' }}>

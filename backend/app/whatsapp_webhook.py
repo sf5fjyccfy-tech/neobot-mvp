@@ -21,7 +21,7 @@ from sqlalchemy import func
 # Imports locaux
 import asyncio
 from app.database import get_db
-from app.models import Conversation, Message, ConversationHumanState
+from app.models import Conversation, Message, ConversationHumanState, TenantBusinessConfig
 from app.services.business_kb_service import BusinessKBService
 from app.services.contact_filter_service import ContactFilterService
 from app.services.agent_service import AgentService
@@ -526,6 +526,21 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         from .services.overage_pricing_service import OveragePricingService
         OveragePricingService.update_overage_cost(tenant_id, db)
         
+        # Détecter les produits avec images mentionnés dans la réponse IA
+        products_with_images = []
+        try:
+            biz_config = db.query(TenantBusinessConfig).filter(
+                TenantBusinessConfig.tenant_id == tenant_id
+            ).first()
+            if biz_config and biz_config.products_services:
+                prods = biz_config.products_services if isinstance(biz_config.products_services, list) else []
+                for p in prods:
+                    if isinstance(p, dict) and p.get('image_url') and p.get('name'):
+                        if p['name'].lower() in response_text.lower():
+                            products_with_images.append(p)
+        except Exception as img_err:
+            logger.debug(f"Product image detection failed (non-blocking): {img_err}")
+
         # Send response in background — utiliser reply_jid si dispo (JID exact de l'expéditeur)
         background_tasks.add_task(
             send_whatsapp_response,
@@ -534,6 +549,7 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             text=response_text,
             response_delay=response_delay,
             typing_indicator=typing_indicator,
+            products_with_images=products_with_images,
         )
         
         return {
@@ -588,6 +604,7 @@ async def send_whatsapp_response(
     text: str,
     response_delay: Optional[str] = "natural",
     typing_indicator: bool = True,
+    products_with_images: Optional[list] = None,
 ):
     """
     Send response via WhatsApp service.
@@ -644,6 +661,27 @@ async def send_whatsapp_response(
             logger.info(f"✅ Message sent to {phone} (delay={delay_secs}s, typing={typing_indicator})")
         else:
             logger.error(f"Failed to send message: {response.status_code} — {response.text}")
+
+        # Envoyer les images produits détectées (non-bloquant — best effort)
+        if products_with_images:
+            for product in products_with_images:
+                try:
+                    img_response = await client.post(
+                        f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-image",
+                        json={
+                            "to": phone,
+                            "imageBase64": product["image_url"],
+                            "caption": product.get("name", ""),
+                            "mimetype": "image/jpeg",
+                        },
+                        timeout=20,
+                    )
+                    if img_response.status_code == 200:
+                        logger.info(f"✅ Product image sent for '{product.get('name')}' to {phone}")
+                    else:
+                        logger.warning(f"Product image send failed ({img_response.status_code}) for '{product.get('name')}'")
+                except Exception as img_err:
+                    logger.warning(f"Product image send error for '{product.get('name')}': {img_err}")
 
     except Exception as e:
         logger.error(f"Error sending WhatsApp response: {str(e)}")
