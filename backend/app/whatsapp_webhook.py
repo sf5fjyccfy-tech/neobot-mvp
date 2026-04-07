@@ -628,6 +628,18 @@ async def send_whatsapp_response(
                 timeout=25,
             )
 
+        # 503 = WA non connecté (reconnexion en cours) → retry unique après 5s.
+        # Couvre le cas où le socket Baileys se reconnecte après un 515 et que
+        # le message arrive dans la fenêtre de 3-5s de transition.
+        if response.status_code == 503:
+            logger.warning(f"WA 503 for tenant {tenant_id} (not connected) — waiting 5s and retrying")
+            await asyncio.sleep(5)
+            response = await client.post(
+                f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
+                json={"to": phone, "message": text},
+                timeout=25,
+            )
+
         if response.status_code == 200:
             logger.info(f"✅ Message sent to {phone} (delay={delay_secs}s, typing={typing_indicator})")
         else:
@@ -638,6 +650,20 @@ async def send_whatsapp_response(
 
 
 # ===== Utils =====
+
+# In-process lock par (tenant_id, phone) — sérialise la création de conversation
+# entre deux requêtes simultanées du même expéditeur (ex: retry webhook + original).
+# Single-process sur Render free tier → asyncio.Lock est suffisant.
+# La dict grossit au rythme des numéros uniques, négligeable en mémoire à l'échelle MVP.
+_conversation_locks: dict[tuple[int, str], asyncio.Lock] = {}
+
+
+def _get_conversation_lock(tenant_id: int, phone: str) -> asyncio.Lock:
+    key = (tenant_id, phone)
+    if key not in _conversation_locks:
+        _conversation_locks[key] = asyncio.Lock()
+    return _conversation_locks[key]
+
 
 async def save_message_to_db(
     phone: str,
@@ -651,23 +677,26 @@ async def save_message_to_db(
     """
     Save message for a tenant/customer pair and create conversation when missing.
     """
-    conversation = db.query(Conversation).filter(
-        Conversation.tenant_id == tenant_id,
-        Conversation.customer_phone == phone,
-    ).order_by(Conversation.id.desc()).first()
+    # Verrouillage par (tenant_id, phone) : évite la race condition SELECT→INSERT
+    # qui créerait deux conversations dupliquées si deux messages arrivent en parallèle.
+    async with _get_conversation_lock(tenant_id, phone):
+        conversation = db.query(Conversation).filter(
+            Conversation.tenant_id == tenant_id,
+            Conversation.customer_phone == phone,
+        ).order_by(Conversation.id.desc()).first()
 
-    if not conversation:
-        conversation = Conversation(
-            tenant_id=tenant_id,
-            customer_phone=phone,
-            customer_name=sender_name,
-            channel="whatsapp",
-            status="active",
-        )
-        db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
-        logger.info(f"✅ Created new conversation {conversation.id} for {phone}")
+        if not conversation:
+            conversation = Conversation(
+                tenant_id=tenant_id,
+                customer_phone=phone,
+                customer_name=sender_name,
+                channel="whatsapp",
+                status="active",
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+            logger.info(f"✅ Created new conversation {conversation.id} for {phone}")
 
     # Keep customer name fresh if we receive a better value later.
     if sender_name and conversation.customer_name != sender_name:
