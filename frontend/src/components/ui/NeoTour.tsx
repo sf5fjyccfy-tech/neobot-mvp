@@ -52,7 +52,7 @@ const STEPS: Step[] = [
   },
   {
     title: "📱 Config WhatsApp",
-    body: "Connecte ton numéro WhatsApp ici. Sans ça, ton bot est littéralement muet. C'est vraiment l'étape n°1.",
+    body: "Connecte ton numéro WhatsApp ici. C'est la dernière étape — une fois ton agent configuré, scanne le QR code et le bot est en ligne.",
     navIndex: 4,
     cta: { label: 'Connecter WhatsApp', href: '/config' },
   },

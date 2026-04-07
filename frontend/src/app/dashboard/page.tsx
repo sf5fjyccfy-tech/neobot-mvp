@@ -304,13 +304,13 @@ export default function DashboardPage() {
               👋 Bienvenue{userName ? ` chez ${userName}` : ''} !
             </p>
             <p style={{ color: TEXT, fontSize: 13, margin: '0 0 16px' }}>
-              Suivez ces 3 étapes pour que votre bot soit opérationnel en moins de 5 minutes.
+              3 étapes pour que votre bot réponde à vos clients — commencez par configurer l&apos;agent IA.
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {[
-                { num: '1', label: 'Configurer votre entreprise', href: '/config', icon: '⚙️' },
-                { num: '2', label: 'Connecter WhatsApp', href: '/config#whatsapp', icon: '📱' },
-                { num: '3', label: 'Tester votre bot IA', href: '/agent', icon: '🤖' },
+                { num: '1', label: 'Configurer votre agent IA', href: '/agent', icon: '🤖' },
+                { num: '2', label: 'Connecter WhatsApp', href: '/config', icon: '📱' },
+                { num: '3', label: 'Voir vos conversations', href: '/conversations', icon: '💬' },
               ].map(step => (
                 <Link key={step.num} href={step.href} style={{ textDecoration: 'none', flex: 1, minWidth: 160 }}>
                   <div style={{
@@ -514,10 +514,10 @@ export default function DashboardPage() {
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { step: '01', label: 'Configurer votre entreprise', href: '/config', done: false },
-                { step: '02', label: 'Créer votre agent IA', href: '/agent', done: false },
-                { step: '03', label: 'Connecter WhatsApp', href: '/config', done: false },
-                { step: '04', label: 'Tester le bot en live', href: '/agent', done: false },
+                { step: '01', label: 'Créer votre agent IA', href: '/agent', done: false },
+                { step: '02', label: 'Connecter WhatsApp', href: '/config', done: waConnected },
+                { step: '03', label: 'Recevoir vos premiers messages', href: '/conversations', done: statsLoaded && stats[0].value !== '—' && stats[0].value !== '0' },
+                { step: '04', label: 'Analyser vos performances', href: '/analytics', done: false },
               ].map((item, i) => (
                 <Link key={i} href={item.href} style={{ textDecoration: 'none' }}>
                   <div style={{
@@ -525,23 +525,23 @@ export default function DashboardPage() {
                     alignItems: 'center',
                     gap: 14,
                     padding: '12px 16px',
-                    
-                    border: `1px solid ${BORDER}`,
+                    border: `1px solid ${item.done ? '#22c55e30' : BORDER}`,
                     borderRadius: 10,
                     cursor: 'pointer',
+                    opacity: item.done ? 0.65 : 1,
                   }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = NEON + '40'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = BORDER}>
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = item.done ? '#22c55e50' : NEON + '40'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = item.done ? '#22c55e30' : BORDER}>
                     <span style={{
                       fontFamily: '"Syne", sans-serif',
                       fontSize: 11,
                       fontWeight: 800,
-                      color: NEON,
+                      color: item.done ? '#22c55e' : NEON,
                       minWidth: 28,
                       letterSpacing: 1,
-                    }}>{item.step}</span>
-                    <span style={{ color: TEXT, fontSize: 13, flex: 1 }}>{item.label}</span>
-                    <span style={{ color: MUTED, fontSize: 14 }}>→</span>
+                    }}>{item.done ? '✓' : item.step}</span>
+                    <span style={{ color: item.done ? MUTED : TEXT, fontSize: 13, flex: 1, textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
+                    {!item.done && <span style={{ color: MUTED, fontSize: 14 }}>→</span>}
                   </div>
                 </Link>
               ))}
