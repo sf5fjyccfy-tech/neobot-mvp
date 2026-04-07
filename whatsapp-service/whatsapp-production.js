@@ -616,7 +616,8 @@ async function connectTenant(tenantId, options = {}) {
       },
       // Fingerprint identique à WhatsApp Web officiel — affiche "WhatsApp Web" dans les
       // appareils liés Android. Neutre, indétectable par Meta.
-      browser: Browsers.macOS('Chrome'),
+      // 'Google Chrome' requis (Meta valide ce string côté serveur pour le pairing code)
+      browser: Browsers.macOS('Google Chrome'),
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: true,
@@ -1192,7 +1193,8 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
           keys: makeCacheableSignalKeyStore(state.keys, bailLogger, 100),
         },
         usePairingCode: true,
-        browser: Browsers.macOS('Chrome'),
+        // 'Google Chrome' obligatoire — Meta rejette 'Chrome' lors de requestPairingCode
+        browser: Browsers.macOS('Google Chrome'),
         printQRInTerminal: false,
         logger: bailLogger,
         generateHighQualityLinkPreview: false,
