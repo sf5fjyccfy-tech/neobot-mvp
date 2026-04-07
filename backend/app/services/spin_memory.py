@@ -4,7 +4,10 @@ Utilise un cache en mémoire + stockage simple en DB si disponible
 """
 from datetime import datetime, timedelta
 import json
+import logging
 from typing import Dict, Optional, Any
+
+logger = logging.getLogger(__name__)
 
 class SpinMemory:
     """Cache mémoire pour suivre les conversations SPIN"""
@@ -50,7 +53,7 @@ class SpinMemory:
                         self._memory_cache[phone] = state_data
                         return state_data
             except Exception as e:
-                print(f"⚠️  Mémoire DB inaccessible: {e}")
+                logger.warning(f"Mémoire DB inaccessible pour {phone}: {e}")
         
         # 3. État par défaut
         return {
@@ -83,7 +86,7 @@ class SpinMemory:
             try:
                 self._save_to_db(phone, current_state)
             except Exception as e:
-                print(f"⚠️  Sauvegarde DB échouée (non critique): {e}")
+                logger.warning(f"Sauvegarde DB échouée pour {phone} (non critique): {e}")
     
     def _save_to_db(self, phone: str, state_data: Dict[str, Any]):
         """Sauvegarde asynchrone en DB"""

@@ -183,7 +183,7 @@ async def generate_ai_response(
             return get_fallback_response(mode, message_lower, business_name)
                 
     except Exception as e:
-        print(f"⚠️  Erreur IA: {e}")
+        logger.error(f"Erreur IA: {e}", exc_info=True)
         return get_fallback_response(mode, message_lower, business_name)
 
 def get_fallback_response(mode: str, message: str, business_name: str = None) -> str:

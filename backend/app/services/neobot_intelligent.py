@@ -3,8 +3,11 @@ Moteur Ultimate NéoBot - Simple et Fiable
 """
 import re
 import random
+import logging
 from typing import Dict, List, Tuple, Optional
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 class NeobotIntelligent:
     def __init__(self, db: Session = None):
@@ -47,7 +50,7 @@ class NeobotIntelligent:
         normalized_neobot = re.sub(r'[^\d]', '', self.NEOBOT_PHONE)
         
         is_neobot = normalized_dest == normalized_neobot
-        print(f"🔍 DESTINATION: {normalized_dest} → NÉOBOT: {is_neobot}")
+        logger.debug(f"DESTINATION check: {normalized_dest} → NÉOBOT: {is_neobot}")
         return is_neobot
 
     def detect_neobot_intent(self, message: str) -> str:
@@ -82,8 +85,8 @@ class NeobotIntelligent:
     def get_neobot_response(self, message: str) -> str:
         """Retourne une réponse NéoBot PRÉ-ÉCRITE"""
         intent = self.detect_neobot_intent(message)
-        print(f"🎯 INTENTION: {intent} pour: {message}")
-        
+        logger.debug(f"INTENTION détectée: {intent}")
+
         responses = self.neobot_responses.get(intent, self.neobot_responses["default"])
         return random.choice(responses)
 
@@ -102,4 +105,4 @@ class NeobotIntelligent:
 
     def learn_from_ai_response(self, message: str, ai_response: str):
         """Apprentissage (pour plus tard)"""
-        print(f"🎓 APPRENTISSAGE: {message} → {ai_response}")
+        logger.debug(f"APPRENTISSAGE: {len(message)} chars → {len(ai_response)} chars")

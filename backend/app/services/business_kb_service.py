@@ -41,13 +41,15 @@ class BusinessKBService:
         # 2. Récupérer le type de business
         try:
             business_type = config.business_type.slug
-        except:
+        except Exception as e:
+            logger.warning(f"business_type.slug inaccessible pour tenant config {config.id}: {e}")
             business_type = "custom"
-        
+
         # 3. Parser les produits/services
         try:
             products = json.loads(config.products_services) if isinstance(config.products_services, str) else config.products_services or []
-        except:
+        except Exception as e:
+            logger.warning(f"Parsing products_services échoué pour tenant config {config.id}: {e}")
             products = []
         
         # 4. Construire la persona complète

@@ -393,11 +393,28 @@ app.include_router(demo_router)
 # ========== CORS MIDDLEWARE ==========
 # Note : les middlewares Starlette s'exécutent dans l'ordre inverse d'ajout.
 # CORS doit être ajouté EN DERNIER pour être exécuté EN PREMIER (traite les OPTIONS avant subscription check).
+#
+# Origines autorisées : lues depuis ALLOWED_ORIGINS (CSV) — jamais de wildcard en production.
+# Dev fallback : localhost sur les ports frontend courants.
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+_CORS_ORIGINS: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3002",
+    ]
+)
+logger.info(f"CORS allow_origins : {_CORS_ORIGINS}")
+
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(SubscriptionMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],

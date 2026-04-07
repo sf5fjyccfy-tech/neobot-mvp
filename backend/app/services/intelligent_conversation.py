@@ -2,6 +2,9 @@
 SPIN SELLING GARANTI - Retourne TOUJOURS une réponse valide
 """
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_conversation_response(message: str, db=None, tenant_id=None, phone=None) -> str:
     """
@@ -100,5 +103,5 @@ def get_conversation_response(message: str, db=None, tenant_id=None, phone=None)
             
     except Exception as e:
         # FALLBACK ABSOLU - MÊME SI TOUT PLANTE
-        print(f"⚠️  SPIN CRITICAL ERROR: {e}")
+        logger.error(f"SPIN CRITICAL ERROR: {e}", exc_info=True)
         return "🚀 **NÉOBOT** - Je suis ton assistant pour automatiser WhatsApp. Essai gratuit 14 jours !"

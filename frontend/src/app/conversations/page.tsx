@@ -73,11 +73,13 @@ export default function ConversationsPage() {
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [botPaused, setBotPaused] = useState(false);
   const isMobile = useIsMobile();
   // Sur mobile : 'list' affiche la liste, 'chat' affiche la conversation
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedIdRef = useRef<number | null>(null);
 
   const filtered = conversations.filter(c => {
     const matchFilter = filter === 'all' || c.status === filter;
@@ -90,26 +92,42 @@ export default function ConversationsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Charger les messages quand on sélectionne une conversation
+  // Charger les messages quand on sélectionne une conversation + polling 10s
   useEffect(() => {
-    if (!selected) return;
+    if (!selected) { setMessages([]); setLoadingMessages(false); return; }
+    selectedIdRef.current = selected.id;
     const tid = getTenantId();
     const token = getToken();
     if (!tid) return;
-    const controller = new AbortController();
-    fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/messages`), {
-      headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
-      signal: controller.signal,
-    })
-      .then(r => {
-        if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
-        return r.ok ? r.json() : null;
+
+    const fetchMessages = (showLoading: boolean) => {
+      if (showLoading) setLoadingMessages(true);
+      const controller = new AbortController();
+      fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/messages`), {
+        headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
+        signal: controller.signal,
       })
-      .then(data => {
-        if (data && Array.isArray(data.messages)) setMessages(data.messages);
-      })
-      .catch(err => { if (err.name !== 'AbortError') console.error('fetch messages:', err); });
-    return () => controller.abort();
+        .then(r => {
+          if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
+          return r.ok ? r.json() : null;
+        })
+        .then(data => {
+          // Ne mettre à jour que si l'utilisateur est toujours sur cette conversation
+          if (selectedIdRef.current !== selected.id) return;
+          if (data && Array.isArray(data.messages)) setMessages(data.messages);
+        })
+        .catch(err => { if (err.name !== 'AbortError') console.error('fetch messages:', err); })
+        .finally(() => { if (showLoading) setLoadingMessages(false); });
+      return controller;
+    };
+
+    const initialController = fetchMessages(true);
+    // Polling 10s pour afficher les nouvelles réponses IA sans reload
+    const interval = setInterval(() => fetchMessages(false), 10_000);
+    return () => {
+      initialController.abort();
+      clearInterval(interval);
+    };
   }, [selected]);
 
   // Charger l'état du bot quand on change de conversation
@@ -145,22 +163,33 @@ export default function ConversationsPage() {
     const tid = getTenantId();
     const token = getToken();
     if (!tid) { setLoadingConvs(false); return; }
-    const controller = new AbortController();
-    fetch(buildApiUrl(`/api/tenants/${tid}/conversations`), {
-      headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
-      signal: controller.signal,
-    })
-      .then(r => {
-        if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
-        return r.ok ? r.json() : null;
+
+    const fetchConvs = (initial: boolean) => {
+      const controller = new AbortController();
+      fetch(buildApiUrl(`/api/tenants/${tid}/conversations`), {
+        headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
+        signal: controller.signal,
       })
-      .then(data => {
-        if (data && Array.isArray(data.conversations)) setConversations(data.conversations);
-        else if (data && Array.isArray(data)) setConversations(data);
-      })
-      .catch(err => { if (err.name !== 'AbortError') console.error('fetch conversations:', err); })
-      .finally(() => setLoadingConvs(false));
-    return () => controller.abort();
+        .then(r => {
+          if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
+          return r.ok ? r.json() : null;
+        })
+        .then(data => {
+          if (data && Array.isArray(data.conversations)) setConversations(data.conversations);
+          else if (data && Array.isArray(data)) setConversations(data);
+        })
+        .catch(err => { if (err.name !== 'AbortError') console.error('fetch conversations:', err); })
+        .finally(() => { if (initial) setLoadingConvs(false); });
+      return controller;
+    };
+
+    const initialController = fetchConvs(true);
+    // Polling 15s pour afficher les nouvelles conversations en temps réel
+    const interval = setInterval(() => fetchConvs(false), 15_000);
+    return () => {
+      initialController.abort();
+      clearInterval(interval);
+    };
   }, []);
 
   async function sendMessage() {
@@ -430,64 +459,42 @@ export default function ConversationsPage() {
               flexDirection: 'column',
               gap: 12,
             }}>
-              {/* Demo messages */}
-              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                <div style={{
-                  background: SURFACE,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: '0 12px 12px 12px',
-                  padding: '10px 14px',
-                  maxWidth: '65%',
-                }}>
-                  <p style={{ color: TEXT, fontSize: 13, margin: 0, marginBottom: 4 }}>
-                    {selected.last_message}
-                  </p>
-                  <span style={{ fontSize: 10, color: MUTED }}>
-                    {formatTime(selected.last_message_at)} · Client
-                  </span>
+              {loadingMessages ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, color: MUTED, fontSize: 13 }}>
+                  <span style={{ opacity: 0.6 }}>Chargement des messages…</span>
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <div style={{
-                  background: `${NEON}15`,
-                  border: `1px solid ${NEON}30`,
-                  borderRadius: '12px 0 12px 12px',
-                  padding: '10px 14px',
-                  maxWidth: '65%',
-                }}>
-                  <p style={{ color: NEON, fontSize: 13, margin: 0, marginBottom: 4 }}>
-                    Bonjour ! Je suis votre assistant IA. Comment puis-je vous aider aujourd'hui ?
-                  </p>
-                  <span style={{ fontSize: 10, color: `${NEON}80` }}>
-                    {formatTime(new Date(new Date(selected.last_message_at).getTime() + 2000).toISOString())} · 🤖 IA
-                  </span>
-                </div>
-              </div>
-
-              {/* Dynamic messages */}
-              {messages.map(msg => (
-                <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'outgoing' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{
-                    background: msg.direction === 'outgoing' ? `${NEON}15` : SURFACE,
-                    border: `1px solid ${msg.direction === 'outgoing' ? `${NEON}30` : BORDER}`,
-                    borderRadius: msg.direction === 'outgoing' ? '12px 0 12px 12px' : '0 12px 12px 12px',
-                    padding: '10px 14px',
-                    maxWidth: '65%',
-                  }}>
-                    <p style={{ color: msg.direction === 'outgoing' ? NEON : TEXT, fontSize: 13, margin: 0, marginBottom: 4 }}>
-                      {msg.content}
-                    </p>
-                    <span style={{ fontSize: 10, color: MUTED }}>
-                      {formatTime(msg.created_at)} · {
-                        msg.direction === 'incoming'
-                          ? `👤 ${selected?.customer_name || selected?.customer_phone || 'Client'}`
-                          : msg.is_ai ? '🤖 IA' : '✍️ Manuel'
-                      }
-                    </span>
+              ) : messages.length === 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+                  <div style={{ textAlign: 'center', color: MUTED }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+                    <p style={{ fontSize: 13, margin: 0 }}>Aucun message dans cette conversation.</p>
+                    <p style={{ fontSize: 12, margin: '6px 0 0', opacity: 0.6 }}>Les messages WhatsApp apparaîtront ici en temps réel.</p>
                   </div>
                 </div>
-              ))}
+              ) : (
+                messages.map(msg => (
+                  <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'outgoing' ? 'flex-end' : 'flex-start' }}>
+                    <div style={{
+                      background: msg.direction === 'outgoing' ? `${NEON}15` : SURFACE,
+                      border: `1px solid ${msg.direction === 'outgoing' ? `${NEON}30` : BORDER}`,
+                      borderRadius: msg.direction === 'outgoing' ? '12px 0 12px 12px' : '0 12px 12px 12px',
+                      padding: '10px 14px',
+                      maxWidth: '65%',
+                    }}>
+                      <p style={{ color: msg.direction === 'outgoing' ? NEON : TEXT, fontSize: 13, margin: 0, marginBottom: 4 }}>
+                        {msg.content}
+                      </p>
+                      <span style={{ fontSize: 10, color: MUTED }}>
+                        {formatTime(msg.created_at)} · {
+                          msg.direction === 'incoming'
+                            ? `👤 ${selected?.customer_name || selected?.customer_phone || 'Client'}`
+                            : msg.is_ai ? '🤖 IA' : '✍️ Manuel'
+                        }
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
               <div ref={messagesEndRef} />
             </div>
 

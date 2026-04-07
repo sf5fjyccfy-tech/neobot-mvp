@@ -173,8 +173,8 @@ class SessionExpirationChecker:
             # Déconnecte
             try:
                 await BaileysService.logout(current_session.session_id)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Logout session {current_session.session_id} échoué (non critique): {e}")
             current_session.status = "disconnected"
         
         # Crée nouveau

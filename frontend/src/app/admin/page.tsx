@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiCall, getAdminToken, startImpersonation, buildApiUrl } from '@/lib/api';
 import * as Sentry from '@sentry/nextjs';
 
-// Wrapper qui force le JWT admin (ignore les tokens d'impersonation actifs)
+// Wrapper qui force le JWT admin 
 // Nécessaire pour que les appels /api/admin/* fonctionnent même quand le superadmin
 // a une impersonation en cours — sinon getToken() retourne le token impersonné (is_superadmin=False → 403)
 const adminCall = (endpoint: string, opts?: RequestInit) => {

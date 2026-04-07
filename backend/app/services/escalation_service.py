@@ -91,8 +91,8 @@ class EscalationService:
                         if message_count > EscalationService.MAX_ATTEMPTS_THRESHOLD:
                             logger.info(f"🚨 Escalade détectée: MAX_ATTEMPTS ({message_count} msgs)")
                             return EscalationReason.MAX_ATTEMPTS
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"detect_escalation_trigger: erreur count messages conv {conversation_id}: {e}")
             
             return None
             
