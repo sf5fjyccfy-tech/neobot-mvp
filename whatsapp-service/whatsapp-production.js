@@ -1157,11 +1157,18 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
     // Stopper toute reconnexion en cours — éviter conflits de socket
     clearReconnectTimer(session);
     if (session.socket) {
+      // Marquer initializing=true AVANT socket.end() pour bloquer scheduleReconnect
+      // pendant le close event que Baileys émet de manière synchrone/asynchrone.
+      // Sans ça, onConnectionUpdate → scheduleReconnect recrée un timer 10s qui
+      // déclenche un connectTenant après la génération du code → 401 Meta aggravar.
+      session.initializing = true;
       try { session.socket.end(undefined); } catch (_) {}
       session.socket = null;
       // Laisser 300ms à Baileys pour libérer les event emitters internes
       // avant de créer un nouveau socket — évite les listeners orphelins
       await new Promise(resolve => setTimeout(resolve, 300));
+      // Nettoyer tout timer qui aurait pu être recréé pendant les 300ms
+      clearReconnectTimer(session);
     }
     session.state = 'idle';
   }
