@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { buildApiUrl, setToken, setTenantId, setIsSuperadmin } from '@/lib/api';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
@@ -10,7 +10,7 @@ interface LoginFormData {
   password: string;
 }
 
-export default function LoginForm() {
+function LoginFormInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState<LoginFormData>({ email: '', password: '' });
@@ -155,5 +155,13 @@ export default function LoginForm() {
         </a>
       </p>
     </form>
+  );
+}
+
+export default function LoginForm() {
+  return (
+    <Suspense fallback={null}>
+      <LoginFormInner />
+    </Suspense>
   );
 }
