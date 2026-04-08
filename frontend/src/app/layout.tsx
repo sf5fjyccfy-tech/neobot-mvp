@@ -18,7 +18,7 @@ const dmSans = DM_Sans({
   variable: '--font-dm-sans',
 });
 
-// VERSION_MARKER: 929b345 — modifié le 5 avril 2026
+// VERSION_MARKER: 929b345 — modifié le 8 avril 2026
 export const metadata: Metadata = {
   metadataBase: new URL('https://neobot-ai.com'),
   title: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
@@ -31,26 +31,14 @@ export const metadata: Metadata = {
     locale: 'fr_FR',
     siteName: 'NéoBot',
     url: 'https://neobot-ai.com',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
-      },
-    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'NéoBot — L\'IA WhatsApp qui vend pendant que vous dormez',
     description: 'Automatisez vos conversations WhatsApp. 14 jours gratuits.',
-    images: ['/og-image.png'],
   },
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
-  },
+  // favicon, apple-icon et og:image sont générés dynamiquement
+  // via src/app/icon.tsx, apple-icon.tsx, opengraph-image.tsx
 };
 
 export default function RootLayout({
