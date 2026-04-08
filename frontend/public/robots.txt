@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://neobot-ai.com/sitemap.xml

@@ -19,6 +19,7 @@ const dmSans = DM_Sans({
 
 // VERSION_MARKER: 929b345 — modifié le 5 avril 2026
 export const metadata: Metadata = {
+  metadataBase: new URL('https://neobot-ai.com'),
   title: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
   description: 'Automatisez vos conversations WhatsApp avec une IA qui parle comme vous. Répondez à vos clients 24h/24, augmentez vos ventes. 14 jours gratuits.',
   keywords: 'whatsapp, chatbot, cameroun, ia, automatisation, bot, enterprise, afrique',
@@ -28,11 +29,26 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'fr_FR',
     siteName: 'NéoBot',
+    url: 'https://neobot-ai.com',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'NéoBot — L\'IA WhatsApp qui vend pendant que vous dormez',
     description: 'Automatisez vos conversations WhatsApp. 14 jours gratuits.',
+    images: ['/og-image.png'],
+  },
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
   },
 };
 
