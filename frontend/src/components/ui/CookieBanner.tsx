@@ -53,7 +53,7 @@ export default function CookieBanner() {
           <p style={{ margin: 0, color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>
             NéoBot utilise des cookies essentiels au fonctionnement du service et, avec votre accord, des cookies analytiques pour améliorer l&apos;expérience.{' '}
             <Link
-              href="/legal/confidentialite"
+              href="/legal?tab=confidentialite"
               style={{ color: '#FF4D00', textDecoration: 'underline', fontSize: 12 }}
             >
               Politique de confidentialité

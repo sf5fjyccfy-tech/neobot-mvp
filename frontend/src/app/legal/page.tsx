@@ -534,13 +534,39 @@ function Confidentialite() {
       {/* 7 */}
       <h2 style={S.h2}>7. Cookies et Traceurs</h2>
       <p style={S.p}>
-        NeoBot utilise des cookies techniques strictement nécessaires au fonctionnement du service
-        (session, authentification). Aucun cookie publicitaire ou de traçage tiers n'est utilisé.
+        NeoBot utilise des cookies pour le fonctionnement du service et, avec votre accord, pour améliorer
+        l&apos;expérience. Un bandeau de consentement vous permet de choisir à votre première visite.
       </p>
-      <ul style={S.ul}>
-        <li style={S.li}><strong style={{ color: '#FFF0E8' }}>Cookies de session :</strong> Durée : session navigateur. Finalité : authentification sécurisée.</li>
-        <li style={S.li}><strong style={{ color: '#FFF0E8' }}>Cookies Cloudflare :</strong> Protection contre les bots et DDoS. Ces cookies sont nécessaires à la sécurité du service.</li>
-      </ul>
+      <table style={S.table}>
+        <thead>
+          <tr>
+            <th style={S.th}>Cookie</th>
+            <th style={S.th}>Finalité</th>
+            <th style={S.th}>Durée</th>
+            <th style={S.th}>Catégorie</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            ['auth_session', 'Maintien de la session d\'authentification', 'Session navigateur', 'Essentiel'],
+            ['neobot_cookies_accepted', 'Mémorisation de votre choix de consentement', '12 mois', 'Essentiel'],
+            ['neo_tour_v2_done', 'Mémorisation de la visite guidée', 'Indéfini', 'Fonctionnel'],
+            ['Cloudflare (__cf_bm, _cfuvid)', 'Protection contre les bots et DDoS', 'Session / 30 min', 'Essentiel (sécurité)'],
+          ].map(([name, fin, dur, cat]) => (
+            <tr key={name}>
+              <td style={{ ...S.td, fontFamily: 'monospace', color: '#FF9A6C', fontSize: 12 }}>{name}</td>
+              <td style={S.td}>{fin}</td>
+              <td style={{ ...S.td, color: 'rgba(0,229,204,0.7)' }}>{dur}</td>
+              <td style={S.td}>{cat}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={S.p}>
+        Les cookies essentiels sont toujours actifs — ils sont nécessaires au fonctionnement du service.
+        Vous pouvez refuser les cookies analytiques via le bandeau en bas de page. Pour effacer les cookies
+        déjà stockés, utilisez les paramètres de votre navigateur.
+      </p>
 
       {/* 8 */}
       <h2 style={S.h2}>8. Données des Contacts Finaux (Clients de Nos Clients)</h2>
