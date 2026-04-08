@@ -79,7 +79,7 @@ def create_payment_link(
     if not plan_config:
         raise ValueError(f"Plan inconnu : {plan}")
 
-    amount = plan_config.get("price_ngn") or plan_config.get("price_fcfa", 0)
+    amount = plan_config.get("price_fcfa", 0)
     if amount <= 0:
         raise ValueError(f"Plan {plan} non facturable (prix 0 ou interne)")
 
@@ -91,7 +91,7 @@ def create_payment_link(
         tenant_id=tenant_id,
         plan=plan.upper(),
         amount=amount,
-        currency="NGN",
+        currency="XAF",
         status="pending",
         expires_at=expires_at,
     )

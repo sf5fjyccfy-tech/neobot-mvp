@@ -57,7 +57,8 @@ Informations produit :
 - L'agent répond automatiquement 24h/24 aux clients (vente, RDV, support, FAQ, qualification)
 - Configuration sans code : formulaire + prompt IA généré automatiquement
 - Délai d'installation : moins de 30 minutes
-- Plan unique : Essential — 20 000 FCFA/mois, 2 500 messages/mois, 1 agent actif
+- Plans disponibles — Essential : 20 000 FCFA/mois (disponible), Business : 50 000 FCFA/mois (bientôt), Enterprise : 100 000 FCFA/mois (bientôt)
+- Plan actif aujourd'hui : Essential — 2 500 messages/mois, 1 agent actif
 - Essai gratuit 14 jours, aucune carte bancaire requise
 - Langues : français, anglais, dialectes locaux selon la configuration
 - Clients cibles : restaurants, boutiques, agences, cliniques, auto-écoles, artisans
