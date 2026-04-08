@@ -31,8 +31,8 @@ export const buildApiUrl = (endpoint: string): string => {
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('jwt_token', token);
-    // Cookie de présence lu par le middleware Next.js pour protéger les routes
-    document.cookie = 'auth_session=1; Path=/; SameSite=Strict; Max-Age=86400';
+    // Cookie de présence lu par le middleware Next.js pour protéger les routes — 7 jours
+    document.cookie = 'auth_session=1; Path=/; SameSite=Strict; Max-Age=604800';
   }
 };
 

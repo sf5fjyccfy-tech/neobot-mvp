@@ -31,11 +31,13 @@ export const metadata: Metadata = {
     locale: 'fr_FR',
     siteName: 'NéoBot',
     url: 'https://neobot-ai.com',
+    images: [{ url: 'https://neobot-ai.com/opengraph-image', width: 1200, height: 630, alt: 'NéoBot — L\'IA WhatsApp qui vend pendant que vous dormez' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'NéoBot — L\'IA WhatsApp qui vend pendant que vous dormez',
     description: 'Automatisez vos conversations WhatsApp. 14 jours gratuits.',
+    images: ['https://neobot-ai.com/opengraph-image'],
   },
   // favicon, apple-icon et og:image sont générés dynamiquement
   // via src/app/icon.tsx, apple-icon.tsx, opengraph-image.tsx

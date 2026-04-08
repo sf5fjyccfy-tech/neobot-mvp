@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { buildApiUrl, setToken, setTenantId, setIsSuperadmin } from '@/lib/api';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 
@@ -12,6 +12,7 @@ interface LoginFormData {
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState<LoginFormData>({ email: '', password: '' });
   const [error, setError] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -55,8 +56,12 @@ export default function LoginForm() {
       setToken(data.access_token);
       setTenantId(data.tenant_id);
       setIsSuperadmin(data.is_superadmin ?? false);
+      // Récupère la destination originale si le middleware a bloqué l'accès
+      const rawRedirect = searchParams?.get('redirect') ?? '';
+      // Sécurité : on n'accepte que des chemins internes (/...) — pas d'open redirect
+      const safeRedirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') && !rawRedirect.includes('://') ? rawRedirect : null;
       // Hard redirect : garantit que le cookie auth_session est envoyé avec la prochaine requête middleware
-      window.location.href = data.is_superadmin ? '/admin' : '/dashboard';
+      window.location.href = data.is_superadmin ? '/admin' : (safeRedirect ?? '/dashboard');
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         setError('Le serveur met quelques secondes à démarrer. Patientez 30 secondes et réessayez.');

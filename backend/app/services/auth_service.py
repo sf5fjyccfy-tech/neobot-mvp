@@ -21,7 +21,7 @@ if not _jwt_secret_env:
     )
 SECRET_KEY = _jwt_secret_env or "change-me-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 jours par défaut
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
