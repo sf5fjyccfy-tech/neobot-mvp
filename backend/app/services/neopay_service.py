@@ -69,7 +69,14 @@ def create_payment_link(
 
     Le token est un hex 32 octets (256 bits d'entropie — non devinable).
     """
-    plan_config = PLAN_LIMITS.get(PlanType(plan.upper()))
+    # Normalise les alias display (essential→basic, business→standard, enterprise→pro)
+    _PLAN_ALIASES = {"ESSENTIAL": "BASIC", "BUSINESS": "STANDARD", "ENTERPRISE": "PRO"}
+    plan_key = _PLAN_ALIASES.get(plan.upper(), plan.upper())
+    try:
+        plan_type = PlanType(plan_key)
+    except ValueError:
+        raise ValueError(f"Plan inconnu : {plan}")
+    plan_config = PLAN_LIMITS.get(plan_type)
     if not plan_config:
         raise ValueError(f"Plan inconnu : {plan}")
 
@@ -84,7 +91,7 @@ def create_payment_link(
     link = PaymentLink(
         token=token,
         tenant_id=tenant_id,
-        plan=plan.upper(),
+        plan=plan_key,
         amount=amount,
         currency="NGN",
         status="pending",

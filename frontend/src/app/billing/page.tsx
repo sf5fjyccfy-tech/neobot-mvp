@@ -74,7 +74,7 @@ export default function BillingPage() {
       const res = await fetch(buildApiUrl('/api/neopay/payment-links'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ plan: 'essential' }),
+        body: JSON.stringify({ plan: 'basic' }),
       });
       if (!res.ok) {
         const err = await res.json();
