@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { apiCall, getTenantId, getToken, buildApiUrl } from '@/lib/api';
+import { apiCall, getTenantId, getToken, buildApiUrl, getBusinessInfo } from '@/lib/api';
 import AppShell from '@/components/ui/AppShell';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -15,6 +15,24 @@ const AGENT_TYPES = [
   { value: 'vente',         label: 'Agent Vente',         icon: '🔥',  desc: 'Closeur commercial' },
   { value: 'qualification', label: 'Agent Qualification', icon: '🎯',  desc: 'Qualification prospects' },
 ];
+
+// Mapping secteur d'activité → type d'agent recommandé
+const BUSINESS_TYPE_TO_AGENT: Record<string, { agentType: string; reason: string }> = {
+  restaurant: { agentType: 'vente',         reason: 'prise de commandes & réservations' },
+  ecommerce:  { agentType: 'vente',         reason: 'vente et suivi commandes' },
+  travel:     { agentType: 'rdv',           reason: 'réservations & itinéraires' },
+  salon:      { agentType: 'rdv',           reason: 'gestion de rendez-vous' },
+  fitness:    { agentType: 'rdv',           reason: 'réservations de séances' },
+  consulting: { agentType: 'qualification', reason: 'qualification de prospects' },
+};
+
+function getSuggestedAgentType(): { agentType: string; businessLabel: string; reason: string } | null {
+  const info = getBusinessInfo();
+  if (!info?.business_type) return null;
+  const suggestion = BUSINESS_TYPE_TO_AGENT[info.business_type];
+  if (!suggestion) return null;
+  return { ...suggestion, businessLabel: info.business_type };
+}
 
 const TONES = [
   'Amical & Professionnel',
@@ -546,7 +564,11 @@ export default function AgentPage() {
             </p>
           </div>
           <button
-            onClick={() => setShowCreateForm(true)}
+            onClick={() => {
+              const suggestion = getSuggestedAgentType();
+              setCreateForm(p => ({ ...p, agent_type: suggestion?.agentType ?? 'libre' }));
+              setShowCreateForm(true);
+            }}
             className="px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105"
             style={{ background: 'rgba(255,77,0,0.12)', border: '1px solid rgba(255,77,0,0.3)', color: '#FF4D00' }}
           >
@@ -1266,6 +1288,20 @@ export default function AgentPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
           <div className="w-full max-w-md mx-4 rounded-3xl p-7 shadow-2xl" style={{ background: '#0C0916', border: '1px solid rgba(255,255,255,0.1)' }}>
             <h2 className="text-xl font-bold text-white mb-6" style={{ fontFamily: "'Syne', sans-serif" }}>Créer un agent</h2>
+            {(() => {
+              const suggestion = getSuggestedAgentType();
+              if (!suggestion) return null;
+              const typeInfo = AGENT_TYPES.find(t => t.value === suggestion.agentType);
+              return (
+                <div className="mb-5 px-4 py-3 rounded-xl flex items-start gap-3" style={{ background: 'rgba(255,213,0,0.06)', border: '1px solid rgba(255,213,0,0.2)' }}>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
+                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)', margin: 0 }}>
+                    Pour votre secteur <strong style={{ color: 'rgba(255,255,255,0.8)' }}>{suggestion.businessLabel}</strong>, nous recommandons{' '}
+                    <strong style={{ color: '#FF4D00' }}>{typeInfo?.label ?? suggestion.agentType}</strong>{' '}— idéal pour la {suggestion.reason}.
+                  </p>
+                </div>
+              );
+            })()}
             <div className="space-y-5">
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Nom de l&apos;agent</label>

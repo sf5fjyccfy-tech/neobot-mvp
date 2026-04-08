@@ -120,6 +120,8 @@ export default function DashboardPage() {
   const [isTrial, setIsTrial] = useState(false);
   const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const [waConnected, setWaConnected] = useState(false);
+  const [planLabel, setPlanLabel] = useState<string | null>(null);
+  const [isSuperadminDash, setIsSuperadminDash] = useState(false);
 
   useEffect(() => {
     // Détecter un token d'impersonation passé en query param
@@ -162,8 +164,17 @@ export default function DashboardPage() {
           const waOk = waData?.status === 'connected';
           setWaConnected(waOk);
           if (usageData) {
-            setIsTrial(usageData.is_trial ?? false);
+            const superadmin = usageData.is_superadmin ?? false;
+            setIsSuperadminDash(superadmin);
+            const trialFlag = !superadmin && (usageData.is_trial ?? false);
+            setIsTrial(trialFlag);
             setTrialDaysLeft(usageData.trial_days_left ?? null);
+            // Label du badge : superadmin → 'Admin', trial en cours → null (badge Essai), sinon plan
+            if (superadmin) {
+              setPlanLabel('Admin');
+            } else if (!trialFlag) {
+              setPlanLabel(usageData.plan ?? 'Essential');
+            }
             setStats(prev => prev.map((s, i) => {
               if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
               if (i === 1) return { ...s, value: String(usageData.active_conversations ?? '—'), sub: 'Sessions ouvertes' };
@@ -248,9 +259,9 @@ export default function DashboardPage() {
               Tableau de bord
             </h1>
             <span style={{
-              background: isTrial ? 'rgba(230,127,0,0.15)' : `${NEON}20`,
-              border: `1px solid ${isTrial ? 'rgba(230,127,0,0.4)' : `${NEON}40`}`,
-              color: isTrial ? '#E67F00' : NEON,
+              background: isSuperadminDash ? 'rgba(139,92,246,0.15)' : isTrial ? 'rgba(230,127,0,0.15)' : `${NEON}20`,
+              border: `1px solid ${isSuperadminDash ? 'rgba(139,92,246,0.5)' : isTrial ? 'rgba(230,127,0,0.4)' : `${NEON}40`}`,
+              color: isSuperadminDash ? '#a78bfa' : isTrial ? '#E67F00' : NEON,
               fontSize: 11,
               fontWeight: 700,
               padding: '2px 10px',
@@ -258,7 +269,7 @@ export default function DashboardPage() {
               letterSpacing: 1,
               textTransform: 'uppercase',
             }}>
-              {isTrial ? `Essai${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : 'Essential'}
+              {isSuperadminDash ? 'Admin' : isTrial ? `Essai${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : (planLabel ?? 'Essential')}
             </span>
           </div>
           <p style={{ color: MUTED, fontSize: 13, margin: 0 }}>
@@ -579,22 +590,22 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Bottom activity feed */}
-        <div id="neo-conversations-preview" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
-          <h2 style={{
-            fontFamily: '"Syne", sans-serif',
-            fontSize: 16,
-            fontWeight: 700,
-            color: '#fff',
-            margin: 0,
-            marginBottom: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <span style={{ color: NEON }}>◈</span> Activité récente
-          </h2>
-          {dashStats?.recent_outcomes && dashStats.recent_outcomes.length > 0 ? (
+        {/* Bottom activity feed — affiché uniquement quand il y a des données */}
+        {dashStats?.recent_outcomes && dashStats.recent_outcomes.length > 0 && (
+          <div id="neo-conversations-preview" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
+            <h2 style={{
+              fontFamily: '"Syne", sans-serif',
+              fontSize: 16,
+              fontWeight: 700,
+              color: '#fff',
+              margin: 0,
+              marginBottom: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <span style={{ color: NEON }}>◈</span> Activité récente
+            </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {dashStats.recent_outcomes.map((item, i) => (
                 <div key={i} style={{
@@ -619,16 +630,8 @@ export default function DashboardPage() {
                 </p>
               </Link>
             </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: MUTED }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
-              <p style={{ fontSize: 14, margin: 0 }}>Aucune activité récente</p>
-              <p style={{ fontSize: 12, margin: '6px 0 0', color: MUTED }}>
-                Les conversations apparaîtront ici une fois le bot connecté
-              </p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
     </AppShell>

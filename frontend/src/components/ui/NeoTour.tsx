@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { NeoBotIcon } from './NeoBotLogo';
 import { useRouter } from 'next/navigation';
 
-const TOUR_KEY = 'neo_tour_v1_done';
+const TOUR_KEY = 'neo_tour_v2_done';
 
 // Géométrie sidebar (doit correspondre à globals.css + AppShell)
 const SIDEBAR_W   = 220;
@@ -25,40 +25,35 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    title: "Salut, moi c'est Neo 👋",
-    body: "Ton guide de bord NeoBot. Je vais te faire visiter en 6 étapes — moins de 30 secondes. Promis.",
+    title: "Ton bot est à 3 min d'être en ligne 🚀",
+    body: "Je t'emmène sur les 4 points clés. Chaque étape, une action concrète. Aucun blabla.",
     navIndex: -1,
   },
   {
-    title: "📊 Dashboard",
-    body: "Ton cockpit. Messages reçus, conversations actives, stats du jour. Tout en un seul regard.",
-    navIndex: 0,
-  },
-  {
-    title: "🤖 Agent IA",
-    body: "Ici ton bot prend vie. Donne-lui un caractère, une base de connaissances, un ton. Il bosse 24h/24 à ta place.",
+    title: "🤖 Crée ton agent IA",
+    body: "C'est l'étape #1. Donne un secteur, un ton, une base de connaissances à ton bot. Il répond exactement comme tu le veux.",
     navIndex: 1,
-    cta: { label: "Configurer l'agent", href: '/agent' },
+    cta: { label: "Configurer l'agent →", href: '/agent' },
   },
   {
-    title: "💬 Conversations",
-    body: "Toutes les discussions de tes clients en temps réel. Tu peux reprendre la main quand tu veux — le bot s'efface.",
+    title: "📱 Connecte WhatsApp",
+    body: "Scanne le QR code avec ton téléphone. Ton bot est EN LIGNE instantanément. Tes clients écrivent, le bot répond.",
+    navIndex: 4,
+    cta: { label: 'Connecter WhatsApp →', href: '/config' },
+  },
+  {
+    title: "💬 Surveille les conversations",
+    body: "Tu vois tout en temps réel. Tu veux reprendre la main sur un client ? Un tap, et c'est toi qui parles. Le bot s'efface.",
     navIndex: 2,
   },
   {
-    title: "📈 Analytics",
-    body: "Combien de messages, quelles heures sont chaudes, quels clients reviennent. La data ne ment pas.",
+    title: "📈 Lis tes résultats",
+    body: "RDV pris, ventes conclues, leads qualifiés — l'analytics te dit ce que ton bot a accompli pour toi chaque jour.",
     navIndex: 3,
   },
   {
-    title: "📱 Config WhatsApp",
-    body: "Connecte ton numéro WhatsApp ici. C'est la dernière étape — une fois ton agent configuré, scanne le QR code et le bot est en ligne.",
-    navIndex: 4,
-    cta: { label: 'Connecter WhatsApp', href: '/config' },
-  },
-  {
-    title: "C'est tout ! 🎉",
-    body: "Tu as le tour complet. Si tu te perds, clique sur Neo en bas à gauche et je reviens instantanément.",
+    title: "C'est parti 🎉",
+    body: "Le seul bot WhatsApp qui travaille pendant que tu dors. Si tu te perds, clique sur Neo en bas à gauche.",
     navIndex: -1,
   },
 ];

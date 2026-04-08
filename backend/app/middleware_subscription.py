@@ -67,6 +67,10 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
 
             db = SessionLocal()
             try:
+                # Superadmin bypass : aucune limitation d'abonnement
+                if self._is_superadmin(token, db):
+                    return await call_next(request)
+
                 sub = db.execute(
                     __import__('sqlalchemy').select(Subscription).where(
                         Subscription.tenant_id == tenant_id
@@ -138,3 +142,20 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
         except Exception:
             pass
         return None
+
+    @staticmethod
+    def _is_superadmin(token: str, db_session) -> bool:
+        """Vérifie si le token appartient à un superadmin — requiert une session DB ouverte."""
+        try:
+            from app.services.auth_service import decode_access_token
+            from app.models import User
+            payload = decode_access_token(token)
+            if not payload:
+                return False
+            user_id = payload.get("user_id")
+            if not user_id:
+                return False
+            user = db_session.query(User).filter(User.id == user_id).first()
+            return bool(user and user.is_superadmin)
+        except Exception:
+            return False

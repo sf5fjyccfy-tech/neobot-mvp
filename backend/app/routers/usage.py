@@ -10,7 +10,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.dependencies import verify_tenant_access
-from app.models import Tenant, Message, Conversation
+from app.models import Tenant, Message, Conversation, Subscription, User
 from app.services.usage_tracking_service import UsageTrackingService
 
 router = APIRouter(prefix="/api/tenants", tags=["usage"])
@@ -85,9 +85,25 @@ async def get_usage_summary(
             detail=summary["error"]
         )
 
-    # Enrichir avec les infos d'essai
-    is_trial = bool(tenant.is_trial)
-    trial_ends_at = tenant.trial_ends_at
+    # Enrichir avec les infos d'essai depuis le modèle Subscription (source de vérité)
+    subscription = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).first()
+    is_superadmin_tenant = False
+    if subscription:
+        is_trial = bool(subscription.is_trial)
+        trial_ends_at = subscription.trial_end_date
+    else:
+        # Fallback : lire depuis le modèle Tenant si pas de Subscription
+        is_trial = bool(tenant.is_trial)
+        trial_ends_at = tenant.trial_ends_at
+
+    # Détecter si c'est un compte superadmin (pas de badge plan)
+    user = db.query(User).filter(User.tenant_id == tenant_id, User.is_superadmin == True).first()
+    if user:
+        is_superadmin_tenant = True
+        is_trial = False  # Superadmin : jamais en essai
+        summary["plan"] = "NeoBot Admin"
+        summary["plan_limit"] = -1
+        summary["over_limit"] = False
     trial_days_left: Optional[int] = None
     if is_trial and trial_ends_at:
         delta = trial_ends_at - datetime.utcnow()
@@ -96,6 +112,7 @@ async def get_usage_summary(
     summary["is_trial"] = is_trial
     summary["trial_ends_at"] = trial_ends_at.isoformat() if trial_ends_at else None
     summary["trial_days_left"] = trial_days_left
+    summary["is_superadmin"] = is_superadmin_tenant
 
     # Messages reçus aujourd'hui (début du jour UTC)
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
