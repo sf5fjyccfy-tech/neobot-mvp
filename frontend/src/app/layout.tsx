@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Syne, DM_Sans } from 'next/font/google';
 import './globals.css';
 import GalaxyCanvas from '@/components/ui/GalaxyCanvas';
+import CookieBanner from '@/components/ui/CookieBanner';
 
 const syne = Syne({
   subsets: ['latin'],
@@ -64,6 +65,7 @@ export default function RootLayout({
         <div style={{ position: 'relative', zIndex: 1 }}>
           {children}
         </div>
+        <CookieBanner />
       </body>
     </html>
   );
