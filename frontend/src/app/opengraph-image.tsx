@@ -81,7 +81,6 @@ export default function OgImage() {
               border: '1px solid rgba(255,77,0,0.3)',
               borderRadius: '20px',
               padding: '6px 16px',
-              width: 'fit-content',
             }}>
               <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#FF4D00', display: 'flex' }} />
               <span style={{ color: '#FF6B35', fontSize: '15px', fontWeight: 600, fontFamily: 'sans-serif', letterSpacing: '0.06em' }}>
