@@ -73,8 +73,8 @@ PLAN_LIMITS = {
         "name": "Essential",
         "display_name": "Essential",
         "available": True,
-        "price_fcfa": 20000,    # XAF (Afrique centrale)
-        "price_ngn": 20000,     # NGN (Nigeria)
+        "price_fcfa": 20000,    # XAF (Afrique centrale) — prix de référence
+        "price_ngn": 49100,     # NGN — conversion 20 000 XAF (taux : 1 XAF ≈ 2.455 NGN)
         "whatsapp_messages": 2500,           # 2 500 messages/mois
         "channels": 1,
         "max_agents": 1,                     # 1 seul agent actif
@@ -105,7 +105,7 @@ PLAN_LIMITS = {
         "display_name": "Business",
         "available": False,                  # Gelé — bientôt disponible
         "price_fcfa": 50000,    # XAF
-        "price_ngn": 50000,     # NGN
+        "price_ngn": 122750,    # NGN — conversion 50 000 XAF
         "whatsapp_messages": 5000,
         "channels": 3,
         "max_agents": 3,
@@ -135,7 +135,7 @@ PLAN_LIMITS = {
         "display_name": "Enterprise",
         "available": False,                  # Gelé — bientôt disponible
         "price_fcfa": 100000,   # XAF
-        "price_ngn": 100000,    # NGN
+        "price_ngn": 245500,    # NGN — conversion 100 000 XAF
         "whatsapp_messages": -1,             # Illimité
         "channels": -1,
         "max_agents": -1,

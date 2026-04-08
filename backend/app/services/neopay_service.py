@@ -25,7 +25,7 @@ from ..models import (
     PlanType,
     PLAN_LIMITS,
 )
-from . import korapay_service, campay_service
+from . import korapay_service
 from .email_service import send_internal_alert, send_payment_confirmation
 
 logger = logging.getLogger(__name__)
@@ -49,15 +49,9 @@ def _get_backend_url() -> str:
 
 def _choose_provider(country: str, payment_method: str) -> str:
     """
-    Routing intelligent :
-    - Cameroun + Mobile Money → CamPay (quand CAMPAY_PRODUCTION=true), sinon Korapay
-    - Cameroun + Carte → Korapay
-    - Reste Afrique → Korapay
-    - International → Korapay (PayPal non encore intégré)
+    Provider unique : Korapay.
+    CamPay suspendu — documents en attente.
     """
-    campay_live = os.environ.get("CAMPAY_PRODUCTION", "false").lower() == "true"
-    if country.upper() in ("CM", "CMR") and payment_method == "mobile_money" and campay_live:
-        return "campay"
     return "korapay"
 
 
@@ -79,7 +73,8 @@ def create_payment_link(
     if not plan_config:
         raise ValueError(f"Plan inconnu : {plan}")
 
-    amount = plan_config.get("price_fcfa", 0)
+    # Korapay traite en NGN — on utilise le prix NGN (converti depuis XAF)
+    amount = plan_config.get("price_ngn", 0)
     if amount <= 0:
         raise ValueError(f"Plan {plan} non facturable (prix 0 ou interne)")
 
@@ -91,7 +86,7 @@ def create_payment_link(
         tenant_id=tenant_id,
         plan=plan.upper(),
         amount=amount,
-        currency="XAF",
+        currency="NGN",
         status="pending",
         expires_at=expires_at,
     )
@@ -197,19 +192,6 @@ async def initiate_payment(
             )
             checkout_url = result.get("data", {}).get("checkout_url") or result.get("data", {}).get("payment_url", "")
 
-        elif provider == "campay":
-            if not customer_phone:
-                raise ValueError("Numéro de téléphone requis pour Mobile Money CamPay")
-            result = await campay_service.initialize_collection(
-                reference=reference,
-                amount=link.amount,
-                currency=link.currency,
-                phone_number=customer_phone,
-                description=f"Abonnement NéoBot {link.plan}",
-                redirect_url=redirect_url,
-                webhook_url=notification_url,
-            )
-            checkout_url = result.get("ussd_code") or result.get("operator_reference", "")
         else:
             raise ValueError(f"Provider non supporté : {provider}")
 
@@ -222,40 +204,11 @@ async def initiate_payment(
         logger.error("Échec initiation paiement %s via %s: %s", reference, provider, exc)
         sentry_sdk.capture_exception(exc)
 
-        # Fallback automatique si timeout ou erreur Korapay → CamPay sandbox
-        if provider == "korapay":
-            logger.warning("Fallback Korapay → CamPay déclenché pour ref %s", reference)
-            sentry_sdk.capture_message(
-                f"NeopPay fallback Korapay→CamPay — ref: {reference}",
-                level="warning"
-            )
-            await send_internal_alert(
-                subject="⚠️ NeopPay — Fallback Korapay→CamPay",
-                body=f"Référence: {reference}\nTenant: {link.tenant_id}\nErreur: {exc}"
-            )
-            # CamPay sandbox en fallback
-            if customer_phone:
-                try:
-                    result = await campay_service.initialize_collection(
-                        reference=f"{reference}_fallback",
-                        amount=link.amount,
-                        currency=link.currency,
-                        phone_number=customer_phone,
-                        description=f"Abonnement NéoBot {link.plan}",
-                        redirect_url=redirect_url,
-                        webhook_url=f"{_get_backend_url()}/api/neopay/webhooks/campay",
-                    )
-                    event.provider = "campay"
-                    event.status = "pending"
-                    db.commit()
-                    return {
-                        "checkout_url": result.get("ussd_code", ""),
-                        "provider": "campay",
-                        "reference": f"{reference}_fallback"
-                    }
-                except Exception as fallback_exc:
-                    logger.error("Fallback CamPay aussi échoué: %s", fallback_exc)
-                    sentry_sdk.capture_exception(fallback_exc)
+        # Alerte Sentry + email sur erreur Korapay
+        await send_internal_alert(
+            subject="⚠️ NeopPay — Erreur Korapay",
+            body=f"Référence: {reference}\nTenant: {link.tenant_id}\nErreur: {exc}"
+        )
 
         event.status = "failed"
         event.failure_reason = str(exc)
@@ -313,10 +266,7 @@ async def process_webhook(
     # ── Traitement métier ─────────────────────────────────────────────────────
     try:
         raw_status = extracted.get("status", "")
-        is_success = (
-            (provider == "korapay" and raw_status in ("success", "successful")) or
-            (provider == "campay" and raw_status == "SUCCESSFUL")
-        )
+        is_success = (provider == "korapay" and raw_status in ("success", "successful"))
 
         if is_success:
             transaction_id = extracted["transaction_id"]
@@ -464,8 +414,6 @@ async def retry_failed_webhooks(db: Session) -> int:
         # Extraire les données normalisées depuis le payload stocké
         if wh.provider == "korapay":
             extracted = korapay_service.extract_webhook_data(wh.raw_payload)
-        elif wh.provider == "campay":
-            extracted = campay_service.extract_webhook_data(wh.raw_payload)
         else:
             continue
 
