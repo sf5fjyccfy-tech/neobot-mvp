@@ -286,16 +286,25 @@ async def register(
     )
 
     # Email de confirmation — génère un token SHA-256 à usage unique
-    raw_verification_token = secrets.token_urlsafe(32)
-    new_user.email_verification_token = hashlib.sha256(raw_verification_token.encode()).hexdigest()
-    db.commit()
-    BACKEND_URL = os.getenv("BACKEND_URL", "https://api.neobot-ai.com")
-    verification_link = f"{BACKEND_URL}/api/auth/verify-email?token={raw_verification_token}"
-    background_tasks.add_task(
-        send_confirmation_email,
-        to_email=new_user.email,
-        confirmation_link=verification_link,
-    )
+    # Wrappé en try/except : si la colonne n'existe pas encore en prod (migration en retard),
+    # l'inscription réussit quand même — email de confirmation absent, mais compte créé.
+    try:
+        raw_verification_token = secrets.token_urlsafe(32)
+        new_user.email_verification_token = hashlib.sha256(raw_verification_token.encode()).hexdigest()
+        db.commit()
+        BACKEND_URL = os.getenv("BACKEND_URL", "https://api.neobot-ai.com")
+        verification_link = f"{BACKEND_URL}/api/auth/verify-email?token={raw_verification_token}"
+        background_tasks.add_task(
+            send_confirmation_email,
+            to_email=new_user.email,
+            confirmation_link=verification_link,
+        )
+    except Exception as _verif_exc:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "Email verification token non sauvegardé (migration DB en attente ?) : %s", _verif_exc
+        )
+        db.rollback()
 
     return {
         "access_token": access_token,

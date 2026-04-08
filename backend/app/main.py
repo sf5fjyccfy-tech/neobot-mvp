@@ -108,6 +108,18 @@ async def _startup_tasks():
     try:
         init_db()
 
+        # ── Migration auto des colonnes ajoutées après le déploiement initial ──
+        # Idempotent : IF NOT EXISTS garantit que c'est sans risque à chaque redémarrage.
+        with engine.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;"
+            ))
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR;"
+            ))
+            conn.commit()
+            logger.info("✅ Migrations auto : colonnes email_verified / email_verification_token vérifiées")
+
         # Initialiser les types de business
         db = next(get_db())
         BusinessKBService.initialize_business_types(db)
