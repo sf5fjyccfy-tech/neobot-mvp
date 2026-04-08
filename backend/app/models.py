@@ -220,6 +220,9 @@ class User(Base):
     # TOTP 2FA (superadmin uniquement)
     totp_secret = Column(String(64), nullable=True)
     totp_enabled = Column(Boolean, default=False, nullable=False, server_default="false")
+    # Vérification email
+    email_verified = Column(Boolean, default=False, nullable=False, server_default="false")
+    email_verification_token = Column(String(255), nullable=True, unique=True)  # SHA-256 du token envoyé
     # Reset de mot de passe
     reset_token = Column(String(255), nullable=True, unique=True)          # SHA-256 du token envoyé par email
     reset_token_expires_at = Column(DateTime, nullable=True)

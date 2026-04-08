@@ -276,13 +276,25 @@ async def register(
     refresh_tok = _issue_refresh_token(db, new_user.id)
 
     # Email de bienvenue — en background pour ne pas bloquer la réponse
-    from app.services.email_service import send_welcome_email
+    from app.services.email_service import send_welcome_email, send_confirmation_email
     background_tasks.add_task(
         send_welcome_email,
         to_email=new_user.email,
         user_name=new_user.full_name or new_user.email.split("@")[0],
         tenant_name=new_tenant.name,
         trial_end_date=trial_end,
+    )
+
+    # Email de confirmation — génère un token SHA-256 à usage unique
+    raw_verification_token = secrets.token_urlsafe(32)
+    new_user.email_verification_token = hashlib.sha256(raw_verification_token.encode()).hexdigest()
+    db.commit()
+    BACKEND_URL = os.getenv("BACKEND_URL", "https://api.neobot-ai.com")
+    verification_link = f"{BACKEND_URL}/api/auth/verify-email?token={raw_verification_token}"
+    background_tasks.add_task(
+        send_confirmation_email,
+        to_email=new_user.email,
+        confirmation_link=verification_link,
     )
 
     return {
@@ -450,6 +462,35 @@ async def reset_password(
     db.commit()
 
     return {"message": "Mot de passe réinitialisé avec succès. Vous pouvez maintenant vous connecter."}
+
+
+# ======================== VÉRIFICATION EMAIL ========================
+
+@router.get("/verify-email")
+async def verify_email(token: str, db: Session = Depends(get_db)):
+    """
+    Valide le token de vérification email envoyé à l'inscription.
+    Le token est à usage unique et effacé après utilisation.
+    Redirige vers le frontend avec un paramètre de statut.
+    """
+    from fastapi.responses import RedirectResponse
+
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "https://neobot-ai.com")
+
+    if not token or len(token) > 256:
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?email_verified=invalid")
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    user = db.query(User).filter(User.email_verification_token == token_hash).first()
+
+    if not user:
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?email_verified=invalid")
+
+    user.email_verified = True
+    user.email_verification_token = None
+    db.commit()
+
+    return RedirectResponse(url=f"{FRONTEND_URL}/login?email_verified=success")
 
 
 @router.get("/me")

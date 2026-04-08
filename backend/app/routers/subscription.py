@@ -56,7 +56,7 @@ async def get_subscription_status(
     Get subscription status for a tenant
     
     Returns:
-    - plan: Current plan (basique, standard, pro)
+    - plan: Current plan (essential, business, enterprise)
     - is_trial: Whether in trial period
     - days_remaining: Days left in trial (if applicable)
     - status: Subscription status (active, paused, cancelled)
@@ -123,7 +123,7 @@ async def upgrade_from_trial(
     Upgrade from trial to a paid plan
     
     - **tenant_id**: Tenant ID
-    - **plan**: Target plan (basique, standard, pro)
+    - **plan**: Target plan (essential, business, enterprise)
     - Payment would be processed separately (Phase 2)
     """
     # Verify tenant ownership
@@ -155,7 +155,7 @@ async def change_plan(
     Change subscription plan (for existing paid subscribers)
     
     - **tenant_id**: Tenant ID
-    - **plan**: New plan (basique, standard, pro)
+    - **plan**: New plan (essential, business, enterprise)
     - Can upgrade or downgrade at any time
     """
     # Verify tenant ownership
@@ -235,9 +235,9 @@ async def get_all_subscriptions(
     return {
         "total_active": len(subscriptions),
         "by_plan": {
-            "basique": len([s for s in subscriptions if s.plan == "basique"]),
-            "standard": len([s for s in subscriptions if s.plan == "standard"]),
-            "pro": len([s for s in subscriptions if s.plan == "pro"])
+            "essential": len([s for s in subscriptions if s.plan == "essential"]),
+            "business": len([s for s in subscriptions if s.plan == "business"]),
+            "enterprise": len([s for s in subscriptions if s.plan == "enterprise"])
         },
         "trials": len([s for s in subscriptions if s.is_trial]),
         "paid": len([s for s in subscriptions if not s.is_trial])
