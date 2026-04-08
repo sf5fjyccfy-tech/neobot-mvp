@@ -145,7 +145,10 @@ async def initiate_payment(
         raise ValueError(f"Lien de paiement déjà {link.status}")
 
     provider = _choose_provider(country, payment_method)
-    reference = link.token  # Référence = token unique, idempotent
+    # Korapay limite les références à 50 chars — on tronque ici pour que
+    # PaymentEvent.transaction_id corresponde exactement à ce que Korapay
+    # renvoie dans le webhook (sinon l'activation abonnement ne se déclenche pas)
+    reference = link.token[:50]
 
     # Gérer le retry : si un event "failed" existe sur ce token, on le supprime
     # avant de recréer (UNIQUE constraint sur transaction_id).
