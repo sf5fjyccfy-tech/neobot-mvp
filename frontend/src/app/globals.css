@@ -240,3 +240,29 @@ body > * {
     bottom: 80px !important;
   }
 }
+
+/* Bande upgrade essai — mobile uniquement, dans le flux de contenu */
+.app-shell-trial-banner-mobile {
+  display: none;
+  text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  .app-shell-trial-banner-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 16px;
+    background: rgba(255, 77, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 77, 0, 0.25);
+    color: #FF4D00;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .app-shell-trial-banner-mobile strong {
+    color: #FF4D00;
+    font-weight: 800;
+  }
+}

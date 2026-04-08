@@ -34,6 +34,8 @@ interface UsageSummary {
   remaining: number;
   percent: number;
   over_limit: boolean;
+  is_trial?: boolean;
+  trial_days_left?: number | null;
 }
 
 export default function BillingPage() {
@@ -41,6 +43,8 @@ export default function BillingPage() {
   const [mounted, setMounted]   = useState(false);
   const [usage, setUsage]       = useState<UsageSummary | null>(null);
   const [loading, setLoading]   = useState(true);
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribeError, setSubscribeError] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -60,6 +64,31 @@ export default function BillingPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleSubscribe() {
+    const token = getToken();
+    if (!token) { window.location.href = '/login?redirect=/billing'; return; }
+    setSubscribing(true);
+    setSubscribeError('');
+    try {
+      const res = await fetch(buildApiUrl('/api/neopay/payment-links'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ plan: 'essential' }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setSubscribeError(err.detail || 'Erreur lors de la création du lien de paiement');
+        return;
+      }
+      const data = await res.json();
+      window.location.href = data.payment_url;
+    } catch {
+      setSubscribeError('Erreur réseau. Veuillez réessayer.');
+    } finally {
+      setSubscribing(false);
+    }
+  }
 
   if (!mounted || loading) {
     return (
@@ -107,21 +136,32 @@ export default function BillingPage() {
                 {price} <span style={{ fontSize: 14, color: MUTED, fontWeight: 400 }}>FCFA/mois</span>
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Link href="/pricing" style={{ textDecoration: 'none' }}>
-                <button style={{
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+              {usage?.is_trial && (
+                <span style={{ fontSize: 11, color: NEON, fontWeight: 600 }}>
+                  ⏳ Essai — {usage.trial_days_left ?? 0}j restants
+                </span>
+              )}
+              <button
+                onClick={handleSubscribe}
+                disabled={subscribing}
+                style={{
                   padding: '10px 22px',
-                  background: `linear-gradient(135deg, ${NEON}, #00E5CC)`,
+                  background: subscribing ? 'rgba(255,77,0,0.3)' : `linear-gradient(135deg, ${NEON}, #00E5CC)`,
                   border: 'none',
                   borderRadius: 10,
-                  color: '#06040E',
+                  color: subscribing ? MUTED : '#06040E',
                   fontSize: 13,
                   fontWeight: 800,
-                  cursor: 'pointer',
-                }}>
-                  Mise à niveau
-                </button>
-              </Link>
+                  cursor: subscribing ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {subscribing ? 'Redirection...' : usage?.is_trial ? 'Activer mon abonnement' : 'Mise à niveau'}
+              </button>
+              {subscribeError && (
+                <p style={{ color: '#EF4444', fontSize: 11, margin: 0, textAlign: 'right' }}>{subscribeError}</p>
+              )}
             </div>
           </div>
         </div>

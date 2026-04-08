@@ -138,7 +138,10 @@ export default function ConfigPage() {
                 </p>
                 <ol style={{ margin: 0, paddingLeft: 18, color: MUTED, fontSize: 12, lineHeight: 1.8 }}>
                   <li>Entrez votre numéro WhatsApp</li>
-                  <li>Scannez le QR code avec l'appli</li>
+                  {isMobile
+                    ? <li>Ouvrez WhatsApp → ⋮ → Appareils liés → Ajouter</li>
+                    : <li>Scannez le QR code avec WhatsApp sur votre téléphone</li>
+                  }
                   <li>Votre bot reçoit les messages</li>
                   <li>Les clients voient les réponses IA</li>
                 </ol>

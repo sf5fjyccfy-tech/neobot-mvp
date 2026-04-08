@@ -197,6 +197,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
+        {/* Essai actif : prompt upgrade dans la sidebar (desktop only — mobile = banner dans main) */}
+        {trialDaysLeft !== null && (
+          <Link href="/billing" style={{ textDecoration: 'none', display: 'block', padding: '0 10px 8px' }}>
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: trialDaysLeft <= 3 ? 'rgba(239,68,68,0.08)' : `${NEON}08`,
+              border: `1px solid ${trialDaysLeft <= 3 ? 'rgba(239,68,68,0.3)' : `${NEON}25`}`,
+              cursor: 'pointer',
+            }}>
+              <p style={{ color: trialDaysLeft <= 3 ? '#EF4444' : NEON, fontSize: 11, fontWeight: 700, margin: '0 0 2px' }}>
+                {trialDaysLeft <= 3 ? '⚠️' : '⏳'} {trialDaysLeft}j d&apos;essai
+              </p>
+              <p style={{ color: MUTED, fontSize: 10, margin: 0 }}>Activer mon abonnement →</p>
+            </div>
+          </Link>
+        )}
+
         {/* Logout en bas */}
         <div style={{ padding: '12px 10px', borderTop: `1px solid ${BORDER}` }}>
           <button
@@ -226,25 +244,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Contenu principal ───────────────────────── */}
       <main className="app-shell-main" style={{ flex: 1, position: 'relative' }}>
 
-        {/* Badge essai gratuit — discret, coin haut droite */}
+        {/* Bande upgrade essai — masquée sur desktop (sidebar gère), visible mobile */}
         {trialDaysLeft !== null && (
-          <Link href="/pricing" style={{ textDecoration: 'none', position: 'absolute', top: 16, right: 20, zIndex: 10 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 10px 4px 7px',
-              borderRadius: 20,
-              background: trialDaysLeft <= 3 ? 'rgba(239,68,68,0.12)' : 'rgba(255,77,0,0.08)',
-              border: `1px solid ${trialDaysLeft <= 3 ? 'rgba(239,68,68,0.35)' : 'rgba(255,77,0,0.25)'}`,
-              cursor: 'pointer',
-            }}>
-              <span style={{ fontSize: 12 }}>{trialDaysLeft <= 3 ? '⚠️' : '⏳'}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: trialDaysLeft <= 3 ? '#EF4444' : NEON }}>
-                {trialDaysLeft}j
-              </span>
-              <span style={{ fontSize: 10, color: MUTED }}>essai</span>
-            </div>
+          <Link href="/billing" className="app-shell-trial-banner-mobile">
+            <span>{trialDaysLeft <= 3 ? '⚠️' : '⏳'} {trialDaysLeft}j d&apos;essai restants —</span>
+            <strong style={{ marginLeft: 4 }}>Activer l&apos;abonnement →</strong>
           </Link>
         )}
 

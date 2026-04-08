@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CheckCircle, XCircle, AlertCircle, Bot, Zap } from 'lucide-react';
+import { getToken } from '@/lib/api';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const BG = '#06040E';
 const SURFACE = '#0D0021';
@@ -16,6 +18,12 @@ const CYAN_LIGHT = '#00E5CC';
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    setIsLoggedIn(!!getToken());
+  }, []);
 
   const plans = [
     {
@@ -116,23 +124,42 @@ export default function PricingPage() {
           <span style={{ color: '#fff', fontFamily: '"Syne", sans-serif', fontWeight: 800, fontSize: 18 }}>NéoBot</span>
         </Link>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Link href="/login" style={{ textDecoration: 'none', color: TEXT, fontSize: 14, padding: '8px 16px' }}>
-            Connexion
-          </Link>
-          <Link href="/signup" style={{ textDecoration: 'none' }}>
-            <button style={{
-              padding: '8px 20px',
-              background: `linear-gradient(135deg, ${VIOLET}, ${CYAN})`,
-              border: 'none',
-              borderRadius: 8,
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}>
-              Essai gratuit →
-            </button>
-          </Link>
+          {isLoggedIn ? (
+            <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+              <button style={{
+                padding: '8px 20px',
+                background: `linear-gradient(135deg, ${VIOLET}, ${CYAN})`,
+                border: 'none',
+                borderRadius: 8,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}>
+                Mon dashboard →
+              </button>
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" style={{ textDecoration: 'none', color: TEXT, fontSize: 14, padding: '8px 16px' }}>
+                Connexion
+              </Link>
+              <Link href="/signup" style={{ textDecoration: 'none' }}>
+                <button style={{
+                  padding: '8px 20px',
+                  background: `linear-gradient(135deg, ${VIOLET}, ${CYAN})`,
+                  border: 'none',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}>
+                  Essai gratuit →
+                </button>
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
@@ -199,23 +226,23 @@ export default function PricingPage() {
 
       {/* Pricing Cards */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 80px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 16 : 20 }}>
           {plans.map((plan, idx) => (
             <div key={idx} style={{ position: 'relative' }}>
             <div
               style={{
-                background: plan.highlighted ? `linear-gradient(180deg, ${VIOLET}18, ${SURFACE})` : SURFACE,
-                border: plan.highlighted ? `2px solid ${CYAN}60` : `1px solid ${BORDER}`,
+                background: (plan.highlighted && !(plan as { locked?: boolean }).locked) ? `linear-gradient(180deg, ${VIOLET}18, ${SURFACE})` : SURFACE,
+                border: (plan.highlighted && !(plan as { locked?: boolean }).locked) ? `2px solid ${CYAN}60` : `1px solid ${BORDER}`,
                 borderRadius: 20,
                 overflow: 'hidden',
                 position: 'relative',
-                transform: plan.highlighted ? 'scale(1.03)' : 'scale(1)',
+                transform: (plan.highlighted && !(plan as { locked?: boolean }).locked) ? 'scale(1.03)' : 'scale(1)',
                 transition: 'transform 0.2s',
                 filter: (plan as { locked?: boolean }).locked ? 'blur(2.5px)' : 'none',
                 pointerEvents: (plan as { locked?: boolean }).locked ? 'none' : 'auto',
               }}
             >
-              {plan.highlighted && (
+              {plan.highlighted && !(plan as { locked?: boolean }).locked && (
                 <div style={{
                   background: `linear-gradient(90deg, ${VIOLET}, ${CYAN})`,
                   padding: '8px',
@@ -286,7 +313,7 @@ export default function PricingPage() {
                     {plan.cta}
                   </button>
                 ) : (
-                <Link href="/signup" style={{ textDecoration: 'none' }}>
+                <Link href={isLoggedIn ? '/billing' : '/signup'} style={{ textDecoration: 'none' }}>
                   <button style={{
                     width: '100%',
                     padding: '12px',
@@ -300,7 +327,7 @@ export default function PricingPage() {
                     marginBottom: 24,
                     transition: 'all 0.2s',
                   }}>
-                    {plan.cta}
+                    {isLoggedIn ? 'Activer mon abonnement' : plan.cta}
                   </button>
                 </Link>
                 )}
