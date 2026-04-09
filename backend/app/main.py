@@ -117,8 +117,11 @@ async def _startup_tasks():
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR;"
             ))
+            conn.execute(text(
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;"
+            ))
             conn.commit()
-            logger.info("✅ Migrations auto : colonnes email_verified / email_verification_token vérifiées")
+            logger.info("✅ Migrations auto : email_verified, email_verification_token, subscription_expires_at vérifiées")
 
         # Initialiser les types de business
         db = next(get_db())
