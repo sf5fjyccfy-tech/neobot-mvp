@@ -108,20 +108,41 @@ async def _startup_tasks():
     try:
         init_db()
 
-        # ── Migration auto des colonnes ajoutées après le déploiement initial ──
-        # Idempotent : IF NOT EXISTS garantit que c'est sans risque à chaque redémarrage.
-        with engine.connect() as conn:
-            conn.execute(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;"
-            ))
-            conn.execute(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR;"
-            ))
-            conn.execute(text(
-                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;"
-            ))
-            conn.commit()
-            logger.info("✅ Migrations auto : email_verified, email_verification_token, subscription_expires_at vérifiées")
+        # ── Migrations auto — chaque colonne dans son propre bloc (idempotent) ──
+        _migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;",
+        ]
+        for sql in _migrations:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(sql))
+                    conn.commit()
+            except Exception as _me:
+                logger.warning(f"⚠ Migration ignorée ({sql[:60]}…): {_me}")
+        logger.info("✅ Migrations auto vérifiées")
+
+        # ── Reset superadmin via variable d'env SUPERADMIN_RESET_PASSWORD ──
+        # Usage Render : ajouter la var d'env temporairement, redéployer, retirer.
+        _reset_pw = os.environ.get("SUPERADMIN_RESET_PASSWORD")
+        _reset_email = os.environ.get("SUPERADMIN_EMAIL", "timpatrick561@gmail.com")
+        if _reset_pw:
+            from app.services.auth_service import get_password_hash as _hash
+            db_reset = next(get_db())
+            try:
+                _su = db_reset.query(User).filter(User.email == _reset_email).first()
+                if _su:
+                    _su.hashed_password = _hash(_reset_pw)
+                    _su.is_superadmin = True
+                    db_reset.commit()
+                    logger.info(f"✅ Mot de passe superadmin réinitialisé pour {_reset_email}")
+                else:
+                    logger.warning(f"⚠ Utilisateur {_reset_email} introuvable pour reset")
+            except Exception as _re:
+                logger.error(f"❌ Erreur reset superadmin: {_re}")
+            finally:
+                db_reset.close()
 
         # Initialiser les types de business
         db = next(get_db())
