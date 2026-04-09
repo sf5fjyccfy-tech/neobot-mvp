@@ -182,12 +182,11 @@ async def _shutdown_tasks():
 
 async def _retry_webhooks_loop():
     """Background task : retente les webhooks échoués toutes les 5 min."""
-    loop = asyncio.get_event_loop()
     while True:
         await asyncio.sleep(300)  # 5 minutes
         db = SessionLocal()
         try:
-            await loop.run_in_executor(None, neopay_service.retry_failed_webhooks, db)
+            await neopay_service.retry_failed_webhooks(db)
         except Exception as exc:
             import sentry_sdk as _sentry
             _sentry.capture_exception(exc)
