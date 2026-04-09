@@ -42,7 +42,8 @@ class AgentTypeChangeRequest(BaseModel):
 class BroadcastEmailRequest(BaseModel):
     subject: str
     body: str
-    target: str = "all"  # all | active_paid | trial
+    target: str = "all"  # all | active_paid | trial | single
+    tenant_id: Optional[int] = None  # requis si target == 'single'
 
 
 class AgentUpdateRequest(BaseModel):
@@ -548,10 +549,21 @@ async def broadcast_email(
     if len(request.body) > 5000:
         raise HTTPException(status_code=400, detail="Corps trop long (5000 chars max)")
 
-    q = db.query(Tenant).filter(Tenant.is_deleted == False, Tenant.is_suspended == False)
-    if request.target == "trial":
-        q = q.filter(Tenant.is_trial == True)
-    tenants = q.all()
+    if request.target == "single":
+        if not request.tenant_id:
+            raise HTTPException(status_code=400, detail="tenant_id requis pour target=single")
+        tenant = db.query(Tenant).filter(
+            Tenant.id == request.tenant_id,
+            Tenant.is_deleted == False,
+        ).first()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant non trouvé")
+        tenants = [tenant]
+    else:
+        q = db.query(Tenant).filter(Tenant.is_deleted == False, Tenant.is_suspended == False)
+        if request.target == "trial":
+            q = q.filter(Tenant.is_trial == True)
+        tenants = q.all()
 
     sent, failed = 0, 0
     for t in tenants:

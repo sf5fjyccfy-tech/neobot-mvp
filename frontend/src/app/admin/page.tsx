@@ -647,7 +647,34 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
   const [suspendReason, setSuspendReason] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState<string | null>(null);
   const canConfirmDelete = deleteConfirmName === detail.name && detail.id !== 1;
+
+  const sendEmail = async () => {
+    if (!emailSubject.trim() || !emailBody.trim()) return;
+    setEmailSending(true);
+    setEmailSent(null);
+    try {
+      const res = await adminCall('/api/admin/broadcast-email', {
+        method: 'POST',
+        body: JSON.stringify({ subject: emailSubject, body: emailBody, target: 'single', tenant_id: detail.id }),
+      }).then(r => r.json());
+      if (res.sent === 1) {
+        setEmailSent('success');
+        setEmailSubject('');
+        setEmailBody('');
+      } else {
+        setEmailSent('error');
+      }
+    } catch {
+      setEmailSent('error');
+    } finally {
+      setEmailSending(false);
+    }
+  };
 
   const subExpDays = daysUntil(detail.subscription_expires_at);
 
@@ -727,6 +754,45 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
           className="mt-2 text-xs text-gray-600 hover:text-orange-400 transition">
           Remettre le compteur de messages à 0
         </button>
+      </div>
+
+      {/* Email ciblé */}
+      <div className="bg-[#0D0D1A] rounded-xl p-5 border border-[#1A1A2E]">
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">📧 Envoyer un email</h3>
+        <div className="space-y-2">
+          <input
+            value={emailSubject}
+            onChange={e => setEmailSubject(e.target.value)}
+            maxLength={200}
+            placeholder="Sujet..."
+            className="w-full bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500/50 placeholder-gray-700"
+          />
+          <textarea
+            value={emailBody}
+            onChange={e => setEmailBody(e.target.value)}
+            maxLength={5000}
+            rows={4}
+            placeholder={`Message pour ${detail.name}...`}
+            className="w-full bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500/50 placeholder-gray-700 resize-none"
+          />
+          {emailSent === 'success' && (
+            <div className="text-xs px-3 py-2 rounded-lg border bg-green-900/20 border-green-800/40 text-green-400">
+              ✅ Email envoyé à {detail.email}
+            </div>
+          )}
+          {emailSent === 'error' && (
+            <div className="text-xs px-3 py-2 rounded-lg border bg-red-900/20 border-red-800/40 text-red-400">
+              ❌ Échec de l&apos;envoi — vérifiez les logs Brevo
+            </div>
+          )}
+          <button
+            disabled={emailSending || !emailSubject.trim() || !emailBody.trim()}
+            onClick={sendEmail}
+            className="w-full bg-purple-700 hover:bg-purple-600 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 rounded-lg transition"
+          >
+            {emailSending ? 'Envoi en cours...' : `Envoyer à ${detail.email}`}
+          </button>
+        </div>
       </div>
 
       {/* Suspension */}
