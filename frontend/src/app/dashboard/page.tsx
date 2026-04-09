@@ -122,6 +122,8 @@ export default function DashboardPage() {
   const [waConnected, setWaConnected] = useState(false);
   const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [isSuperadminDash, setIsSuperadminDash] = useState(false);
+  const [hasAgent, setHasAgent] = useState(false);
+  const [totalUsed, setTotalUsed] = useState(0);
 
   useEffect(() => {
     // Détecter un token d'impersonation passé en query param
@@ -159,8 +161,10 @@ export default function DashboardPage() {
         fetch(buildApiUrl(`/api/tenants/${tid}/usage`), { headers }).then(r => r.ok ? r.json() : null),
         fetch(buildApiUrl(`/api/tenants/${tid}/dashboard/stats`), { headers }).then(r => r.ok ? r.json() : null),
         fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), { headers }).then(r => r.ok ? r.json() : null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/agents/active`), { headers }).then(r => r.ok ? r.json() : null),
       ])
-        .then(([usageData, statsData, waData]) => {
+        .then(([usageData, statsData, waData, agentData]) => {
+          setHasAgent(agentData !== null && agentData?.id !== undefined);
           const waOk = waData?.status === 'connected';
           setWaConnected(waOk);
           if (usageData) {
@@ -175,6 +179,7 @@ export default function DashboardPage() {
             } else if (!trialFlag) {
               setPlanLabel(usageData.plan ?? 'Essential');
             }
+            setTotalUsed(usageData.total_used ?? 0);
             setStats(prev => prev.map((s, i) => {
               if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
               if (i === 1) return { ...s, value: String(usageData.active_conversations ?? '—'), sub: 'Sessions ouvertes' };
@@ -525,10 +530,10 @@ export default function DashboardPage() {
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { step: '01', label: 'Créer votre agent IA', href: '/agent', done: false },
+                { step: '01', label: 'Créer votre agent IA', href: '/agent', done: hasAgent },
                 { step: '02', label: 'Connecter WhatsApp', href: '/config', done: waConnected },
-                { step: '03', label: 'Recevoir vos premiers messages', href: '/conversations', done: statsLoaded && stats[0].value !== '—' && stats[0].value !== '0' },
-                { step: '04', label: 'Analyser vos performances', href: '/analytics', done: false },
+                { step: '03', label: 'Recevoir vos premiers messages', href: '/conversations', done: statsLoaded && totalUsed > 0 },
+                { step: '04', label: 'Analyser vos performances', href: '/analytics', done: statsLoaded && dashStats !== null && (dashStats.today_messages > 0 || Object.values(dashStats.outcomes_month as Record<string, number>).reduce((a: number, b: number) => a + b, 0) > 0) },
               ].map((item, i) => (
                 <Link key={i} href={item.href} style={{ textDecoration: 'none' }}>
                   <div style={{
