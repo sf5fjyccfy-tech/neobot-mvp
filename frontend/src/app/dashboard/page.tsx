@@ -181,7 +181,7 @@ export default function DashboardPage() {
             }
             setTotalUsed(usageData.total_used ?? 0);
             setStats(prev => prev.map((s, i) => {
-              if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
+              if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: superadmin ? '∞ messages' : `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
               if (i === 1) return { ...s, value: String(usageData.active_conversations ?? '—'), sub: 'Sessions ouvertes' };
               if (i === 3) return { ...s, value: usageData.over_limit ? 'QUOTA' : waOk ? 'ACTIF' : 'INACTIF', sub: usageData.over_limit ? 'Quota dépassé' : waOk ? 'WhatsApp connecté' : 'WhatsApp non connecté' };
               return s;
@@ -556,42 +556,44 @@ export default function DashboardPage() {
                       minWidth: 28,
                       letterSpacing: 1,
                     }}>{item.done ? '✓' : item.step}</span>
-                    <span style={{ color: item.done ? MUTED : TEXT, fontSize: 13, flex: 1, textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
+                    <span style={{ color: item.done ? MUTED : TEXT, fontSize: 13, flex: 1 }}>{item.label}</span>
                     {!item.done && <span style={{ color: MUTED, fontSize: 14 }}>→</span>}
                   </div>
                 </Link>
               ))}
             </div>
 
-            {/* Plan badge */}
-            <div style={{
-              marginTop: 20,
-              padding: '14px 16px',
-              background: `${NEON}08`,
-              border: `1px solid ${NEON}30`,
-              borderRadius: 10,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ color: isTrial ? '#E67F00' : NEON, fontSize: 12, fontWeight: 700 }}>
-                  {isTrial ? `Essai gratuit${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : 'Plan Essential'}
-                </span>
-                <Link href={isTrial ? '/pricing' : '/billing'} style={{ textDecoration: 'none' }}>
-                  <span style={{ color: MUTED, fontSize: 11 }}>{isTrial ? 'Activer →' : 'Gérer →'}</span>
-                </Link>
+            {/* Plan badge — masqué pour le superadmin */}
+            {!isSuperadminDash && (
+              <div style={{
+                marginTop: 20,
+                padding: '14px 16px',
+                background: `${NEON}08`,
+                border: `1px solid ${NEON}30`,
+                borderRadius: 10,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ color: isTrial ? '#E67F00' : NEON, fontSize: 12, fontWeight: 700 }}>
+                    {isTrial ? `Essai gratuit${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : 'Plan Essential'}
+                  </span>
+                  <Link href={isTrial ? '/pricing' : '/billing'} style={{ textDecoration: 'none' }}>
+                    <span style={{ color: MUTED, fontSize: 11 }}>{isTrial ? 'Activer →' : 'Gérer →'}</span>
+                  </Link>
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload'].map((feat, i) => (
+                    <span key={i} style={{
+                      fontSize: 11,
+                      color: TEXT,
+                      background: `${NEON}10`,
+                      border: `1px solid ${NEON}20`,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                    }}>✓ {feat}</span>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload'].map((feat, i) => (
-                  <span key={i} style={{
-                    fontSize: 11,
-                    color: TEXT,
-                    background: `${NEON}10`,
-                    border: `1px solid ${NEON}20`,
-                    padding: '2px 8px',
-                    borderRadius: 6,
-                  }}>✓ {feat}</span>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         </div>
 

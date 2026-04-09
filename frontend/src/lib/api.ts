@@ -30,9 +30,9 @@ export const buildApiUrl = (endpoint: string): string => {
  */
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('jwt_token', token);
-    // Cookie de présence lu par le middleware Next.js pour protéger les routes — 7 jours
-    document.cookie = 'auth_session=1; Path=/; SameSite=Strict; Max-Age=604800';
+    sessionStorage.setItem('jwt_token', token);
+    // Cookie de présence lu par le middleware Next.js — session cookie (expire à la fermeture du browser)
+    document.cookie = 'auth_session=1; Path=/; SameSite=Strict';
   }
 };
 
@@ -41,7 +41,7 @@ export const getToken = (): string | null => {
     // Impersonation : sessionStorage en priorité (onglet courant), puis localStorage (résiste au refresh)
     return sessionStorage.getItem('impersonate_token')
       || localStorage.getItem('impersonate_token')
-      || localStorage.getItem('jwt_token');
+      || sessionStorage.getItem('jwt_token');
   }
   return null;
 };
@@ -50,14 +50,14 @@ export const getToken = (): string | null => {
  * À utiliser pour les appels /api/admin/* qui nécessitent is_superadmin=True. */
 export const getAdminToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('jwt_token');
+    return sessionStorage.getItem('jwt_token');
   }
   return null;
 };
 
 export const clearToken = (): void => {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem('jwt_token');
+    sessionStorage.removeItem('jwt_token');
     localStorage.removeItem('tenant_id');
     localStorage.removeItem('is_superadmin');
     localStorage.removeItem('business_info');
