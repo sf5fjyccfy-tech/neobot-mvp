@@ -16,6 +16,7 @@ Fonctions :
 """
 
 import os
+import re
 import html as _esc
 import logging
 
@@ -137,6 +138,18 @@ async def _send(payload: dict) -> bool:
 
     if REPLY_TO_EMAIL and "replyTo" not in payload:
         payload["replyTo"] = {"email": REPLY_TO_EMAIL}
+
+    # Génère automatiquement une version text/plain si absente (corrige MIME_HTML_ONLY)
+    if "htmlContent" in payload and "textContent" not in payload:
+        html_body = payload["htmlContent"]
+        text = re.sub(r'<style[^>]*>.*?</style>', '', html_body, flags=re.DOTALL)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'&nbsp;', ' ', text)
+        text = re.sub(r'&middot;', '·', text)
+        text = re.sub(r'&[a-z]+;', '', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'\n{3,}', '\n\n', text.strip())
+        payload["textContent"] = text
 
     headers = {
         "accept":       "application/json",
