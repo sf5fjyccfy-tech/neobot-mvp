@@ -223,6 +223,81 @@ async def initiate_payment(
         raise
 
 
+# ─── Préparation paiement pour Korapay Inline Checkout ───────────────────────
+
+def prepare_payment(
+    db: Session,
+    *,
+    token: str,
+    payment_method: str = "card",
+    customer_email: str,
+    customer_name: str,
+    customer_phone: Optional[str] = None,
+    country: str = "CM",
+) -> dict:
+    """
+    Crée un PaymentEvent "initiated" en DB SANS appeler l'API Korapay.
+    Retourne la référence + public_key pour que le SDK Korapay Inline Checkout
+    puisse initialiser le paiement directement côté client (JS).
+
+    Flux :
+      1. Ce endpoint crée la référence en DB
+      2. Frontend initialise window.KorapayCheckout({ key, reference, ... })
+      3. Korapay envoie le webhook → process_webhook() active l'abonnement
+
+    La public_key est renvoyée depuis le backend (pas besoin de NEXT_PUBLIC_KORAPAY_PUBLIC_KEY).
+    """
+    link = get_payment_link(db, token)
+    if not link:
+        raise ValueError("Lien de paiement introuvable ou expiré")
+    if link.status != "pending":
+        raise ValueError(f"Lien de paiement déjà {link.status}")
+
+    reference = link.token[:50]
+
+    # Retry : supprimer tout event non-paid existant pour ce token
+    existing_event = db.query(PaymentEvent).filter(
+        PaymentEvent.transaction_id == reference
+    ).first()
+    if existing_event:
+        if existing_event.status == "paid":
+            raise ValueError("Ce paiement a déjà été effectué avec succès")
+        db.delete(existing_event)
+        db.flush()
+
+    event = PaymentEvent(
+        transaction_id=reference,
+        provider="korapay",
+        payment_link_id=link.id,
+        tenant_id=link.tenant_id,
+        plan=link.plan,
+        amount=link.amount,
+        currency=link.currency,
+        payment_method=payment_method,
+        status="initiated",
+        customer_email=customer_email,
+        customer_phone=customer_phone,
+        payment_metadata={"country": country},
+    )
+    db.add(event)
+    db.commit()
+
+    logger.info(
+        "Payment préparé (Inline) — tenant %s, ref %s, plan %s",
+        link.tenant_id, reference[:8] + "...", link.plan
+    )
+
+    return {
+        "reference": reference,
+        "amount": link.amount,
+        "currency": link.currency,
+        "public_key": korapay_service._get_public_key(),
+        "notification_url": f"{_get_backend_url()}/api/neopay/webhooks/korapay",
+        "redirect_url": f"{_get_frontend_url()}/pay/{link.token}/callback",
+        "narration": f"NeoBot {link.plan} Plan",
+    }
+
+
 # ─── Traitement d'un webhook entrant ─────────────────────────────────────────
 
 async def process_webhook(

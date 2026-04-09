@@ -49,6 +49,15 @@ class InitiatePaymentRequest(BaseModel):
     country: str = "CM"
 
 
+class PreparePaymentRequest(BaseModel):
+    """Pour Korapay Inline Checkout (JS SDK) : prépare le PaymentEvent sans appeler l'API Korapay."""
+    payment_method: str = "card"  # "card" | "mobile_money"
+    customer_email: EmailStr
+    customer_name: str
+    customer_phone: Optional[str] = None
+    country: str = "CM"
+
+
 # ─── GET /api/neopay/payment-links/{token} ───────────────────────────────────
 
 @router.get("/payment-links/{token}", summary="Informations d'un lien de paiement")
@@ -145,6 +154,36 @@ async def initiate_payment(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Erreur temporaire du service de paiement. Veuillez réessayer."
         )
+
+
+# ─── POST /api/neopay/payment-links/{token}/prepare ──────────────────────────
+
+@router.post("/payment-links/{token}/prepare", summary="Préparer le paiement (Korapay Inline)")
+def prepare_payment(
+    token: str,
+    body: PreparePaymentRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Prépare un PaymentEvent en DB sans appeler l'API Korapay.
+    Utilisé par le SDK Korapay Inline Checkout (client-side JS) :
+    le client reçoit reference + public_key et initialise le checkout directement.
+
+    Endpoint public — le token du lien est le secret, valable 24h.
+    """
+    try:
+        result = neopay_service.prepare_payment(
+            db,
+            token=token,
+            payment_method=body.payment_method,
+            customer_email=body.customer_email,
+            customer_name=body.customer_name,
+            customer_phone=body.customer_phone,
+            country=body.country,
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 # ─── POST /api/neopay/webhooks/korapay ───────────────────────────────────────

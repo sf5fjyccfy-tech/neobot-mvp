@@ -1,9 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Script from 'next/script';
 import { useParams } from 'next/navigation';
 import { buildApiUrl } from '@/lib/api';
 import { CheckCircle2, AlertTriangle, Loader2, CreditCard, Smartphone, ArrowRight, Clock } from 'lucide-react';
+
+// Korapay Inline Checkout — global injecté par https://korabay.com/inline.js
+declare global {
+  interface Window {
+    KorapayCheckout?: (config: {
+      key: string;
+      reference: string;
+      amount: number;
+      currency: string;
+      customer: { name: string; email: string; mobile_number?: string };
+      notification_url?: string;
+      narration?: string;
+      onSuccess?: (data: { reference: string }) => void;
+      onFailed?: (data: { error?: string }) => void;
+      onClose?: () => void;
+    }) => void;
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +90,9 @@ export default function PayPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Korapay Inline Checkout JS ready state
+  const [korapayScriptReady, setKorapayScriptReady] = useState(false);
+  const [korapayScriptFailed, setKorapayScriptFailed] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     payment_method: 'mobile_money',
@@ -121,6 +143,65 @@ export default function PayPage() {
     }
 
     setSubmitting(true);
+
+    // ── Chemin 1 : Korapay Inline SDK (SDK JS chargé + disponible) ────────────
+    const useInline = (korapayScriptReady || !korapayScriptFailed) &&
+                      typeof window.KorapayCheckout === 'function';
+
+    if (useInline) {
+      try {
+        const prepRes = await fetch(buildApiUrl(`/api/neopay/payment-links/${token}/prepare`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payment_method: form.payment_method,
+            customer_email: form.customer_email,
+            customer_name: form.customer_name,
+            customer_phone: form.customer_phone || undefined,
+            country: form.country,
+          }),
+        });
+        const prep = await prepRes.json();
+        if (!prepRes.ok) {
+          throw new Error(prep?.detail || 'Erreur de préparation du paiement');
+        }
+
+        window.KorapayCheckout!({
+          key: prep.public_key,
+          reference: prep.reference,
+          amount: prep.amount,
+          currency: prep.currency,
+          customer: {
+            name: form.customer_name,
+            email: form.customer_email,
+            ...(form.customer_phone ? { mobile_number: form.customer_phone } : {}),
+          },
+          notification_url: prep.notification_url,
+          narration: prep.narration,
+          onSuccess: (data) => {
+            window.location.href = `${prep.redirect_url}?trxref=${data.reference}&reference=${data.reference}`;
+          },
+          onFailed: () => {
+            setFormError('Paiement refusé. Vérifiez vos informations ou essayez une autre méthode de paiement.');
+            setSubmitting(false);
+          },
+          onClose: () => {
+            // L'utilisateur a fermé la modale sans payer
+            setSubmitting(false);
+          },
+        });
+        // La modale Korapay est maintenant ouverte — on ne réinitialise pas submitting
+        // (sera réinitialisé par onFailed ou onClose)
+        return;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Erreur inattendue';
+        setFormError(msg);
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // ── Chemin 2 : Fallback redirect vers checkout Korapay (si script non chargé) ─
     try {
       const res = await fetch(buildApiUrl(`/api/neopay/payment-links/${token}/initiate`), {
         method: 'POST',
@@ -140,7 +221,6 @@ export default function PayPage() {
         throw new Error(data?.detail || 'Erreur lors de l\'initialisation du paiement');
       }
 
-      // Redirection vers la page checkout du provider (Korapay / CamPay)
       if (data?.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
@@ -158,6 +238,14 @@ export default function PayPage() {
   const accent = linkInfo ? (PLAN_ACCENT[linkInfo.plan] ?? '#00E5CC') : '#00E5CC';
 
   return (
+    <>
+      {/* Korapay Inline Checkout SDK — charg\u00e9 en priorit\u00e9, fallback automatique si \u00e9chec */}
+      <Script
+        src="https://korabay.com/inline.js"
+        strategy="afterInteractive"
+        onLoad={() => setKorapayScriptReady(true)}
+        onError={() => setKorapayScriptFailed(true)}
+      />
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{ background: '#06040E' }}
@@ -422,5 +510,6 @@ export default function PayPage() {
         )}
       </div>
     </div>
+    </>
   );
 }
