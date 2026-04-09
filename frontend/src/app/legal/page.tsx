@@ -847,7 +847,6 @@ function LegalContent() {
     <div
       style={{
         minHeight: '100vh',
-        background: '#06040E',
         color: '#FFF0E8',
         fontFamily: '"DM Sans", sans-serif',
       }}
@@ -1018,7 +1017,7 @@ function LegalContent() {
 export default function LegalPage() {
   return (
     <Suspense fallback={
-      <div style={{ minHeight: '100vh', background: '#06040E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ color: 'rgba(255,154,108,.5)', fontFamily: '"Syne",sans-serif', fontSize: 14 }}>Chargement...</div>
       </div>
     }>

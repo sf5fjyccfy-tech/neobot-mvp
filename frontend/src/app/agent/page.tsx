@@ -482,7 +482,7 @@ export default function AgentPage() {
   if (loading) return (
     <AppShell>
       {/* Skeleton layout — reproduit la structure 2 colonnes de la page agent */}
-      <div className="min-h-screen" style={{ background: '#06040E', fontFamily: "'DM Sans', sans-serif" }}>
+      <div className="min-h-screen" style={{ fontFamily: "'DM Sans', sans-serif" }}>
         <div className="flex h-screen overflow-hidden">
           {/* Sidebar skeleton */}
           <div className="w-64 shrink-0 flex flex-col p-4 gap-3" style={{ background: '#0C0916', borderRight: '1px solid #1C1428' }}>

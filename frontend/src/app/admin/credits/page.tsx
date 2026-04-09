@@ -236,7 +236,7 @@ export default function CreditsPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen" style={{ background: '#06040E', color: '#e2e8f0' }}>
+    <div className="min-h-screen" style={{ color: '#e2e8f0' }}>
       {/* Nav */}
       <nav
         className="sticky top-0 z-40 border-b flex items-center justify-between px-6 h-14"

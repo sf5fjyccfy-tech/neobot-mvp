@@ -93,7 +93,7 @@ export default function BillingPage() {
   if (!mounted || loading) {
     return (
       <AppShell>
-        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: BG }}>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${NEON}`, borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
         </div>
       </AppShell>

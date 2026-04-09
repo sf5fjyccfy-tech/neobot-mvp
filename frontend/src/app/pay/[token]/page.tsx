@@ -248,7 +248,6 @@ export default function PayPage() {
       />
     <div
       className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: '#06040E' }}
     >
       {/* Halo décoratif */}
       <div

@@ -16,7 +16,7 @@ const BENEFITS = [
 
 export default function SignupPage() {
   return (
-    <div className="min-h-screen flex" style={{ background: '#06040E' }}>
+    <div className="min-h-screen flex">
       {/* GAUCHE : Branding & Bénéfices */}
       <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden">
         {/* Fond galaxie */}

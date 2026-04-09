@@ -64,7 +64,7 @@ function ResetPasswordForm() {
   const inputClass = "w-full pl-10 pr-11 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all backdrop-blur-sm";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#06040E' }}>
+    <div className="min-h-screen flex items-center justify-center p-6">
       {/* Nébuleuses fond */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute" style={{ top: '-10%', left: '-10%', width: '50%', height: '50%', background: 'radial-gradient(circle, rgba(255,77,0,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />

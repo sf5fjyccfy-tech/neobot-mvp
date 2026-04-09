@@ -102,7 +102,7 @@ export default function PricingPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: '"DM Sans", sans-serif', color: TEXT }}>
+    <div style={{ minHeight: '100vh', fontFamily: '"DM Sans", sans-serif', color: TEXT }}>
 
       {/* Nav */}
       <nav style={{

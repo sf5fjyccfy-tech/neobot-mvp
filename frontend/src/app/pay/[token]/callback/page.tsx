@@ -39,7 +39,6 @@ function CallbackContent() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: '#06040E' }}
     >
       <div
         className="w-full max-w-md rounded-2xl p-8 text-center"
@@ -97,7 +96,6 @@ export default function PayCallbackPage() {
       fallback={
         <div
           className="min-h-screen flex items-center justify-center"
-          style={{ background: '#06040E' }}
         >
           <Loader2 size={40} className="animate-spin" style={{ color: '#00E5CC' }} />
         </div>
