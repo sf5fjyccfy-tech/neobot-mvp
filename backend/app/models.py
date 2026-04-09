@@ -181,6 +181,7 @@ class Tenant(Base):
     
     is_trial = Column(Boolean, default=True)
     trial_ends_at = Column(DateTime, nullable=True)
+    subscription_expires_at = Column(DateTime, nullable=True)  # Set lors de chaque paiement confirmé
 
     def get_plan_config(self):
         """Obtenir la configuration du plan"""

@@ -423,6 +423,7 @@ async def _activate_subscription_from_payment(
     tenant.plan = PlanType(plan_key)
     tenant.is_trial = False
     tenant.trial_ends_at = None
+    tenant.subscription_expires_at = datetime.utcnow() + timedelta(days=30)
     tenant.messages_limit = plan_config["whatsapp_messages"] if plan_config["whatsapp_messages"] > 0 else 999999
 
     # ── Mettre à jour la Subscription ────────────────────────────────────────

@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.models import (
     User, Tenant, AgentTemplate, AgentType, PlanType, PLAN_LIMITS,
-    Subscription, Conversation, WhatsAppSession,
+    Subscription, Conversation, WhatsAppSession, UsageTracking,
 )
 from fastapi import BackgroundTasks
 from app.dependencies import get_superadmin_user
@@ -21,6 +21,7 @@ from app.services.email_service import (
     send_welcome_email,
     send_password_reset_email,
     send_confirmation_email,
+    send_custom_broadcast,
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -37,6 +38,12 @@ class TenantPlanRequest(BaseModel):
 
 class AgentTypeChangeRequest(BaseModel):
     agent_type: AgentType
+
+class BroadcastEmailRequest(BaseModel):
+    subject: str
+    body: str
+    target: str = "all"  # all | active_paid | trial
+
 
 class AgentUpdateRequest(BaseModel):
     # custom_prompt_override intentionnellement absent : l'admin ne modifie pas les prompts clients
@@ -104,6 +111,13 @@ def list_tenants(
 
     tenants = q.order_by(Tenant.created_at.desc()).all()
 
+    # Bulk-query usage_tracking pour le mois courant — évite N+1
+    current_month = datetime.now().strftime('%Y-%m')
+    usage_records = db.query(UsageTracking).filter(
+        UsageTracking.month_year == current_month
+    ).all()
+    usage_map = {u.tenant_id: u.whatsapp_messages_used for u in usage_records}
+
     result = []
     for t in tenants:
         wa = db.query(WhatsAppSession).filter(WhatsAppSession.tenant_id == t.id).first()
@@ -148,6 +162,8 @@ def list_tenants(
             "trial_ends_at": trial_ends_at,
             "trial_days_remaining": trial_days_remaining,
             "last_active_at": last_conv_at.isoformat() if last_conv_at else None,
+            "messages_this_month": usage_map.get(t.id, 0),
+            "subscription_expires_at": t.subscription_expires_at.isoformat() if t.subscription_expires_at else None,
         })
     return result
 
@@ -205,6 +221,7 @@ def get_tenant_detail(
         "trial_ends_at": trial_ends_at,
         "trial_days_remaining": trial_days_remaining,
         "last_active_at": last_conv_at.isoformat() if last_conv_at else None,
+        "subscription_expires_at": tenant.subscription_expires_at.isoformat() if tenant.subscription_expires_at else None,
         "user": {
             "id": user.id,
             "email": user.email,
@@ -509,3 +526,44 @@ def impersonate_tenant(
         "user_email": user.email,
         "expires_in": 3600,
     }
+
+
+# ======================== BROADCAST EMAIL ========================
+
+@router.post("/broadcast-email")
+async def broadcast_email(
+    request: BroadcastEmailRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """
+    Envoie un email personnalisé à tous les clients actifs (non supprimés, non suspendus).
+    target='all' → tous, 'trial' → uniquement les clients en trial.
+    Retourne {sent, failed, total} pour affichage dans le modal.
+    """
+    if not request.subject.strip() or not request.body.strip():
+        raise HTTPException(status_code=400, detail="Sujet et corps requis")
+    if len(request.subject) > 200:
+        raise HTTPException(status_code=400, detail="Sujet trop long (200 chars max)")
+    if len(request.body) > 5000:
+        raise HTTPException(status_code=400, detail="Corps trop long (5000 chars max)")
+
+    q = db.query(Tenant).filter(Tenant.is_deleted == False, Tenant.is_suspended == False)
+    if request.target == "trial":
+        q = q.filter(Tenant.is_trial == True)
+    tenants = q.all()
+
+    sent, failed = 0, 0
+    for t in tenants:
+        ok = await send_custom_broadcast(
+            to_email=t.email,
+            to_name=t.name,
+            subject=request.subject,
+            body=request.body,
+        )
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+
+    return {"sent": sent, "failed": failed, "total": len(tenants)}

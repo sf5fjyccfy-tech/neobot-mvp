@@ -680,3 +680,62 @@ async def send_internal_alert(subject: str, body: str) -> bool:
         "subject":     subject,
         "htmlContent": html_content,
     })
+
+
+async def send_custom_broadcast(
+    to_email: str,
+    to_name: str,
+    subject: str,
+    body: str,
+) -> bool:
+    """
+    Email broadcast superadmin — envoi personnalisé à un client.
+    body est du texte brut, converti en HTML sécurisé (XSS-safe via _esc.escape).
+    Appelé en boucle par POST /api/admin/broadcast-email.
+    """
+    safe_name = _esc.escape(to_name)
+    safe_subject = _esc.escape(subject)
+    safe_body = _esc.escape(body).replace("\n", "<br>")
+    accent = "#00E5CC"
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>{safe_subject}</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;" bgcolor="#f4f4f4">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#f4f4f4"
+       style="background-color:#f4f4f4;">
+  <tr><td align="center" style="padding:28px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff"
+           style="max-width:560px;width:100%;background-color:#ffffff;border-radius:10px;
+                  border:1px solid #e8e8e8;">
+      <tr><td height="4" bgcolor="{accent}"
+             style="background-color:{accent};height:4px;font-size:0;
+                    border-radius:10px 10px 0 0;">&nbsp;</td></tr>
+      <tr><td style="padding:24px 28px 16px;">
+        <img src="{LOGO_URL}" width="28" height="31" alt="NeoBot" border="0"
+             style="display:inline-block;vertical-align:middle;margin-right:8px;">
+        <span style="font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:13px;
+                     font-weight:900;letter-spacing:0.18em;color:#111111;
+                     vertical-align:middle;">NEOBOT</span>
+      </td></tr>
+      <tr><td style="padding:8px 28px 16px;">
+        <div style="font-family:Arial Black,Arial,sans-serif;font-size:18px;
+                    font-weight:900;color:#111111;line-height:1.3;">{safe_subject}</div>
+      </td></tr>
+      <tr><td style="padding:0 28px 24px;">
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#444444;
+                    line-height:1.7;">{safe_body}</div>
+      </td></tr>
+      {_footer()}
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+
+    return await _send({
+        "sender":      {"name": SENDER_NAME, "email": SENDER_EMAIL},
+        "to":          [{"email": to_email, "name": to_name}],
+        "subject":     subject,
+        "htmlContent": html_content,
+    })
