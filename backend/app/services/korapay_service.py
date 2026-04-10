@@ -95,6 +95,7 @@ async def initialize_charge(
     customer_name: str,
     redirect_url: str,
     notification_url: str,
+    channels: Optional[list] = None,
     metadata: Optional[dict] = None,
 ) -> dict:
     """
@@ -128,6 +129,8 @@ async def initialize_charge(
             "name": customer_name,
         },
     }
+    if channels:
+        payload["channels"] = channels
     if metadata:
         payload["metadata"] = metadata
 

@@ -187,6 +187,7 @@ async def initiate_payment(
     # ── Appel provider ────────────────────────────────────────────────────────
     try:
         if provider == "korapay":
+            channels = ["mobile_money"] if payment_method == "mobile_money" else ["card"]
             result = await korapay_service.initialize_charge(
                 reference=reference,
                 amount=link.amount,
@@ -195,6 +196,7 @@ async def initiate_payment(
                 customer_name=customer_name,
                 redirect_url=redirect_url,
                 notification_url=notification_url,
+                channels=channels,
                 metadata={"plan": link.plan, "tenant_id": link.tenant_id, "payment_link_id": link.id},
             )
             checkout_url = result.get("data", {}).get("checkout_url") or result.get("data", {}).get("payment_url", "")

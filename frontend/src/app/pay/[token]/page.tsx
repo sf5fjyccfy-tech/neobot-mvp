@@ -14,6 +14,7 @@ declare global {
       reference: string;
       amount: number;
       currency: string;
+      channels?: string[];
       customer: { name: string; email: string; mobile_number?: string };
       notification_url?: string;
       narration?: string;
@@ -171,6 +172,7 @@ export default function PayPage() {
           reference: prep.reference,
           amount: prep.amount,
           currency: prep.currency,
+          channels: [form.payment_method === 'mobile_money' ? 'mobile_money' : 'card'],
           customer: {
             name: form.customer_name,
             email: form.customer_email,
