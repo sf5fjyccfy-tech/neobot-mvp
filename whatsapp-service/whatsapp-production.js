@@ -500,13 +500,24 @@ async function onConnectionUpdate(session, update) {
       session.authResetCount = (session.authResetCount || 0) + 1;
 
       if (session.authResetCount > 3) {
-        logger.error('Too many consecutive auth resets — manual intervention required', {
+        logger.error('Too many consecutive auth resets — stopping loop, auto-recovery in 10min', {
           tenantId: session.tenantId,
           authResetCount: session.authResetCount,
         });
-        // auth_failed: état ignoré par le watchdog → arrêt définitif de la boucle
+        // auth_failed: état ignoré par le watchdog → arrêt de la boucle
         session.state = 'auth_failed';
         await resetTenant(session.tenantId, { keepSessionObject: true, autoReconnect: false });
+        // Auto-recovery après 10min (rate-limit Meta typically levé d'ici là)
+        clearReconnectTimer(session);
+        session.scheduledReconnect = setTimeout(() => {
+          session.scheduledReconnect = null;
+          session.state = 'idle';
+          session.authResetCount = 0;
+          session.retryCount = 0;
+          logger.info('Auto-recovery from auth_failed — prêt pour nouvelle tentative', {
+            tenantId: session.tenantId,
+          });
+        }, 10 * 60 * 1000); // 10 min
         return;
       }
 
@@ -1349,11 +1360,38 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
           // Cooldown 10 min pour laisser Meta réinitialiser.
           logger.error('[PAIRING] ❌ Session annulée (401) — rate-limit Meta sévère', { tenantId });
           _pairingRateLimit.set(tenantId, { phone, ts: Date.now() - (PAIRING_COOLDOWN_MS - 600_000) });
+          // ---------- FIX : empêcher le watchdog de créer un QR-socket en boucle ----------
+          // Sans ça : watchdog voit state=disconnected → connectTenant → nouveau 401 →
+          // authResetCount > 3 → auth_failed → reconnexion impossible jusqu'au redémarrage.
+          session.state = 'error';
+          session.lastError = 'Rate-limité Meta 401 — attente 10min avant nouvelle tentative de couplage';
+          session.errorSince = Date.now();
+          clearReconnectTimer(session);
+          session.scheduledReconnect = setTimeout(() => {
+            session.scheduledReconnect = null;
+            session.state = 'idle';
+            session.errorSince = null;
+            session.authResetCount = 0; // Remettre à 0 après cooldown — le rate-limit est levé
+            logger.info('[PAIRING] Cooldown 401 terminé — prêt pour une nouvelle tentative', { tenantId });
+          }, 600_000); // 10 min
+          // ---------------------------------------------------------------------------------
         } else if (statusCode === 408) {
           // Timeout Meta — fenêtre de validation expirée (20s sous rate-limit, 2-3min normal).
           // Cooldown 5 min.
           logger.warn('[PAIRING] ⏱ Session expirée (408) — code non saisi à temps', { tenantId });
           _pairingRateLimit.set(tenantId, { phone, ts: Date.now() - (PAIRING_COOLDOWN_MS - 300_000) });
+          // ---------- FIX : même protection que pour le 401 ----------
+          session.state = 'error';
+          session.lastError = 'Session expirée 408 — attente 5min avant nouvelle tentative de couplage';
+          session.errorSince = Date.now();
+          clearReconnectTimer(session);
+          session.scheduledReconnect = setTimeout(() => {
+            session.scheduledReconnect = null;
+            session.state = 'idle';
+            session.errorSince = null;
+            logger.info('[PAIRING] Cooldown 408 terminé — prêt pour une nouvelle tentative', { tenantId });
+          }, 300_000); // 5 min
+          // -----------------------------------------------------------
         } else {
           logger.warn('[PAIRING] Socket fermée', { tenantId, statusCode });
         }
