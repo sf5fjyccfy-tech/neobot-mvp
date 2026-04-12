@@ -895,6 +895,18 @@ function startWatchdog() {
     }, 14 * 60 * 1000);
   }
 
+  // Self keep-alive : pinge la propre URL publique du service WA toutes les 10min.
+  // Empêche Render free tier de mettre CE service en veille.
+  // Configurer WHATSAPP_SERVICE_URL=https://<nom-du-service>.onrender.com dans Render.
+  const SELF_URL = process.env.WHATSAPP_SERVICE_URL;
+  if (SELF_URL && !SELF_URL.includes('localhost')) {
+    setInterval(async () => {
+      try {
+        await axios.get(`${SELF_URL}/health`, { timeout: 8_000 });
+      } catch (_) { /* non bloquant */ }
+    }, 10 * 60 * 1000);
+  }
+
   setInterval(async () => {
     for (const session of tenantSessions.values()) {
       if (session.initializing || session.connected) {

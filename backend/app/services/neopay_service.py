@@ -552,3 +552,29 @@ async def retry_failed_webhooks(db: Session) -> int:
         db.commit()
 
     return retried
+
+
+# ─── Approbation manuelle paiement Orange Money ───────────────────────────────
+
+async def approve_manual_payment(db: Session, event_id: int) -> dict:
+    """
+    Approuve manuellement un paiement Orange Money en attente.
+    Appelée depuis POST /api/neopay/om-approve/{event_id} — superadmin uniquement.
+    Idempotente : sans risque si appelée deux fois pour le même event.
+    """
+    event = db.query(PaymentEvent).filter(PaymentEvent.id == event_id).first()
+    if not event:
+        raise ValueError(f"PaymentEvent {event_id} introuvable")
+    if event.provider != "om_manual":
+        raise ValueError("Cet événement n'est pas un paiement OM manuel")
+    if event.status == "confirmed":
+        logger.info("PaymentEvent %d déjà confirmé — idempotence", event_id)
+        return {"status": "already_confirmed", "tenant_id": event.tenant_id}
+    if event.status != "pending":
+        raise ValueError(f"Statut inattendu pour activation : {event.status}")
+
+    await _activate_subscription_from_payment(
+        db, transaction_id=event.transaction_id, provider="om_manual"
+    )
+    logger.info("✅ Paiement OM approuvé manuellement — event %d, tenant %d", event_id, event.tenant_id)
+    return {"status": "confirmed", "tenant_id": event.tenant_id}

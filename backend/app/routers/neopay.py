@@ -277,6 +277,102 @@ async def webhook_campay(request: Request, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
+# ─── Orange Money Manuel ─────────────────────────────────────────────────────
+
+class OmPaymentRequestBody(BaseModel):
+    plan: str = "BASIC"
+    customer_phone: str
+
+
+@router.post("/om-request", summary="Demande paiement Orange Money manuel")
+async def create_om_request(
+    body: OmPaymentRequestBody,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Enregistre une demande de paiement Orange Money manuel.
+    Crée un PaymentEvent 'pending' et alerte l'admin par email.
+    L'activation est déclenchée manuellement via /api/neopay/om-approve/{event_id}.
+    """
+    import uuid as _uuid
+    from app.models import PlanType, PLAN_LIMITS
+    from app.services.email_service import send_internal_alert
+
+    _ALIASES = {"ESSENTIAL": "BASIC", "BUSINESS": "STANDARD", "ENTERPRISE": "PRO"}
+    plan_key = _ALIASES.get(body.plan.upper(), body.plan.upper())
+
+    try:
+        plan_config = PLAN_LIMITS.get(PlanType(plan_key))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Plan inconnu : {body.plan}")
+
+    if not plan_config:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Plan {plan_key} non disponible")
+
+    transaction_id = f"om_manual_{_uuid.uuid4().hex}"
+    amount = plan_config.get("price_fcfa", 20000)
+
+    event = PaymentEvent(
+        transaction_id=transaction_id,
+        provider="om_manual",
+        tenant_id=current_user.tenant_id,
+        plan=plan_key,
+        amount=amount,
+        currency="XAF",
+        payment_method="mobile_money",
+        status="pending",
+        customer_email=current_user.email,
+        customer_phone=body.customer_phone,
+        payment_metadata={"customer_name": current_user.full_name or ""},
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+
+    try:
+        await send_internal_alert(
+            subject=f"\U0001f4b0 Paiement OM en attente \u2014 {current_user.full_name or current_user.email}",
+            body=(
+                f"Tenant ID  : {current_user.tenant_id}\n"
+                f"Plan       : {plan_key} ({amount:,} XAF)\n"
+                f"T\u00e9l\u00e9phone  : {body.customer_phone}\n"
+                f"Email      : {current_user.email}\n"
+                f"Nom        : {current_user.full_name or '\u2014'}\n"
+                f"Event ID   : {event.id}\n"
+                f"Transaction: {transaction_id}\n\n"
+                f"\u2192 Pour approuver :\n"
+                f"POST /api/neopay/om-approve/{event.id}"
+            ),
+        )
+    except Exception as alert_exc:
+        logger.warning("Alerte email OM non envoy\u00e9e : %s", alert_exc)
+
+    return {
+        "status": "pending",
+        "event_id": event.id,
+        "message": "Demande enregistr\u00e9e. Votre abonnement sera activ\u00e9 dans les 24h apr\u00e8s v\u00e9rification.",
+    }
+
+
+@router.post("/om-approve/{event_id}", summary="Approuver un paiement OM (superadmin)")
+async def approve_om_payment(
+    event_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_superadmin_user),
+):
+    """
+    Active manuellement l'abonnement d'un client dont le paiement OM a \u00e9t\u00e9 v\u00e9rifi\u00e9.
+    D\u00e9clenche la m\u00eame logique d'activation que les webhooks provider.
+    Idempotent \u2014 sans risque si appel\u00e9 deux fois.
+    """
+    try:
+        result = await neopay_service.approve_manual_payment(db, event_id)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
 # ─── GET /api/neopay/payments — Superadmin ───────────────────────────────────
 
 @router.get("/payments", summary="Historique paiements (superadmin)")
