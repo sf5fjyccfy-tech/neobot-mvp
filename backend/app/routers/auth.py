@@ -256,7 +256,7 @@ async def register(
 
     subscription = Subscription(
         tenant_id=new_tenant.id,
-        plan="essential",
+        plan="BASIC",  # Uniformisé avec neopay_service.py — was: "essential"
         status="active",
         is_trial=True,
         trial_start_date=trial_start,

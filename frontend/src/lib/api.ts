@@ -38,9 +38,8 @@ export const setToken = (token: string): void => {
 
 export const getToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    // Impersonation : sessionStorage en priorité (onglet courant), puis localStorage (résiste au refresh)
+    // Impersonation uniquement en sessionStorage — expire à la fermeture du navigateur
     return sessionStorage.getItem('impersonate_token')
-      || localStorage.getItem('impersonate_token')
       || sessionStorage.getItem('jwt_token');
   }
   return null;
@@ -174,6 +173,9 @@ export const clearAuth = (): void => {
 
 // ─── Impersonation helpers ────────────────────────────────────────────────────
 
+// Impersonation — sessionStorage UNIQUEMENT (expire à la fermeture du navigateur).
+// localStorage intentionnellement absent pour éviter qu'un token admin reste lisible
+// sur une machine partagée ou après la session.
 export const startImpersonation = (token: string, tenantName: string, tenantId?: number): void => {
   if (typeof window !== 'undefined') {
     // Sauvegarder le tenant_id original de l'admin avant de le remplacer
@@ -185,11 +187,9 @@ export const startImpersonation = (token: string, tenantName: string, tenantId?:
     if (tenantId !== undefined) {
       localStorage.setItem('tenant_id', String(tenantId));
     }
-    // Double stockage : sessionStorage (onglet) + localStorage (résiste au refresh)
+    // sessionStorage uniquement — le token d'impersonation ne doit pas survivre au navigateur
     sessionStorage.setItem('impersonate_token', token);
     sessionStorage.setItem('impersonate_tenant', tenantName);
-    localStorage.setItem('impersonate_token', token);
-    localStorage.setItem('impersonate_tenant', tenantName);
   }
 };
 
@@ -203,6 +203,7 @@ export const stopImpersonation = (): void => {
     }
     sessionStorage.removeItem('impersonate_token');
     sessionStorage.removeItem('impersonate_tenant');
+    // Nettoyage défensif si anciennement persisté en localStorage
     localStorage.removeItem('impersonate_token');
     localStorage.removeItem('impersonate_tenant');
   }
@@ -217,7 +218,7 @@ export const getImpersonatedTenant = (): string | null => {
 
 export const isImpersonating = (): boolean => {
   if (typeof window !== 'undefined') {
-    return Boolean(sessionStorage.getItem('impersonate_token') || localStorage.getItem('impersonate_token'));
+    return Boolean(sessionStorage.getItem('impersonate_token'));
   }
   return false;
 };

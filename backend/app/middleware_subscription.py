@@ -7,6 +7,8 @@ avant de traiter les requêtes sur les endpoints protégés.
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from datetime import datetime
+from sqlalchemy import select
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,10 +26,19 @@ PUBLIC_PREFIXES = (
     "/webhook/",       # webhooks entrants (Baileys, Korapay)
 )
 
-# Routes protégées par la subscription
+# Routes protégées par la subscription.
+# Toutes les routes métier listées ici — un tenant expiré sera bloqué à 402.
+# NB : les routes admin (/api/admin/*) sont à ajouter uniquement si les superadmins
+# peuvent avoir une subscription (actuellement ils bypassent via _is_superadmin).
 SUBSCRIPTION_REQUIRED_PREFIXES = (
     "/api/tenants/",
     "/api/analytics/",
+    "/api/agents/",
+    "/api/conversations/",
+    "/api/contacts/",
+    "/api/messages/",
+    "/api/whatsapp/",
+    "/api/neopay/payment-links",  # Création liens paiement — pas les webhooks
 )
 
 
@@ -63,7 +74,6 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
         try:
             from app.database import SessionLocal
             from app.models import Subscription
-            from datetime import datetime
 
             db = SessionLocal()
             try:
@@ -72,7 +82,7 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
                     return await call_next(request)
 
                 sub = db.execute(
-                    __import__('sqlalchemy').select(Subscription).where(
+                    select(Subscription).where(
                         Subscription.tenant_id == tenant_id
                     )
                 ).scalar_one_or_none()

@@ -15,13 +15,18 @@ from app.utils.security import verify_password, get_password_hash as hash_passwo
 _jwt_secret_env = os.getenv("JWT_SECRET", "")
 if not _jwt_secret_env:
     import logging as _logging
+    import sys as _sys
     _logging.getLogger(__name__).critical(
         "SECURITE CRITIQUE : JWT_SECRET n'est pas défini dans les variables d'environnement. "
-        "Utilisez une clé forte en production."
+        "Utilisez une clé forte en production. Démarrage refusé."
     )
-SECRET_KEY = _jwt_secret_env or "change-me-in-production"
+    # Refus de démarrage en production. Si tu es en dev, définis JWT_SECRET dans .env.
+    _sys.exit(1)
+SECRET_KEY = _jwt_secret_env
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 jours par défaut
+# 60 min par défaut — le refresh token (30j) assure la persistance de session.
+# 7 jours était trop long : un token volé restait valide une semaine sans révocation possible.
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))  # 1h par défaut
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:

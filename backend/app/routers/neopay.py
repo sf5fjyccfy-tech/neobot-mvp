@@ -17,18 +17,22 @@ Endpoints superadmin :
   GET  /api/neopay/webhooks                — Historique webhooks
 """
 import logging
+import re
+import uuid as _uuid
 from typing import Optional
 from datetime import datetime
 
 import sentry_sdk
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, get_superadmin_user
-from app.models import PaymentLink, PaymentEvent, WebhookEvent, Tenant
+from app.models import PaymentLink, PaymentEvent, WebhookEvent, Tenant, PlanType, PLAN_LIMITS
 from app.services import neopay_service, korapay_service, campay_service
+from app.services.email_service import send_internal_alert
+from app.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -283,9 +287,19 @@ class OmPaymentRequestBody(BaseModel):
     plan: str = "BASIC"
     customer_phone: str
 
+    @field_validator('customer_phone')
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        digits = v.replace(' ', '').replace('-', '')
+        if not re.match(r'^6\d{8}$', digits):
+            raise ValueError('Numéro invalide — format attendu : 6XXXXXXXX (9 chiffres, commençant par 6)')
+        return digits
+
 
 @router.post("/om-request", summary="Demande paiement Orange Money manuel")
+@limiter.limit("3/hour")  # Limite 3 demandes/heure — évite spam inbox admin
 async def create_om_request(
+    request: Request,
     body: OmPaymentRequestBody,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -295,10 +309,6 @@ async def create_om_request(
     Crée un PaymentEvent 'pending' et alerte l'admin par email.
     L'activation est déclenchée manuellement via /api/neopay/om-approve/{event_id}.
     """
-    import uuid as _uuid
-    from app.models import PlanType, PLAN_LIMITS
-    from app.services.email_service import send_internal_alert
-
     _ALIASES = {"ESSENTIAL": "BASIC", "BUSINESS": "STANDARD", "ENTERPRISE": "PRO"}
     plan_key = _ALIASES.get(body.plan.upper(), body.plan.upper())
 
@@ -331,6 +341,7 @@ async def create_om_request(
     db.refresh(event)
 
     try:
+        _nom = current_user.full_name or "\u2014"
         await send_internal_alert(
             subject=f"\U0001f4b0 Paiement OM en attente \u2014 {current_user.full_name or current_user.email}",
             body=(
@@ -338,7 +349,7 @@ async def create_om_request(
                 f"Plan       : {plan_key} ({amount:,} XAF)\n"
                 f"T\u00e9l\u00e9phone  : {body.customer_phone}\n"
                 f"Email      : {current_user.email}\n"
-                f"Nom        : {current_user.full_name or '\u2014'}\n"
+                f"Nom        : {_nom}\n"
                 f"Event ID   : {event.id}\n"
                 f"Transaction: {transaction_id}\n\n"
                 f"\u2192 Pour approuver :\n"

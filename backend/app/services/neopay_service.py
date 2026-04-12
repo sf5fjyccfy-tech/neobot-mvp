@@ -427,6 +427,10 @@ async def _activate_subscription_from_payment(
     tenant.trial_ends_at = None
     tenant.subscription_expires_at = datetime.utcnow() + timedelta(days=30)
     tenant.messages_limit = plan_config["whatsapp_messages"] if plan_config["whatsapp_messages"] > 0 else 999999
+    # Réinitialise le compteur messages lors du passage en payant.
+    # Sans ça, un tenant ayant épuisé son quota trial reste bloqué après paiement.
+    tenant.messages_used = 0
+    tenant.messages_period_start = datetime.utcnow()
 
     # ── Mettre à jour la Subscription ────────────────────────────────────────
     subscription = db.query(Subscription).filter(Subscription.tenant_id == payment.tenant_id).first()
