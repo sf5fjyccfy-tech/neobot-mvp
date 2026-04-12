@@ -8,6 +8,7 @@ interface ProductServiceItem {
   price: number;
   description: string;
   category?: string;
+  url?: string; // lien page produit — bot l'envoie quand client demande ce produit
   image_url?: string; // base64 — envoyé par le bot si le client demande ce produit
 }
 
@@ -113,7 +114,7 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
   const handleProductAdd = () => {
     setConfig(prev => ({
       ...prev,
-      products_services: [...prev.products_services, { name: '', price: 0, description: '', image_url: '' }],
+      products_services: [...prev.products_services, { name: '', price: 0, description: '', url: '', image_url: '' }],
     }));
   };
 
@@ -355,6 +356,16 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
                 <input type="number" placeholder="Prix" value={item.price} onChange={(e) => handleProductChange(index, 'price', parseFloat(e.target.value))} style={{ ...fieldStyle, width: 80, padding: '6px 10px' }} />
                 <input type="text" placeholder="Description" value={item.description} onChange={(e) => handleProductChange(index, 'description', e.target.value)} style={{ ...fieldStyle, flex: 2, padding: '6px 10px' }} />
                 <button type="button" onClick={() => handleProductRemove(index)} style={{ padding: '6px 10px', background: '#FF444420', border: '1px solid #FF444440', borderRadius: 6, color: '#FF8888', fontSize: 12, cursor: 'pointer' }}>✕</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ color: MUTED, fontSize: 11, flexShrink: 0 }}>🔗</span>
+                <input
+                  type="url"
+                  placeholder="Lien page produit (optionnel) — ex: https://monsite.com/produit"
+                  value={item.url || ''}
+                  onChange={(e) => handleProductChange(index, 'url', e.target.value)}
+                  style={{ ...fieldStyle, flex: 1, padding: '5px 10px', fontSize: 12, color: MUTED }}
+                />
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 {item.image_url && (
