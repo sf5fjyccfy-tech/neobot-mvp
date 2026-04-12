@@ -132,15 +132,34 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
   };
 
   const handleProductImage = (index: number, file: File) => {
-    if (file.size > 500 * 1024) {
-      alert('Image trop lourde — maximum 500 Ko.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      handleProductChange(index, 'image_url', e.target?.result as string);
+    // Compression automatique par canvas — cible <200 Ko, max 900px côté le plus long
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const MAX_SIDE = 900;
+      let { width, height } = img;
+      if (width > MAX_SIDE || height > MAX_SIDE) {
+        if (width > height) { height = Math.round(height * MAX_SIDE / width); width = MAX_SIDE; }
+        else                 { width = Math.round(width * MAX_SIDE / height); height = MAX_SIDE; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      // Réduction de qualité par paliers jusqu'à atteindre < 200 Ko
+      let quality = 0.82;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > 200 * 1024 * 1.37 && quality > 0.3) {
+        // base64 expand x1.37 vs octets binaires
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+      handleProductChange(index, 'image_url', dataUrl);
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); alert('Fichier image non lisible.'); };
+    img.src = objectUrl;
   };
 
   const handleGenerateDescription = async () => {
@@ -373,7 +392,7 @@ export default function BusinessConfigForm({ tenantId }: { tenantId: number }) {
                   <img src={item.image_url} alt={item.name} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: `1px solid ${BORDER}`, flexShrink: 0 }} />
                 )}
                 <label style={{ ...fieldStyle, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', width: 'auto', fontSize: 12, color: MUTED, boxSizing: 'border-box' as const }}>
-                  📷 {item.image_url ? 'Changer la photo' : 'Ajouter une photo'}
+                  📷 {item.image_url ? 'Changer la photo' : 'Ajouter une photo'} <span style={{ fontSize: 10, opacity: 0.6 }}>(compressée auto)</span>
                   <input
                     type="file"
                     accept="image/*"
