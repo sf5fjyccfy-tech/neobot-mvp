@@ -520,10 +520,42 @@ async def get_current_user_info(
         "role": current_user.role,
         "is_active": current_user.is_active,
         "is_superadmin": bool(getattr(current_user, "is_superadmin", False)),
+        "email_verified": bool(getattr(current_user, "email_verified", True)),
         "tenant_id": current_user.tenant_id,
         "tenant_name": tenant.name if tenant else None,
         "tenant_plan": tenant.get_plan_config().get("name", tenant.plan.value) if tenant else None,
     }
+
+
+@router.post("/resend-verification")
+@limiter.limit("3/hour")  # évite le flood d'emails
+async def resend_verification(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Renvoie l'email de vérification si le compte n'est pas encore confirmé."""
+    if current_user.email_verified:
+        return {"message": "Email déjà vérifié."}
+
+    raw_token = secrets.token_urlsafe(32)
+    current_user.email_verification_token = hashlib.sha256(raw_token.encode()).hexdigest()
+    db.commit()
+
+    BACKEND_URL = os.getenv("BACKEND_URL", "https://api.neobot-ai.com")
+    verification_link = f"{BACKEND_URL}/api/auth/verify-email?token={raw_token}"
+
+    from app.services.email_service import send_confirmation_email
+    try:
+        await send_confirmation_email(
+            to_email=current_user.email,
+            confirmation_link=verification_link,
+        )
+    except Exception as exc:
+        logger.warning("Renvoi email vérification échoué : %s", exc)
+        raise HTTPException(status_code=502, detail="Erreur lors de l'envoi de l'email. Réessayez.")
+
+    return {"message": "Email de vérification renvoyé."}
 
 
 # ======================== ADMIN 2FA ========================

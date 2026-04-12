@@ -124,6 +124,8 @@ export default function DashboardPage() {
   const [isSuperadminDash, setIsSuperadminDash] = useState(false);
   const [hasAgent, setHasAgent] = useState(false);
   const [totalUsed, setTotalUsed] = useState(0);
+  const [emailVerified, setEmailVerified] = useState(true); // true par défaut — on n'affiche rien si /me ne répond pas
+  const [resendCooldown, setResendCooldown] = useState(false);
 
   useEffect(() => {
     // Détecter un token d'impersonation passé en query param
@@ -157,6 +159,13 @@ export default function DashboardPage() {
     const token = getToken();
     if (tid && token) {
       const headers = { 'Authorization': `Bearer ${token}` };
+
+      // Vérification email : appel /me pour récupérer email_verified
+      fetch(buildApiUrl('/api/auth/me'), { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(me => { if (me && me.email_verified === false) setEmailVerified(false); })
+        .catch(() => {});
+
       Promise.all([
         fetch(buildApiUrl(`/api/tenants/${tid}/usage`), { headers }).then(r => r.ok ? r.json() : null),
         fetch(buildApiUrl(`/api/tenants/${tid}/dashboard/stats`), { headers }).then(r => r.ok ? r.json() : null),
@@ -209,6 +218,55 @@ export default function DashboardPage() {
   return (
     <AppShell>
     <div style={{ minHeight: '100vh', fontFamily: '"DM Sans", sans-serif', color: TEXT }}>
+      {/* Bandeau vérification email */}
+      {!emailVerified && !isSuperadminDash && !impersonating && (
+        <div style={{
+          background: 'linear-gradient(90deg, #1c1a08, #2a2408)',
+          borderBottom: '1px solid #854d0e',
+          padding: '9px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ color: '#fde68a', fontSize: 13, fontWeight: 600 }}>
+            ✉️ Confirmez votre email pour sécuriser votre compte.
+          </span>
+          <button
+            disabled={resendCooldown}
+            onClick={async () => {
+              setResendCooldown(true);
+              try {
+                const token = (await import('@/lib/api')).getToken();
+                const { buildApiUrl } = await import('@/lib/api');
+                await fetch(buildApiUrl('/api/auth/resend-verification'), {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}` },
+                });
+              } catch (_) {}
+              setTimeout(() => setResendCooldown(false), 60000);
+            }}
+            style={{
+              background: resendCooldown ? '#422006' : '#854d0e',
+              border: '1px solid #a16207',
+              color: resendCooldown ? '#92400e' : '#fef3c7',
+              padding: '5px 14px',
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: resendCooldown ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {resendCooldown ? 'Email envoyé ✓' : 'Renvoyer l\'email'}
+          </button>
+        </div>
+      )}
+
       {/* Bandeau mode test (impersonation) */}
       {impersonating && (
         <div style={{

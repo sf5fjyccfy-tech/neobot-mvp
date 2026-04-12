@@ -16,6 +16,7 @@ function LoginFormInner() {
   const [formData, setFormData] = useState<LoginFormData>({ email: '', password: '' });
   const [error, setError] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [emailVerifiedStatus, setEmailVerifiedStatus] = useState<'success' | 'invalid' | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -24,7 +25,10 @@ function LoginFormInner() {
       setSessionExpired(true);
       localStorage.removeItem('session_expired');
     }
-  }, []);
+    const ev = searchParams?.get('email_verified');
+    if (ev === 'success') setEmailVerifiedStatus('success');
+    else if (ev === 'invalid') setEmailVerifiedStatus('invalid');
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -83,6 +87,18 @@ function LoginFormInner() {
         <div className="bg-orange-500/15 border border-orange-400/30 text-orange-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
           <span className="text-orange-400 mt-0.5">🔒</span>
           Votre session a expiré. Reconnectez-vous pour continuer.
+        </div>
+      )}
+      {emailVerifiedStatus === 'success' && (
+        <div className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+          <span className="text-emerald-400 mt-0.5">✓</span>
+          Email vérifié avec succès. Vous pouvez vous connecter.
+        </div>
+      )}
+      {emailVerifiedStatus === 'invalid' && (
+        <div className="bg-red-500/15 border border-red-400/30 text-red-200 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+          <span className="text-red-400 mt-0.5">⚠</span>
+          Lien de vérification invalide ou expiré. Reconnectez-vous pour en recevoir un nouveau.
         </div>
       )}
       {error && (
