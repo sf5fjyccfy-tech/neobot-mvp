@@ -4,10 +4,8 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   experimental: {
-    // Active la découverte du fichier src/instrumentation.ts (Sentry server/edge)
-    instrumentationHook: true,
+    // instrumentationHook est stable dans Next.js 15, gardé pour compatibilité
   },
   // Empêche Cloudflare (et tout CDN intermédiaire) de cacher le HTML des pages.
   // Les assets statiques (.js, .css) ont des hashes dans leur nom → OK à cacher.
