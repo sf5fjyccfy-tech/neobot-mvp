@@ -4,9 +4,6 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    // instrumentationHook est stable dans Next.js 15, gardé pour compatibilité
-  },
   // Empêche Cloudflare (et tout CDN intermédiaire) de cacher le HTML des pages.
   // Les assets statiques (.js, .css) ont des hashes dans leur nom → OK à cacher.
   // Mais si le HTML est caché, le navigateur ne voit jamais les nouveaux hashes JS.
@@ -31,10 +28,9 @@ const nextConfig = {
 };
 
 module.exports = withSentryConfig(nextConfig, {
-  // Org et project Sentry — à récupérer sur sentry.io/settings/
-  silent: true,   // Pas de logs verbose au build
-  // Upload sourcemaps en production uniquement
-  disableServerWebpackPlugin: process.env.NODE_ENV !== 'production',
-  disableClientWebpackPlugin: process.env.NODE_ENV !== 'production',
+  silent: true,
+  // Désactivé : pas de SENTRY_AUTH_TOKEN sur Cloudflare Pages
+  disableServerWebpackPlugin: true,
+  disableClientWebpackPlugin: true,
 });
 
