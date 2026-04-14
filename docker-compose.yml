@@ -1,26 +1,18 @@
+# =========================================================================
+# NeoBot — Docker Compose for Hetzner VPS
+#
+# Architecture :
+#   - backend (FastAPI)      → port 8000 exposé (Cloudflare proxy → HTTPS)
+#   - whatsapp (Baileys)     → port 3001 INTERNE SEULEMENT
+#   - DB                     → Neon.tech externe (DATABASE_URL dans .env)
+#   - Frontend               → Cloudflare Pages (non déployé ici)
+#
+# Avant de lancer : cp .env.example .env && nano .env
+# =========================================================================
+
 version: '3.8'
 
 services:
-  # ========== POSTGRESQL ==========
-  postgres:
-    image: postgres:12-alpine
-    container_name: neobot_postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-neobot}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neobot_secure_password}
-      POSTGRES_DB: ${POSTGRES_DB:-neobot_db}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U neobot"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - neobot_network
-    restart: unless-stopped
 
   # ========== BACKEND (FastAPI) ==========
   backend:
@@ -28,61 +20,51 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     container_name: neobot_backend
+    env_file: .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-neobot}:${POSTGRES_PASSWORD:-neobot_secure_password}@postgres:5432/${POSTGRES_DB:-neobot_db}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      BACKEND_PORT: 8000
-      DEBUG_MODE: ${DEBUG_MODE:-false}
+      # Overrides pour s'assurer que le service WhatsApp est adressé en interne
+      WHATSAPP_SERVICE_URL: "http://whatsapp:3001"
     ports:
       - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - ./logs/backend:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - neobot_network
     restart: unless-stopped
 
-  # ========== WHATSAPP SERVICE (Node.js) ==========
+  # ========== WHATSAPP SERVICE (Node.js / Baileys) ==========
   whatsapp:
     build:
       context: ./whatsapp-service
       dockerfile: Dockerfile.prod
     container_name: neobot_whatsapp
+    env_file: .env
     environment:
-      WHATSAPP_BACKEND_URL: http://backend:8000
-      WHATSAPP_PORT: 3001
-      TENANT_ID: 1
-    ports:
-      - "3001:3001"
-    depends_on:
-      - backend
+      # Overrides pour s'assurer que le backend est adressé en interne
+      WHATSAPP_BACKEND_URL: "http://backend:8000"
+      WHATSAPP_PORT: "3001"
+    # Port 3001 NON exposé vers l'extérieur — communication interne Docker uniquement.
+    # Le backend proxifie les appels WhatsApp depuis le frontend.
+    expose:
+      - "3001"
     volumes:
       - ./auth_info_baileys:/app/auth_info_baileys
-    networks:
-      - neobot_network
-    restart: unless-stopped
-
-  # ========== FRONTEND (Next.js) ==========
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-    container_name: neobot_frontend
-    environment:
-      NEXT_PUBLIC_API_URL: http://backend:8000
-      NEXT_PUBLIC_WHATSAPP_URL: http://whatsapp:3001
-    ports:
-      - "3000:3000"
+      - ./logs/whatsapp:/app/logs
     depends_on:
       - backend
     networks:
       - neobot_network
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   neobot_network:
     driver: bridge
+
+volumes: {}
+
