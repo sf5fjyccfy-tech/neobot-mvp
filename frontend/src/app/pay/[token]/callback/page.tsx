@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
