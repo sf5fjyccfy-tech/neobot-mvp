@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiCall, getToken } from '@/lib/api';
-import * as Sentry from '@sentry/nextjs';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ProviderStatus = {
@@ -195,7 +194,7 @@ export default function CreditsPage() {
         return;
       }
       setError(msg);
-      Sentry.captureException(err);
+      console.error('[credits fetchData]', err);
     } finally {
       setLoading(false);
     }
@@ -209,7 +208,7 @@ export default function CreditsPage() {
       await apiCall('/api/admin/credits/refresh', { method: 'POST' });
       await fetchData();
     } catch (err) {
-      Sentry.captureException(err);
+      console.error('[credits refresh]', err);
     } finally {
       setRefreshing(false);
     }

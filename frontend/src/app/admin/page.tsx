@@ -3,7 +3,6 @@ import React from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiCall, getAdminToken, startImpersonation, buildApiUrl } from '@/lib/api';
-import * as Sentry from '@sentry/nextjs';
 
 const adminCall = (endpoint: string, opts?: RequestInit) => {
   const token = getAdminToken();
@@ -151,10 +150,9 @@ export default function AdminPage() {
       .then(r => r.json())
       .then(me => {
         if (!me.is_superadmin) { router.push('/dashboard'); return; }
-        Sentry.setUser({ id: String(me.id), email: me.email, username: me.email });
         loadData();
       })
-      .catch((e) => { Sentry.captureException(e, { tags: { admin_action: 'auth_check' } }); router.push('/login'); });
+      .catch((e) => { console.error('[admin auth]', e); router.push('/login'); });
   }, [loadData, router]);
 
   const selectTenant = async (id: number) => {
@@ -164,7 +162,7 @@ export default function AdminPage() {
       const d = await adminCall(`/api/admin/tenants/${id}`).then(r => r.json());
       setDetail(d);
     } catch (e: any) {
-      Sentry.captureException(e, { tags: { admin_action: 'selectTenant' }, extra: { tenantId: id } });
+      console.error('[selectTenant]', e);
       showToast(`❌ ${e.message}`);
     } finally {
       setDetailLoading(false);
@@ -178,7 +176,7 @@ export default function AdminPage() {
       await loadData();
       if (selectedId) await selectTenant(selectedId);
     } catch (e: any) {
-      Sentry.captureException(e, { tags: { admin_action: 'action' }, extra: { url, method } });
+      console.error('[action]', e);
       showToast(`❌ ${e.message}`);
     }
   };
@@ -189,7 +187,7 @@ export default function AdminPage() {
       startImpersonation(data.access_token, data.tenant_name, data.tenant_id);
       window.open(openPath, '_blank');
     } catch (e: any) {
-      Sentry.captureException(e, { tags: { admin_action: 'impersonate' }, extra: { tenantId } });
+      console.error('[impersonate]', e);
       showToast(`❌ ${e.message}`);
     }
   };
@@ -205,7 +203,7 @@ export default function AdminPage() {
       }).then(r => r.json());
       setBroadcastResult(res);
     } catch (e: any) {
-      Sentry.captureException(e, { tags: { admin_action: 'broadcast' } });
+      console.error('[broadcast]', e);
       showToast(`❌ ${e.message}`);
     } finally {
       setBroadcastSending(false);
