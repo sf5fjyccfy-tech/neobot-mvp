@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
-    "build:cf": "npx @opennextjs/cloudflare build && mkdir -p .open-next/assets/_next && cp -r .next/static .open-next/assets/_next/ && cp -r public/. .open-next/assets/ && cp -r .open-next/cloudflare .open-next/middleware .open-next/server-functions .open-next/assets/ && cp -r .open-next/.build .open-next/assets/ && cp .open-next/worker.js .open-next/assets/_worker.js",
+    "build:cf": "npx @opennextjs/cloudflare build",
     "start": "next start",
     "lint": "next lint"
   },
