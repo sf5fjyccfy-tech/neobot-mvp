@@ -48,6 +48,7 @@ export default function BillingPage() {
   const [omSubmitting, setOmSubmitting] = useState(false);
   const [omSuccess, setOmSuccess]       = useState(false);
   const [omError, setOmError]           = useState('');
+  const [copiedUssd, setCopiedUssd]     = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -356,7 +357,27 @@ export default function BillingPage() {
                 <p style={{ color: NEON, fontWeight: 700, fontSize: 12, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}>📱 Instructions de paiement</p>
                 <ol style={{ paddingLeft: 18, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>
-                    Composez le code&nbsp;: <strong style={{ color: '#fff', letterSpacing: 1 }}>#150*46*3731154#</strong>
+                    Composez le code&nbsp;:{' '}
+                    <strong style={{ color: '#fff', letterSpacing: 1 }}>#150*46*3731154#</strong>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText('#150*46*3731154#').then(() => {
+                          setCopiedUssd(true);
+                          setTimeout(() => setCopiedUssd(false), 2000);
+                        });
+                      }}
+                      style={{
+                        marginLeft: 8, padding: '2px 8px',
+                        background: copiedUssd ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
+                        border: `1px solid ${copiedUssd ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.15)'}`,
+                        borderRadius: 6, color: copiedUssd ? '#22c55e' : 'rgba(255,255,255,0.6)',
+                        fontSize: 11, fontWeight: 600, cursor: 'pointer', verticalAlign: 'middle',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {copiedUssd ? '✓ Copié' : 'Copier'}
+                    </button>
                   </li>
                   <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>
                     Confirmez le montant&nbsp;: <strong style={{ color: '#fff' }}>20 000 FCFA</strong>

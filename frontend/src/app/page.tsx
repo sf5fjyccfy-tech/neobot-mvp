@@ -258,6 +258,7 @@ function ChatDemo() {
   const [typing, setTyping]   = useState(false);
   const [count, setCount]     = useState(0);
   const [limitReached, setLimit] = useState(false);
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [sessionId]           = useState(() =>
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -271,6 +272,13 @@ function ChatDemo() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, typing]);
+
+  // Vérifie si l'API est joignable au chargement
+  useEffect(() => {
+    fetch(`${API_BASE}/health`, { method: 'HEAD' })
+      .then(r => setApiOnline(r.ok))
+      .catch(() => setApiOnline(false));
+  }, []);
 
   const send = async () => {
     const msg = input.trim();
@@ -314,8 +322,10 @@ function ChatDemo() {
         <div>
           <div style={{color:'#FFF0E8',fontWeight:700,fontSize:13,fontFamily:'"Syne",sans-serif'}}>NéoBot</div>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:'#00E5CC',display:'inline-block',boxShadow:'0 0 6px #00E5CC'}}/>
-            <span style={{color:'#00E5CC',fontSize:11}}>En ligne · Posez n’importe quelle question</span>
+            <span style={{width:6,height:6,borderRadius:'50%',background:apiOnline===false?'#EF4444':'#00E5CC',display:'inline-block',boxShadow:apiOnline===false?'0 0 6px #EF4444':'0 0 6px #00E5CC'}}/>
+            <span style={{color:apiOnline===false?'#EF4444':'#00E5CC',fontSize:11}}>
+              {apiOnline===false ? 'Hors ligne momentanément' : "En ligne · Posez n’importe quelle question"}
+            </span>
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiCall, buildApiUrl, setToken, setTenantId, setBusinessInfo, setIsSuperadmin } from '@/lib/api';
-import { Eye, EyeOff, User, Mail, Lock, Building2, Briefcase, ArrowRight, Check } from 'lucide-react';
+import { Eye, EyeOff, User, Mail, Lock, Building2, Briefcase, Phone, ArrowRight, Check } from 'lucide-react';
 
 interface SignupFormData {
   full_name: string;
@@ -11,6 +11,7 @@ interface SignupFormData {
   password: string;
   tenant_name: string;
   business_type: string;
+  whatsapp_number: string;
 }
 
 const BUSINESS_TYPES = [
@@ -31,6 +32,7 @@ export default function SignupForm() {
     password: '',
     tenant_name: '',
     business_type: 'restaurant',
+    whatsapp_number: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -203,10 +205,25 @@ export default function SignupForm() {
         </div>
       </div>
 
+      {/* WhatsApp Business */}
+      <div>
+        <label className={labelClass}>
+          Numéro WhatsApp Business <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 400 }}>(optionnel)</span>
+        </label>
+        <div className="relative">
+          <Phone className="absolute left-3 top-3.5 w-4 h-4 text-white/40" />
+          <input
+            name="whatsapp_number" type="tel"
+            value={formData.whatsapp_number} onChange={handleChange}
+            className={inputClass} placeholder="237690234567 (indicatif + numéro)"
+          />
+        </div>
+        <p className="text-white/40 text-xs mt-1">Le numéro que vous allez connecter à NéoBot</p>
+      </div>
+
       {/* Mot de passe */}
       <div>
-        <label className={labelClass}>Mot de passe</label>
-        <div className="relative">
+        <label className={labelClass}>Mot de passe</label>        <div className="relative">
           <Lock className="absolute left-3 top-3.5 w-4 h-4 text-white/40" />
           <input
             name="password" type={showPassword ? 'text' : 'password'} required

@@ -51,6 +51,7 @@ class RegisterRequest(BaseModel):
     full_name: str
     tenant_name: str
     business_type: str
+    whatsapp_number: str | None = None  # Optionnel — numéro WhatsApp Business du tenant
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -230,7 +231,7 @@ async def register(
     new_tenant = Tenant(
         name=body.tenant_name,
         email=body.email,
-        phone=_derive_tenant_phone(body.email),
+        phone=body.whatsapp_number or _derive_tenant_phone(body.email),
         business_type=body.business_type or "autre",
         plan=PlanType.BASIC,
         messages_used=0,

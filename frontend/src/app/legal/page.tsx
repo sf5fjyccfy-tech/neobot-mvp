@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { NeoBotIcon as NeoLogo } from '@/components/ui/NeoBotLogo';
 import { ArrowLeft, FileText, Shield, Info } from 'lucide-react';
 
@@ -817,21 +816,18 @@ function MentionsLegales() {
   );
 }
 
-// ─── Composant principal (wrapper pour useSearchParams) ───────────────────────
+// ─── Composant principal ─────────────────────────────────────────────────────
 function LegalContent() {
-  const searchParams = useSearchParams();
-  const tabParam = searchParams.get('tab') as TabId | null;
+  const [activeTab, setActiveTab] = useState<TabId>('cgu');
 
-  const [activeTab, setActiveTab] = useState<TabId>(
-    tabParam && TABS.some(t => t.id === tabParam) ? tabParam : 'cgu'
-  );
-
-  // Sync tab avec l'URL si changement externe
+  // Lecture du param ?tab= côté client uniquement (évite useSearchParams + Suspense)
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab') as TabId | null;
     if (tabParam && TABS.some(t => t.id === tabParam)) {
       setActiveTab(tabParam);
     }
-  }, [tabParam]);
+  }, []);
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
@@ -1013,15 +1009,7 @@ function LegalContent() {
   );
 }
 
-// ─── Export avec Suspense (requis pour useSearchParams) ───────────────────────
+// ─── Export ──────────────────────────────────────────────────────────────────
 export default function LegalPage() {
-  return (
-    <Suspense fallback={
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'rgba(255,154,108,.5)', fontFamily: '"Syne",sans-serif', fontSize: 14 }}>Chargement...</div>
-      </div>
-    }>
-      <LegalContent />
-    </Suspense>
-  );
+  return <LegalContent />;
 }
