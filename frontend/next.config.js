@@ -2,7 +2,6 @@
 const path = require('path');
 
 const nextConfig = {
-  output: 'standalone',
   reactStrictMode: true,
   async headers() {
     return [
