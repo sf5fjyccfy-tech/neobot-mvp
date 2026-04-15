@@ -1,11 +1,6 @@
 'use client';
 
-import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
-
-// error.tsx — Error boundary par route segment (App Router Next.js)
-// S'applique à toutes les pages filles du dossier où il est placé.
-// Capture l'erreur dans Sentry et affiche une UI de récupération brandée.
 
 export default function Error({
   error,
@@ -15,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    console.error('[Error boundary]', error);
   }, [error]);
 
   return (
