@@ -329,8 +329,9 @@ Ou posez votre question!
                 system_prompt = build_agent_system_prompt(active_agent, db)
                 max_tokens = active_agent.max_response_length or 500
 
-                # Injecter l'historique CRM dans le contexte utilisateur
-                enriched_context = f"{history_text}\n\n{CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)}"
+                # CRM uniquement — history_text est déjà dans conversation_history[:-1]
+                # l'injecter ici aussi causerait une duplication → bot qui répète
+                enriched_context = CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)
 
                 messages = []
                 messages.append({"role": "system", "content": system_prompt})
@@ -345,7 +346,8 @@ Ou posez votre question!
 
             else:
                 # Mode FALLBACK : SalesPromptGenerator (comportement original)
-                enriched_context = f"{history_text}\n\n{CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)}"
+                # Même raison : conversation_history est déjà passé à generate(), history_text serait dupliqué
+                enriched_context = CRMService.get_customer_history_context(conversation_id if conversation_id else 1, db)
 
                 sales_prompt = SalesPromptGenerator.generate(
                     message=user_message,

@@ -74,6 +74,7 @@ export default function ConversationsPage() {
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [botPaused, setBotPaused] = useState(false);
   const isMobile = useIsMobile();
   // Sur mobile : 'list' affiche la liste, 'chat' affiche la conversation
@@ -94,14 +95,14 @@ export default function ConversationsPage() {
 
   // Charger les messages quand on sélectionne une conversation + polling 10s
   useEffect(() => {
-    if (!selected) { setMessages([]); setLoadingMessages(false); return; }
+    if (!selected) { setMessages([]); setMessagesError(null); setLoadingMessages(false); return; }
     selectedIdRef.current = selected.id;
     const tid = getTenantId();
     const token = getToken();
     if (!tid) return;
 
     const fetchMessages = (showLoading: boolean) => {
-      if (showLoading) setLoadingMessages(true);
+      if (showLoading) { setLoadingMessages(true); setMessagesError(null); }
       const controller = new AbortController();
       fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/messages`), {
         headers: { ...(token && { 'Authorization': `Bearer ${token}` }) },
@@ -109,14 +110,27 @@ export default function ConversationsPage() {
       })
         .then(r => {
           if (r.status === 401) { clearToken(); window.location.href = '/login'; return null; }
-          return r.ok ? r.json() : null;
+          if (!r.ok) {
+            console.error(`[NeoBot] Messages fetch error: HTTP ${r.status} for conv ${selected.id} tenant ${tid}`);
+            if (showLoading) setMessagesError(`Erreur ${r.status} — impossible de charger les messages.`);
+            return null;
+          }
+          return r.json();
         })
         .then(data => {
           // Ne mettre à jour que si l'utilisateur est toujours sur cette conversation
           if (selectedIdRef.current !== selected.id) return;
-          if (data && Array.isArray(data.messages)) setMessages(data.messages);
+          if (data && Array.isArray(data.messages)) {
+            setMessages(data.messages);
+            setMessagesError(null);
+          }
         })
-        .catch(err => { if (err.name !== 'AbortError') console.error('fetch messages:', err); })
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('[NeoBot] Messages fetch exception:', err);
+            if (showLoading) setMessagesError('Erreur réseau — vérifiez votre connexion.');
+          }
+        })
         .finally(() => { if (showLoading) setLoadingMessages(false); });
       return controller;
     };
@@ -462,6 +476,14 @@ export default function ConversationsPage() {
               {loadingMessages ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, color: MUTED, fontSize: 13 }}>
                   <span style={{ opacity: 0.6 }}>Chargement des messages…</span>
+                </div>
+              ) : messagesError ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+                  <div style={{ textAlign: 'center', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '20px 28px' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+                    <p style={{ fontSize: 13, color: '#EF4444', fontWeight: 600, margin: 0 }}>{messagesError}</p>
+                    <p style={{ fontSize: 11, color: MUTED, margin: '6px 0 0' }}>Ouvrez la console (F12 → Console) pour le détail.</p>
+                  </div>
                 </div>
               ) : messages.length === 0 ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
