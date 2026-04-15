@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const path = require('path');
-
 const nextConfig = {
   reactStrictMode: true,
   async headers() {
@@ -12,13 +10,6 @@ const nextConfig = {
         ],
       },
     ];
-  },
-  webpack: (config, { dir }) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': path.join(dir, 'src'),
-    };
-    return config;
   },
 };
 
