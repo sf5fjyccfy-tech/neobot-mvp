@@ -136,7 +136,7 @@ export default function AdminPage() {
       setStats(s);
       setTenants(t);
     } catch (e: any) {
-      Sentry.captureException(e, { tags: { admin_action: 'loadData' } });
+      console.error('[Admin] loadData error:', e);
       showToast(`❌ ${e.message}`);
     } finally {
       setLoading(false);
