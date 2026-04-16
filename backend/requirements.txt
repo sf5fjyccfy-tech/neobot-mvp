@@ -1,21 +1,23 @@
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 slowapi==0.1.9
-sqlalchemy==2.0.23
+sqlalchemy==2.0.36
 alembic==1.13.1
 python-dotenv==1.0.0
 cryptography==41.0.7
 httpx==0.25.2
-pydantic[email]==2.5.0
+pydantic[email]==2.8.0
 pydantic-settings==2.1.0
 
 # ═════════════════════════════════════════════════════════════
 # DATABASE DRIVERS
 # ═════════════════════════════════════════════════════════════
-# psycopg2-binary = "Traducteur" Python ↔ PostgreSQL
+# psycopg[binary] = Moderne Python 3.13+ compatible
+#   "Traducteur" Python ↔ PostgreSQL
 #   Sans ça, Python peut pas parler à la base de données
 #   Requis pour: engine = create_engine("postgresql://...")
-psycopg2-binary==2.9.9
+psycopg[binary]==3.3.3
+psycopg2-binary==2.9.10
 
 # ═════════════════════════════════════════════════════════════
 # AUTHENTICATION & SECURITY
