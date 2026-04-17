@@ -18,6 +18,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
 
+        # ✅ PRESERVE CORS headers ajoutés par CORSMiddleware
+        cors_headers = {k: v for k, v in response.headers.items() if k.lower().startswith('access-control')}
+
         # ── Anti-clickjacking ──────────────────────────────────────────────────
         response.headers["X-Frame-Options"] = "DENY"
 
@@ -55,5 +58,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/auth/"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
             response.headers["Pragma"] = "no-cache"
+
+        # ✅ RESTORE CORS headers (sinon CORSMiddleware ne sert à rien)
+        response.headers.update(cors_headers)
 
         return response
