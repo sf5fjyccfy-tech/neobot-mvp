@@ -727,7 +727,28 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
   const [emailBody, setEmailBody] = useState('');
   const [emailSending, setEmailSending] = useState(false);
   const [emailSent, setEmailSent] = useState<string | null>(null);
+  const [waMsg, setWaMsg] = useState('');
+  const [waSending, setWaSending] = useState(false);
+  const [waResult, setWaResult] = useState<string | null>(null);
   const canConfirmDelete = deleteConfirmName === detail.name && detail.id !== 1;
+
+  const sendWhatsApp = async () => {
+    if (!waMsg.trim()) return;
+    setWaSending(true);
+    setWaResult(null);
+    try {
+      const res = await adminCall(`/api/admin/tenants/${detail.id}/whatsapp-message`, {
+        method: 'POST',
+        body: JSON.stringify({ message: waMsg.trim() }),
+      }).then(r => r.json());
+      setWaResult(res.sent ? 'success' : 'error');
+      if (res.sent) setWaMsg('');
+    } catch {
+      setWaResult('error');
+    } finally {
+      setWaSending(false);
+    }
+  };
 
   const sendEmail = async () => {
     if (!emailSubject.trim() || !emailBody.trim()) return;
@@ -870,6 +891,41 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
           </button>
         </div>
       </div>
+
+      {/* WhatsApp direct */}
+      {detail.whatsapp_phone && (
+        <div className="bg-[#0D0D1A] rounded-xl p-5 border border-[#1A1A2E]">
+          <h3 className="text-sm font-semibold text-gray-300 mb-1">📱 WhatsApp direct</h3>
+          <p className="text-[11px] text-gray-600 mb-3">
+            Envoie depuis ton WhatsApp connecté → {detail.whatsapp_phone}
+          </p>
+          <textarea
+            value={waMsg}
+            onChange={e => setWaMsg(e.target.value)}
+            maxLength={2000}
+            rows={3}
+            placeholder={`Message WhatsApp pour ${detail.name}...`}
+            className="w-full bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50 placeholder-gray-700 resize-none mb-2"
+          />
+          {waResult === 'success' && (
+            <div className="text-xs px-3 py-2 rounded-lg border bg-green-900/20 border-green-800/40 text-green-400 mb-2">
+              ✅ Message WhatsApp envoyé à {detail.whatsapp_phone}
+            </div>
+          )}
+          {waResult === 'error' && (
+            <div className="text-xs px-3 py-2 rounded-lg border bg-red-900/20 border-red-800/40 text-red-400 mb-2">
+              ❌ Échec — ton WhatsApp (compte admin) doit être connecté
+            </div>
+          )}
+          <button
+            disabled={waSending || !waMsg.trim()}
+            onClick={sendWhatsApp}
+            className="w-full bg-green-700 hover:bg-green-600 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 rounded-lg transition"
+          >
+            {waSending ? 'Envoi...' : `Envoyer via WhatsApp`}
+          </button>
+        </div>
+      )}
 
       {/* Suspension */}
       <div className={`rounded-xl p-5 border ${detail.is_suspended ? 'bg-red-950/20 border-red-900/40' : 'bg-[#0D0D1A] border-[#1A1A2E]'}`}>

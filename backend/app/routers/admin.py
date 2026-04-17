@@ -2,12 +2,17 @@
 Admin Router — Accès superadmin uniquement
 Gestion globale : tenants, agents, stats, suspension, impersonation
 """
+import os
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone, timedelta
+
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 
 from app.database import get_db
 from app.models import (
@@ -45,6 +50,10 @@ class BroadcastEmailRequest(BaseModel):
     body: str
     target: str = "all"  # all | active_paid | trial | single
     tenant_id: Optional[int] = None  # requis si target == 'single'
+
+
+class WhatsAppMessageRequest(BaseModel):
+    message: str
 
 
 class AgentUpdateRequest(BaseModel):
@@ -587,6 +596,51 @@ def impersonate_tenant(
         "user_email": user.email,
         "expires_in": 3600,
     }
+
+
+# ======================== WHATSAPP MESSAGE ADMIN → CLIENT ========================
+
+@router.post("/tenants/{tenant_id}/whatsapp-message")
+async def send_whatsapp_to_tenant(
+    tenant_id: int,
+    body: WhatsAppMessageRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """
+    Envoie un message WhatsApp à un client depuis le compte WhatsApp admin (tenant 1).
+    Utilise le numéro WhatsApp connecté du tenant cible.
+    """
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message vide")
+
+    tenant = db.query(Tenant).filter(
+        Tenant.id == tenant_id,
+        Tenant.is_deleted == False,
+    ).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+
+    phone = tenant.whatsapp_phone
+    if not phone:
+        raise HTTPException(status_code=400, detail="Ce client n'a pas de numéro WhatsApp enregistré")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/1/send-message",
+                json={"to": phone, "message": body.message.strip()},
+                headers={"x-api-key": INTERNAL_API_KEY},
+            )
+        if r.status_code == 200:
+            return {"sent": True, "phone": phone, "tenant": tenant.name}
+        raise HTTPException(status_code=503, detail=f"WhatsApp service: {r.text[:200]}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=503, detail="WhatsApp service timeout")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Erreur: {str(e)[:200]}")
 
 
 # ======================== BROADCAST EMAIL ========================
