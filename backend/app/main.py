@@ -143,8 +143,8 @@ async def _startup_tasks():
         # ── Reset superadmin via variable d'env SUPERADMIN_RESET_PASSWORD ──
         # Usage Render : ajouter la var d'env temporairement, redéployer, retirer.
         _reset_pw = os.environ.get("SUPERADMIN_RESET_PASSWORD")
-        _reset_email = os.environ.get("SUPERADMIN_EMAIL", "timpatrick561@gmail.com")
-        if _reset_pw:
+        _reset_email = os.environ.get("SUPERADMIN_EMAIL")
+        if _reset_pw and _reset_email:
             from app.services.auth_service import get_password_hash as _hash
             db_reset = next(get_db())
             try:

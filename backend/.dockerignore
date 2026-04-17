@@ -1,0 +1,35 @@
+# Secrets — jamais dans l'image Docker
+.env
+.env.*
+!.env.example
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# Logs et bases de test
+logs/
+*.log
+test.db
+*.sqlite
+
+# Fichiers de test et scripts locaux
+tests/
+scripts/
+*.sh
+*.md
+audit*.py
+diagnostic*.py
+final_test.py
+verify_*.py
+
+# Git
+.git/
+.gitignore

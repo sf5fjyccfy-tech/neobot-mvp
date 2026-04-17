@@ -1,0 +1,21 @@
+# Secrets — jamais dans l'image Docker
+.env
+.env.*
+!.env.example
+
+# Dépendances (réinstallées dans le conteneur)
+node_modules/
+
+# Session WhatsApp (montée en volume, pas dans l'image)
+auth_info_baileys/
+
+# Logs
+logs/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Fichiers de dev
+*.md

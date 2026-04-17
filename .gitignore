@@ -41,7 +41,9 @@ frontend/.next/
 frontend/.eslintrc.json
 
 # Docker
-.dockerignore
+# .dockerignore files MUST be in git (they protect against secrets in images)
+!backend/.dockerignore
+!whatsapp-service/.dockerignore
 
 # Runtime/session artifacts
 *.pid
