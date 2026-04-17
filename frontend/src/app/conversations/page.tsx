@@ -68,10 +68,8 @@ export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'resolved' | 'escalated'>('all');
   const [search, setSearch] = useState('');
-  const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
@@ -206,50 +204,6 @@ export default function ConversationsPage() {
     };
   }, []);
 
-  async function sendMessage() {
-    if (!input.trim() || !selected) return;
-
-    const msg: Message = {
-      id: Date.now(),
-      content: input,
-      direction: 'outgoing',
-      is_ai: false,
-      created_at: new Date().toISOString(),
-    };
-    const optimisticId = msg.id;
-    setMessages(prev => [...prev, msg]);
-    setInput('');
-    setSending(true);
-    try {
-      const tid = getTenantId();
-      const token = getToken();
-      if (!tid) return;
-      const res = await fetch(buildApiUrl(`/api/tenants/${tid}/conversations/${selected.id}/send`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ message: msg.content }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        // Rollback : retire le message optimiste si l'envoi échoue
-        setMessages(prev => prev.filter(m => m.id !== optimisticId));
-      } else if (data?.whatsapp_sent === false) {
-        // HTTP 200 mais WhatsApp non connecté — retirer le message optimiste et alerter
-        setMessages(prev => prev.filter(m => m.id !== optimisticId));
-        const errDetail = data?.wa_error ? ` (${data.wa_error})` : '';
-        alert(`⚠️ Message non envoyé : WhatsApp n'est pas connecté${errDetail}.\nConnectez WhatsApp dans Configuration.`);
-      } else {
-        setBotPaused(true); // Le bot est mis en pause automatiquement après envoi manuel
-      }
-    } catch (_) {
-      setMessages(prev => prev.filter(m => m.id !== optimisticId));
-    } finally {
-      setSending(false);
-    }
-  }
 
   return (
     <AppShell>
@@ -520,53 +474,19 @@ export default function ConversationsPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
+            {/* Info barre — lecture seule */}
             <div style={{
-              padding: '16px 24px',
+              padding: '12px 24px',
               borderTop: `1px solid ${BORDER}`,
               background: SURFACE,
               flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
             }}>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input
-                  type="text"
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Tapez votre message..."
-                  style={{
-                    flex: 1,
-                    padding: '10px 16px',
-                    background: BG,
-                    border: `1px solid ${BORDER}`,
-                    borderRadius: 10,
-                    color: TEXT,
-                    fontSize: 14,
-                    outline: 'none',
-                  }}
-                  onFocus={e => (e.target as HTMLElement).style.borderColor = `${NEON}60`}
-                  onBlur={e => (e.target as HTMLElement).style.borderColor = BORDER}
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!input.trim() || sending}
-                  style={{
-                    padding: '10px 22px',
-                    background: input.trim() ? NEON : `${NEON}30`,
-                    border: 'none',
-                    borderRadius: 10,
-                    color: input.trim() ? '#06040E' : MUTED,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: input.trim() ? 'pointer' : 'not-allowed',
-                    transition: 'background 0.2s, color 0.2s',
-                  }}
-                >
-                  {sending ? '...' : 'Envoyer'}
-                </button>
-              </div>
-              <p style={{ fontSize: 11, color: MUTED, marginTop: 8, margin: '8px 0 0' }}>
-                💡 L'IA répond automatiquement — ce champ permet d'envoyer un message manuel
+              <span style={{ fontSize: 16 }}>🤖</span>
+              <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
+                NeoBot répond automatiquement à vos clients sur WhatsApp — les conversations s&apos;affichent ici en temps réel.
               </p>
             </div>
           </>

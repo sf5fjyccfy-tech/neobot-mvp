@@ -100,7 +100,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
 
   const startCodeTimer = () => {
     if (codeTimerRef.current) clearInterval(codeTimerRef.current);
-    setCodeTimer(30);
+    setCodeTimer(120);
     // Polling accéléré à 2s pendant la fenêtre de saisie — détecte connection:open quasi instantanément
     stopPolling();
     intervalRef.current = setInterval(fetchQRCode, 2000);
@@ -358,7 +358,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                   </div>
                 ))}
                 <div style={{ marginTop: 6, padding: '7px 12px', background: '#FF9A6C12', border: '1px solid #FF9A6C30', borderRadius: 8 }}>
-                  <span style={{ color: '#FF9A6C', fontSize: 11 }}>⚠️ Le code expire en 30 secondes — ouvre WhatsApp et navigue jusqu&apos;à l&apos;étape 4 <strong>avant</strong> de cliquer &quot;Code&quot;</span>
+                  <span style={{ color: '#FF9A6C', fontSize: 11 }}>⚠️ Ouvre WhatsApp et navigue jusqu&apos;à l&apos;étape 4 <strong>avant</strong> de cliquer &quot;Code&quot; — tu auras 2 minutes pour le saisir</span>
                 </div>
               </div>
               {pairingCode ? (
@@ -395,8 +395,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                     </button>
                   </div>
                   {codeTimer > 0 ? (
-                    <p style={{ color: codeTimer <= 15 ? '#FF4D00' : '#00E5CC', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
-                      ⏱ Ce code expire dans {codeTimer}s — entrez-le vite dans WhatsApp
+                    <p style={{ color: codeTimer <= 30 ? '#FF4D00' : '#00E5CC', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
+                      ⏱ Ce code expire dans {codeTimer}s — entrez-le dans WhatsApp
                     </p>
                   ) : (
                     <p style={{ color: '#FF8888', fontSize: 12, fontWeight: 700, marginTop: 8 }}>⌛ Code expiré — générez-en un nouveau</p>

@@ -121,6 +121,11 @@ export default function AdminPage() {
   const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'trial'>('all');
   const [broadcastSending, setBroadcastSending] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<{sent: number; failed: number; total: number} | null>(null);
+  // Bulk delete
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkHard, setBulkHard] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -189,6 +194,33 @@ export default function AdminPage() {
     } catch (e: any) {
       console.error('[impersonate]', e);
       showToast(`❌ ${e.message}`);
+    }
+  };
+
+  const toggleCheck = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCheckedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const bulkDelete = async (hardDelete: boolean) => {
+    setBulkDeleting(true);
+    try {
+      const res = await adminCall('/api/admin/tenants/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ tenant_ids: Array.from(checkedIds), hard_delete: hardDelete }),
+      }).then(r => r.json());
+      showToast(`✅ ${res.deleted} tenant(s) supprimé(s)`);
+      setCheckedIds(new Set());
+      setShowBulkDeleteModal(false);
+      await loadData();
+    } catch (e: any) {
+      showToast(`❌ ${e.message}`);
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -458,10 +490,28 @@ export default function AdminPage() {
             </div>
           </div>
 
+          {/* Barre sélection en masse */}
+          {checkedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-red-950/30 border-b border-red-900/40">
+              <span className="text-red-400 text-xs font-bold">{checkedIds.size} sélectionné(s)</span>
+              <button onClick={() => setShowBulkDeleteModal(true)}
+                className="text-xs bg-red-900/50 text-red-300 border border-red-800/50 hover:bg-red-900 px-3 py-1 rounded transition">
+                🗑 Supprimer la sélection
+              </button>
+              <button onClick={() => setCheckedIds(new Set())}
+                className="text-xs text-gray-500 hover:text-gray-300 transition">Annuler</button>
+            </div>
+          )}
+
           <div className="overflow-y-auto flex-1">
             {filtered.map(t => (
               <div key={t.id} onClick={() => selectTenant(t.id)}
-                className={`flex items-start gap-3 p-4 cursor-pointer border-b border-[#1A1A2E] hover:bg-white/[0.02] transition ${selectedId === t.id ? 'bg-white/[0.03] border-l-2 border-l-yellow-500' : ''}`}>
+                className={`flex items-start gap-3 p-4 cursor-pointer border-b border-[#1A1A2E] hover:bg-white/[0.02] transition ${selectedId === t.id ? 'bg-white/[0.03] border-l-2 border-l-yellow-500' : ''} ${checkedIds.has(t.id) ? 'bg-red-950/10' : ''}`}>
+                <input type="checkbox" checked={checkedIds.has(t.id)}
+                  onClick={e => toggleCheck(t.id, e)}
+                  onChange={() => {}}
+                  className="mt-1 accent-red-500 cursor-pointer shrink-0"
+                  disabled={t.id === 1} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm text-white truncate">{t.name}</span>
@@ -547,6 +597,34 @@ export default function AdminPage() {
             ) : detail ? (
               <TenantDetailPanel detail={detail} onAction={action} onImpersonate={impersonate} />
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmation suppression en masse */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0D0D1A] border border-red-900/50 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-red-400">🗑 Supprimer {checkedIds.size} tenant(s) ?</h3>
+            <p className="text-sm text-gray-400">
+              Cette action est <strong className="text-white">irréversible</strong>. Tous les données associées seront supprimées.
+            </p>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="hard-del" checked={bulkHard} onChange={e => setBulkHard(e.target.checked)} className="accent-red-500" />
+              <label htmlFor="hard-del" className="text-xs text-gray-400">
+                Suppression <strong className="text-red-400">physique</strong> (efface messages + conversations définitivement)
+              </label>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowBulkDeleteModal(false)} disabled={bulkDeleting}
+                className="flex-1 py-2 rounded-xl border border-[#1A1A2E] text-gray-400 hover:text-white text-sm transition">
+                Annuler
+              </button>
+              <button onClick={() => bulkDelete(bulkHard)} disabled={bulkDeleting}
+                className="flex-1 py-2 rounded-xl bg-red-900/50 hover:bg-red-900 border border-red-800/50 text-red-300 text-sm font-bold transition">
+                {bulkDeleting ? 'Suppression...' : `Supprimer ${checkedIds.size} tenant(s)`}
+              </button>
+            </div>
           </div>
         </div>
       )}

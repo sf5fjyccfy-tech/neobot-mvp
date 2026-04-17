@@ -12,8 +12,9 @@ from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.models import (
     User, Tenant, AgentTemplate, AgentType, PlanType, PLAN_LIMITS,
-    Subscription, Conversation, WhatsAppSession, UsageTracking,
+    Subscription, Conversation, WhatsAppSession, UsageTracking, Message,
 )
+from typing import List
 from fastapi import BackgroundTasks
 from app.dependencies import get_superadmin_user
 from app.services.auth_service import create_access_token
@@ -449,6 +450,65 @@ def soft_delete_tenant(
     tenant.suspension_reason = "Supprimé via panel admin"
     db.commit()
     return {"status": "deleted", "tenant_id": tenant_id, "tenant_name": tenant.name}
+
+
+class BulkDeleteRequest(BaseModel):
+    tenant_ids: List[int]
+    hard_delete: bool = False  # True = suppression physique complète (cascade), False = soft delete
+
+
+@router.post("/tenants/bulk-delete")
+def bulk_delete_tenants(
+    body: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_superadmin_user),
+):
+    """
+    Supprime plusieurs tenants en une seule opération.
+    hard_delete=False (défaut) : soft delete (is_deleted=True, accès coupé).
+    hard_delete=True : suppression physique en cascade (messages → conversations → users → tenant).
+    Le tenant fondateur (id=1) et le propre tenant de l'admin sont toujours protégés.
+    """
+    protected = {1, admin.tenant_id}
+    ids = [i for i in body.tenant_ids if i not in protected]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Aucun tenant valide à supprimer (tenant fondateur et votre tenant sont protégés)")
+
+    results = []
+    now = datetime.now(timezone.utc)
+
+    for tid in ids:
+        tenant = db.query(Tenant).filter(Tenant.id == tid).first()
+        if not tenant:
+            results.append({"tenant_id": tid, "status": "not_found"})
+            continue
+
+        if body.hard_delete:
+            # Suppression physique en cascade
+            conv_ids = [c.id for c in db.query(Conversation.id).filter(Conversation.tenant_id == tid).all()]
+            if conv_ids:
+                db.query(Message).filter(Message.conversation_id.in_(conv_ids)).delete(synchronize_session=False)
+            db.query(Conversation).filter(Conversation.tenant_id == tid).delete(synchronize_session=False)
+            db.query(WhatsAppSession).filter(WhatsAppSession.tenant_id == tid).delete(synchronize_session=False)
+            db.query(Subscription).filter(Subscription.tenant_id == tid).delete(synchronize_session=False)
+            db.query(UsageTracking).filter(UsageTracking.tenant_id == tid).delete(synchronize_session=False)
+            db.query(User).filter(User.tenant_id == tid).delete(synchronize_session=False)
+            db.delete(tenant)
+            results.append({"tenant_id": tid, "name": tenant.name, "status": "hard_deleted"})
+        else:
+            tenant.is_deleted = True
+            tenant.is_suspended = True
+            tenant.deleted_at = now
+            tenant.suspension_reason = "Supprimé en masse via panel admin"
+            results.append({"tenant_id": tid, "name": tenant.name, "status": "soft_deleted"})
+
+    db.commit()
+    deleted_count = sum(1 for r in results if r["status"] in ("soft_deleted", "hard_deleted"))
+    return {
+        "deleted": deleted_count,
+        "skipped": len(body.tenant_ids) - len(ids),
+        "results": results,
+    }
 
 
 # ======================== IMPERSONATION ========================

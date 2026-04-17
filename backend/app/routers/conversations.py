@@ -151,7 +151,7 @@ async def get_messages(
     msgs = (
         db.query(Message)
         .filter(Message.conversation_id == conv_id)
-        .order_by(Message.created_at)
+        .order_by(Message.created_at.asc().nullsfirst(), Message.id.asc())
         .offset(offset)
         .limit(limit)
         .all()

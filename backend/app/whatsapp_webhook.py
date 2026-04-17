@@ -647,17 +647,30 @@ async def send_whatsapp_response(
                 timeout=25,
             )
 
-        # 503 = WA non connecté (reconnexion en cours) → retry unique après 5s.
-        # Couvre le cas où le socket Baileys se reconnecte après un 515 et que
-        # le message arrive dans la fenêtre de 3-5s de transition.
+        # 503 = WA non connecté (reconnexion en cours).
+        # La reconnexion Baileys prend ~10s, donc on tente 4 fois avec backoff :
+        # 5s → 12s → 20s → 30s (couvre jusqu'à ~67s de fenêtre de reconnexion).
         if response.status_code == 503:
-            logger.warning(f"WA 503 for tenant {tenant_id} (not connected) — waiting 5s and retrying")
-            await asyncio.sleep(5)
-            response = await client.post(
-                f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
-                json={"to": phone, "message": text},
-                timeout=25,
-            )
+            retry_delays = [5, 12, 20, 30]
+            sent = False
+            for attempt, wait in enumerate(retry_delays, start=1):
+                logger.warning(f"WA 503 tenant {tenant_id} — retry {attempt}/{len(retry_delays)} dans {wait}s")
+                await asyncio.sleep(wait)
+                retry_response = await client.post(
+                    f"{whatsapp_service_url}/api/whatsapp/tenants/{tenant_id}/send-message",
+                    json={"to": phone, "message": text},
+                    timeout=25,
+                )
+                if retry_response.status_code == 200:
+                    logger.info(f"✅ Message envoyé à {phone} après retry {attempt} (délai cumulé)")
+                    sent = True
+                    break
+                elif retry_response.status_code != 503:
+                    logger.error(f"Erreur inattendue retry {attempt}: {retry_response.status_code} — {retry_response.text}")
+                    break
+            if not sent:
+                logger.error(f"Message définitivement perdu après {len(retry_delays)} retries pour tenant {tenant_id} → {phone}")
+            return
 
         if response.status_code == 200:
             logger.info(f"✅ Message sent to {phone} (delay={delay_secs}s, typing={typing_indicator})")
