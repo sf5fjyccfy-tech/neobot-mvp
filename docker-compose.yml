@@ -28,6 +28,8 @@ services:
       - "8000:8000"
     volumes:
       - ./logs/backend:/app/logs
+    mem_limit: 512m
+    memswap_limit: 512m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -56,11 +58,13 @@ services:
     volumes:
       - ./auth_info_baileys:/app/auth_info_baileys
       - ./logs/whatsapp:/app/logs
+    mem_limit: 400m
+    memswap_limit: 400m
     depends_on:
       - backend
     networks:
       - neobot_network
-    restart: unless-stopped
+    restart: on-failure:5
 
   # ========== FRONTEND (Next.js standalone) ==========
   frontend:
@@ -73,6 +77,8 @@ services:
       PORT: "3002"
     ports:
       - "3002:3002"
+    mem_limit: 256m
+    memswap_limit: 256m
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/"]
       interval: 15s

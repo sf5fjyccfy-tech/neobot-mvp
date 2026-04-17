@@ -83,15 +83,14 @@ class GeneratePromptRequest(BaseModel):
     target_audience: Optional[str] = None
 
 
-def _agent_to_dict(agent: AgentTemplate) -> dict:
-    return {
+def _agent_to_dict(agent: AgentTemplate, expose_prompts: bool = False) -> dict:
+    """Convert agent to dict. Prompts NEVER exposed to client by default."""
+    data = {
         "id": agent.id,
         "tenant_id": agent.tenant_id,
         "name": agent.name,
         "agent_type": agent.agent_type,
         "description": agent.description,
-        "system_prompt": agent.system_prompt,
-        "custom_prompt_override": agent.custom_prompt_override,
         "tone": agent.tone,
         "language": agent.language,
         "emoji_enabled": agent.emoji_enabled,
@@ -106,6 +105,11 @@ def _agent_to_dict(agent: AgentTemplate) -> dict:
         "created_at": agent.created_at.isoformat() if agent.created_at else None,
         "updated_at": agent.updated_at.isoformat() if agent.updated_at else None,
     }
+    # System prompts only for backend/admin use — NEVER client-facing
+    if expose_prompts:
+        data["system_prompt"] = agent.system_prompt
+        data["custom_prompt_override"] = agent.custom_prompt_override
+    return data
 
 
 def _check_tenant_access(tenant_id: int, current_user: User) -> None:

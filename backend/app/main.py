@@ -58,9 +58,25 @@ from .services.http_client import close_http_client as _close_services_http_clie
 from .middleware_subscription import SubscriptionMiddleware
 from .limiter import limiter
 
-# Configuration logging
-logging.basicConfig(level=logging.INFO)
+# ========== LOGGING CONFIGURATION ==========
+import os as _os_logging
+_log_dir = _os_logging.getenv("LOG_DIR", "/tmp")
+_log_level = _os_logging.getenv("LOG_LEVEL", "INFO")
+
+# Create logs directory if it doesn't exist
+import os as _os_create_logs
+_os_create_logs.makedirs(_log_dir, exist_ok=True)
+
+logging.basicConfig(
+    level=getattr(logging, _log_level, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(f"{_log_dir}/backend.log"),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
+logger.info(f"🚀 NeoBot Backend started — Logs: {_log_dir}/backend.log")
 
 # Classe définie ici, appliquée dans _startup_tasks APRÈS que uvicorn a appelé
 # dictConfig() — sans ça, uvicorn écrase le filtre au démarrage.
@@ -69,8 +85,9 @@ class _SuppressASGIExceptionLog(logging.Filter):
         return "Exception in ASGI application" not in record.getMessage()
 
 # Charger .env — cherche d'abord backend/.env, puis racine du projet
+# Ne pas hardcoder le chemin — laisser python-dotenv chercher par défaut
 load_dotenv()
-load_dotenv(dotenv_path="/home/tim/neobot-mvp/.env", override=False)
+load_dotenv(".env", override=False)  # Cherche .env dans le dossier courant
 
 # ========== SENTRY ==========
 _sentry_dsn = os.getenv("SENTRY_DSN")
@@ -455,24 +472,27 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
     max_age=3600,
 )
-# SecurityHeadersMiddleware en dernier = plus externe = s'exécute en premier
-# Ajoute les headers de sécurité sur TOUTES les réponses, y compris les erreurs CORS
+# SecurityHeadersMiddleware DERNIER = PREMIER à s'exécuter = ajoute les headers de sécurité sur TOUTES les réponses
 app.add_middleware(SecurityHeadersMiddleware)
+
+# ========== COMMIT HASH — Lecture au démarrage, pas à chaque requête ==========
+# Lire le commit une seule fois pour éviter appels subprocess répétés
+_GIT_COMMIT = "unknown"
+try:
+    import subprocess as _sp
+    _GIT_COMMIT = _sp.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True, stderr=_sp.DEVNULL).strip()
+except Exception:
+    _GIT_COMMIT = os.getenv("RENDER_GIT_COMMIT", "unknown")[:7]
 
 # ========== HEALTH CHECKS ==========
 @app.get("/health")
 async def health():
-    """Health check simple — expose le commit hash pour vérifier ce qui tourne en prod"""
-    import subprocess
-    try:
-        commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True).strip()
-    except Exception:
-        commit = os.getenv("RENDER_GIT_COMMIT", "unknown")[:7]
+    """Health check simple — commit hash lu au démarrage, pas à chaque requête"""
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "version": "1.0.0",
-        "commit": commit,
+        "commit": _GIT_COMMIT,
     }
 
 @app.head("/health")
@@ -823,20 +843,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         headers=exc_headers,
     )
 
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Handler générique pour les erreurs"""
-    import traceback as _tb
-    tb = _tb.format_exc()
-    logger.error(f"❌ Erreur non gérée: {exc}\n{tb}")
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Une erreur interne est survenue.",
-            "status": "error",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    )
+# (Doublon supprimé — voir @app.exception_handler(Exception) à ligne 412)
 
 # ========== RUN APP ==========
 if __name__ == "__main__":

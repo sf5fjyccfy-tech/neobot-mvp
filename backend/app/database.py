@@ -19,9 +19,10 @@ DATABASE_URL = os.getenv(
     "postgresql://neobot:neobot_secure_password@localhost:5432/neobot_db"
 )
 
-# Pool configuration
-POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 20))
-MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 30))
+# Pool configuration — réduit pour VPS (Neon limite ~20 connexions)
+# 5 + 10 overflow = 15 max simultanées (sûr pour un petit VPS)
+POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 5))
+MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 10))
 POOL_TIMEOUT = int(os.getenv("DATABASE_POOL_TIMEOUT", 30))
 
 # ========== ENGINE CREATION ==========
