@@ -323,6 +323,87 @@ async def toggle_bot_pause(
     return {"bot_paused": body.paused, "conversation_id": conv_id}
 
 
+# ── Initier une nouvelle conversation (envoyer en premier) ─────────────────
+
+class InitiateConversationBody(BaseModel):
+    phone_number: str = Field(..., min_length=6, max_length=25)
+    message: str = Field(..., min_length=1, max_length=4000)
+
+
+@router.post("/{tenant_id}/conversations/initiate")
+async def initiate_conversation(
+    tenant_id: int,
+    body: InitiateConversationBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Initie une nouvelle conversation sortante (opérateur → client).
+    Crée la conversation si elle n'existe pas, envoie le message via WhatsApp.
+    """
+    _check_tenant_access(tenant_id, current_user)
+
+    phone = body.phone_number.strip().replace(" ", "").replace("-", "")
+    if not phone.startswith("+"):
+        phone = "+" + phone
+
+    now = datetime.utcnow()
+
+    conv = db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id,
+        Conversation.customer_phone == phone,
+    ).first()
+
+    if not conv:
+        conv = Conversation(
+            tenant_id=tenant_id,
+            customer_phone=phone,
+            customer_name=phone,
+            status="active",
+            last_message_at=now,
+        )
+        db.add(conv)
+        db.flush()
+
+    msg = Message(
+        conversation_id=conv.id,
+        content=body.message,
+        direction="outgoing",
+        is_ai=False,
+        created_at=now,
+    )
+    db.add(msg)
+    conv.last_message_at = now
+    db.commit()
+    db.refresh(msg)
+    db.refresh(conv)
+
+    wa_ok = False
+    wa_error = None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/send-message",
+                json={"to": phone, "message": body.message},
+                headers={"x-api-key": INTERNAL_API_KEY},
+            )
+            wa_ok = r.status_code == 200
+            if not wa_ok:
+                wa_error = r.text[:200]
+                logger.warning(f"WA initiate failed ({r.status_code}): {wa_error}")
+    except Exception as e:
+        wa_error = str(e)
+        logger.error(f"WA service unreachable during initiate: {e}")
+
+    return {
+        "conversation_id": conv.id,
+        "message_id": msg.id,
+        "phone": phone,
+        "whatsapp_sent": wa_ok,
+        **({"wa_error": wa_error} if wa_error else {}),
+    }
+
+
 # ── Statut du bot pour une conversation ────────────────────────────────────
 
 @router.get("/{tenant_id}/conversations/{conv_id}/bot-state")
