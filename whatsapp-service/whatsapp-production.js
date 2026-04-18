@@ -1114,14 +1114,23 @@ app.get('/api/whatsapp/tenants/:tenantId/status', (req, res) => {
   }
 });
 
-app.get('/api/whatsapp/tenants/:tenantId/qr', (req, res) => {
+app.get('/api/whatsapp/tenants/:tenantId/qr', async (req, res) => {
   const tenantId = Number.parseInt(req.params.tenantId, 10);
   if (!Number.isInteger(tenantId) || tenantId <= 0) {
     return res.status(400).json({ error: 'Invalid tenantId' });
   }
 
   try {
-    res.json(buildTenantQRResponse(getTenantSession(tenantId)));
+    const session = getTenantSession(tenantId);
+    
+    // 🔧 FIX: Si le socket n'existe pas ou n'est pas initialisé, déclencher une connexion
+    // Cela garantit que le client obtient un QR au lieu d'attendre indéfiniment
+    if (!session.socket || session.state === 'idle') {
+      logger.info(`QR endpoint called for idle session - triggering connection`, { tenantId });
+      await connectTenant(tenantId, { reason: 'qr-endpoint-trigger' });
+    }
+    
+    res.json(buildTenantQRResponse(session));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
