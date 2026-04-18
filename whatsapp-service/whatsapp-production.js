@@ -98,6 +98,24 @@ class Logger {
 
 const logger = new Logger();
 
+// ========== BROWSER FINGERPRINT ROTATION ==========
+// Meta bloque les fingerprints identiques (tous les Baileys bots utilisent le même).
+// Rotation par tenant_id % profiles pour détecter les bots.
+const BROWSER_PROFILES = [
+  Browsers.macOS('Safari'),                    // 0: Safari sur macOS
+  Browsers.ubuntu('Chrome'),                   // 1: Chrome sur Ubuntu  
+  Browsers.windows('Firefox'),                 // 2: Firefox sur Windows
+  Browsers.macOS('Firefox'),                   // 3: Firefox sur macOS
+  Browsers.ubuntu('Firefox'),                  // 4: Firefox sur Ubuntu
+];
+
+function getBrowserForTenant(tenantId) {
+  // Rotation circulaire par tenant ID — chaque tenant reçoit un fingerprint différent
+  const browserProfile = BROWSER_PROFILES[tenantId % BROWSER_PROFILES.length];
+  logger.debug(`Browser profile for tenant ${tenantId}: ${JSON.stringify(browserProfile)}`);
+  return browserProfile;
+}
+
 class TenantSession {
   constructor(tenantId) {
     this.tenantId = tenantId;
@@ -605,6 +623,18 @@ async function connectTenant(tenantId, options = {}) {
   ensureDir(ROOT_AUTH_DIR);
   ensureDir(tenantAuthDir(tenantId));
 
+  // ✅ FIX 2: CLEAN AUTH AVANT NOUVELLE CONNEXION
+  // Nettoyer les auth échouées pour éviter les conflicts Meta
+  if (process.env.DATABASE_URL) {
+    try {
+      logger.info(`Clearing old auth for tenant ${tenantId} before fresh connect...`);
+      await clearPgAuthState(tenantId);
+      await new Promise(r => setTimeout(r, 2000)); // 2s cooldown Meta
+    } catch (e) {
+      logger.warn(`Failed to clear auth for tenant ${tenantId}: ${e.message}`);
+    }
+  }
+
   session.initializing = true;
   session.state = 'initializing';
   session.connected = false;
@@ -632,10 +662,9 @@ async function connectTenant(tenantId, options = {}) {
         // NE PAS passer un nombre brut — Baileys attend une instance NodeCache.
         keys: makeCacheableSignalKeyStore(authState.keys, bailLogger, new NodeCache({ maxKeys: 100, stdTTL: 30, useClones: false })),
       },
-      // Fingerprint identique à WhatsApp Web officiel — affiche "WhatsApp Web" dans les
-      // appareils liés Android. Neutre, indétectable par Meta.
-      // 'Google Chrome' requis (Meta valide ce string côté serveur pour le pairing code)
-      browser: Browsers.macOS('Google Chrome'),
+      // ✅ ROTATION DE FINGERPRINT — chaque tenant reçoit un browser différent
+      // Évite la détection de bot par Meta (tous les Baileys utilisent macOS+Chrome)
+      browser: getBrowserForTenant(tenantId),
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: true,
@@ -1241,7 +1270,8 @@ app.post('/api/whatsapp/tenants/:tenantId/request-pairing-code', async (req, res
           keys: makeCacheableSignalKeyStore(state.keys, bailLogger, new NodeCache({ maxKeys: 100, stdTTL: 30, useClones: false })),
         },
         usePairingCode: true,
-        // 'Google Chrome' obligatoire — Meta rejette 'Chrome' lors de requestPairingCode
+        // ⚠️ PAIRING CODE: rotation peut déstabiliser le pairing — garder macOS+Chrome
+        // Meta valide ce string spécifiquement pour requestPairingCode
         browser: Browsers.macOS('Google Chrome'),
         printQRInTerminal: false,
         logger: bailLogger,
