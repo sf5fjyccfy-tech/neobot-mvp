@@ -101,16 +101,24 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   };
 
   const handleRefreshQR = useCallback(async () => {
-    console.log('🔄 Forcing QR refresh...');
+    console.log('🔄 Requesting new QR code...');
+    setError('');
     try {
-      const response = await apiCall(`/api/tenants/${tenantId}/whatsapp/refresh-qr`, {
+      // Appelle l'endpoint reset pour forcer une nouvelle connexion et générer un nouveau QR
+      const response = await apiCall(`/api/whatsapp/tenants/${tenantId}/reset`, {
         method: 'POST',
       });
-      const data: WhatsAppQR = await response.json();
-      console.log('✅ New QR generated:', { status: data.status, has_qr_code: !!data.qr_code });
-      setQrData(data);
+      const data = await response.json();
+      console.log('✅ Reset triggered:', { status: data.status });
+      
+      // Relancer le polling immédiat pour attraper le nouveau QR
+      setQrData(null);
+      errorCountRef.current = 0;
+      setTimeout(() => fetchQRCode(), 500);
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Erreur lors de la régénération du QR';
       console.error('❌ QR refresh failed:', err);
+      setError(errorMsg);
     }
   }, [tenantId]);
 
@@ -257,10 +265,15 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     if (!window.confirm('Déconnecter WhatsApp ? Votre bot ne pourra plus répondre tant que vous ne reconnectez pas.')) return;
     setDisconnecting(true);
     try {
-      await apiCall(`/api/tenants/${tenantId}/whatsapp/disconnect`, { method: 'POST' });
-      await fetchQRCode();
+      // Utiliser l'endpoint reset qui supporte la déconnexion
+      await apiCall(`/api/whatsapp/tenants/${tenantId}/reset`, { method: 'POST' });
+      setError('');
+      // Recharger le QR après déconnexion
+      setTimeout(() => fetchQRCode(), 500);
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Erreur lors de la déconnexion';
       console.error('Erreur déconnexion WA:', err);
+      setError(errorMsg);
     } finally {
       setDisconnecting(false);
     }
