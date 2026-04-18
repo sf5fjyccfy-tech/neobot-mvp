@@ -419,15 +419,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 # ========== INCLUDE ROUTERS ==========
+# CRITICAL: whatsapp_qr_router (PUBLIC endpoints, no auth) MUST come BEFORE whatsapp_sessions_router
+# because both match /{tenant_id}/whatsapp/* pattern. FastAPI uses first matching route.
 app.include_router(auth_router)
 app.include_router(whatsapp_router)
-app.include_router(whatsapp_sessions_router)
+app.include_router(whatsapp_qr_router)  # PUBLIC QR endpoints — include BEFORE whatsapp_sessions_router
+app.include_router(whatsapp_sessions_router)  # Auth-required endpoints
 app.include_router(usage_router)
 app.include_router(overage_router)
 app.include_router(analytics_router)
 app.include_router(subscription_router)
 app.include_router(setup_router)
-app.include_router(whatsapp_qr_router)
 app.include_router(contacts_router)
 app.include_router(tenant_settings_router)
 app.include_router(human_detection_router)

@@ -46,13 +46,11 @@ export default function SettingsPage() {
       })
       .catch(() => {});
     // Statut WhatsApp réel
-    fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), {
-      headers: { 'Authorization': `Bearer ${token}` },
-    })
+    fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/status`))
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
-        setWaConnected(data.status === 'connected');
+        setWaConnected(data.connected === true);
         setWaPhone(data.phone ?? null);
       })
       .catch(() => { setWaConnected(false); });

@@ -6,10 +6,13 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 
 interface WhatsAppQR {
   tenant_id: number;
-  status: 'awaiting_scan' | 'connected' | 'error';
+  status: 'waiting_qr' | 'initializing' | 'connected' | 'disconnected' | 'error';
   qr_code: string | null;
   phone: string | null;
   message: string;
+  expires_in?: number;
+  connected: boolean;
+  timestamp?: string;
 }
 
 export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
@@ -28,6 +31,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [codeTimer, setCodeTimer] = useState<number>(0); // 0 = inactif
   const codeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  console.log('🔵 WhatsAppQRDisplay mounted, tenantId=', tenantId);
 
   // Sur mobile, le QR code est inutilisable (scanner son propre téléphone) — basculer sur le code de jumelage
   useEffect(() => {
@@ -52,6 +57,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     try {
       const response = await apiCall(`/api/tenants/${tenantId}/whatsapp/qr`);
       const data: WhatsAppQR = await response.json();
+      console.log('✅ QR fetched:', { status: data.status, has_qr_code: !!data.qr_code, expires_in: data.expires_in });
       errorCountRef.current = 0; // reset sur succès
       setQrData(data);
       if (data.status === 'connected') {
@@ -60,6 +66,7 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error('❌ QR fetch error:', msg);
       // Erreur d'accès (403) — stop immédiat, pas la peine de réessayer
       const isAccessError = msg.toLowerCase().includes('access') || msg.includes('403');
       if (isAccessError) {
@@ -80,6 +87,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         qr_code: null,
         phone: null,
         message: 'Service WhatsApp indisponible temporairement.',
+        expires_in: 0,
+        connected: false,
       });
     }
   }, [tenantId]);
@@ -90,6 +99,20 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     fetchQRCode();
     intervalRef.current = setInterval(fetchQRCode, 5000);
   };
+
+  const handleRefreshQR = useCallback(async () => {
+    console.log('🔄 Forcing QR refresh...');
+    try {
+      const response = await apiCall(`/api/tenants/${tenantId}/whatsapp/refresh-qr`, {
+        method: 'POST',
+      });
+      const data: WhatsAppQR = await response.json();
+      console.log('✅ New QR generated:', { status: data.status, has_qr_code: !!data.qr_code });
+      setQrData(data);
+    } catch (err) {
+      console.error('❌ QR refresh failed:', err);
+    }
+  }, [tenantId]);
 
   useEffect(() => {
     return () => {
@@ -251,8 +274,10 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const TEXT = '#E0E0FF';
 
   if (!qrData) {
-    return <div style={{ textAlign: 'center', padding: '24px', color: MUTED, fontSize: 13 }}>Chargement...</div>;
+    return <div style={{ textAlign: 'center', padding: '24px', color: MUTED, fontSize: 13 }}>⏳ Génération du QR code WhatsApp...</div>;
   }
+
+  console.log('🎨 Rendering QR display, status=', qrData.status, 'has_qr=', !!qrData.qr_code);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -313,8 +338,8 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
         </div>
       )}
 
-      {/* Awaiting Scan State */}
-      {qrData.status === 'awaiting_scan' && (
+      {/* Awaiting Scan State — Display for any status except connected and error */}
+      {qrData.status !== 'connected' && qrData.status !== 'error' && (
         <div style={{ background: '#7B61FF10', border: '1px solid #7B61FF30', borderRadius: 12, padding: 20, textAlign: 'center' }}>
           {!showPairing ? (
             <>
@@ -333,8 +358,13 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
                 )}
               </div>
               <p style={{ color: '#00E5CC', fontSize: 12, marginTop: 12 }}>
-                ⏱ QR valide 60 secondes — se régénère automatiquement
+                ⏱ QR valide {qrData.expires_in ? `${qrData.expires_in}s` : '~2min'} — se régénère automatiquement
               </p>
+              <button 
+                onClick={handleRefreshQR}
+                style={{ marginTop: 8, marginRight: 8, padding: '6px 14px', background: 'transparent', border: '1px solid #00E5CC60', borderRadius: 8, color: '#00E5CC', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                🔄 Rafraîchir
+              </button>
               <button onClick={() => setShowPairing(true)}
                 style={{ marginTop: 12, padding: '6px 14px', background: 'transparent', border: '1px solid #7B61FF60', borderRadius: 8, color: '#FF9A6C', fontSize: 12, cursor: 'pointer' }}>
                 📲 Sur mobile ou sans caméra : connecter par code

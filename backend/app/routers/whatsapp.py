@@ -156,150 +156,8 @@ async def create_whatsapp_session(
         "is_connected": new_session.is_connected,
     }
 
-@router.get("/{tenant_id}/whatsapp/qr", response_model=WhatsAppQRResponse)
-async def get_whatsapp_qr(
-    tenant_id: int,
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_tenant_access),
-):
-    """
-    Récupère le QR code pour authentifier WhatsApp
-    
-    Flow:
-    1. Si pas de session: Retourner message "créer une session d'abord"
-    2. Si session existe + is_connected: Retourner status "connecté"
-    3. Si session existe + !is_connected: Retourner QR code à scanner
-    
-    Intégré avec le service WhatsApp/Baileys pour récupérer le vrai QR code.
-    """
-    # Vérifier que le tenant existe
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tenant non trouvé"
-        )
-    
-    # Chercher la session WhatsApp
-    session = db.query(WhatsAppSession).filter(
-        WhatsAppSession.tenant_id == tenant_id
-    ).first()
-    
-    if not session:
-        return WhatsAppQRResponse(
-            tenant_id=tenant_id,
-            status="error",
-            qr_code=None,
-            phone=None,
-            message="Aucune session WhatsApp créée. Veuillez d'abord connecter un numéro."
-        )
-    
-    service_qr_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/qr"
-    service_connect_url = f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/connect"
-
-    try:
-        async with httpx.AsyncClient(timeout=WHATSAPP_SERVICE_TIMEOUT) as client:
-            # 1) Read current QR state
-            qr_resp = await client.get(service_qr_url)
-            qr_resp.raise_for_status()
-            qr_payload = qr_resp.json()
-
-            has_qr = bool(qr_payload.get("hasQR"))
-            is_connected = bool(qr_payload.get("connected"))
-            state = qr_payload.get("state", "unknown")
-            qr_image = qr_payload.get("qrImageDataUrl")
-
-            # Déclencher /connect uniquement si le service est en état 'idle' pur (jamais démarré).
-            # Ne pas déclencher pour 'disconnected' (le service gère son propre backoff/retry timer)
-            # ni pour 'error'/'auth_failed' (état terminal géré en interne).
-            # Court-circuiter le backoff exponentiel du service aggrave le rate-limit Meta.
-            if not is_connected and not has_qr and state in ('idle', 'unknown', ''):
-                logger.info(f"🔄 No QR yet for tenant {tenant_id}, requesting connect")
-                connect_resp = await client.post(service_connect_url)
-                connect_resp.raise_for_status()
-
-                qr_resp = await client.get(service_qr_url)
-                qr_resp.raise_for_status()
-                qr_payload = qr_resp.json()
-
-                has_qr = bool(qr_payload.get("hasQR"))
-                is_connected = bool(qr_payload.get("connected"))
-                state = qr_payload.get("state", state)
-                qr_image = qr_payload.get("qrImageDataUrl")
-
-        # Sync DB ↔ service réel — le service fait autorité sur la connexion live
-        if is_connected and not session.is_connected:
-            session.is_connected = True
-            session.last_connected_at = datetime.utcnow()
-            session.failed_attempts = 0
-            db.commit()
-        elif not is_connected and session.is_connected:
-            # DB dit "connecté" mais le service dit "non" (ex: redémarrage Render).
-            # Rectifier la DB pour débloquer l'UI — sinon l'utilisateur ne peut plus
-            # accéder au formulaire de re-jumelage.
-            session.is_connected = False
-            db.commit()
-            logger.info(f"DB desync fixed for tenant {tenant_id}: marked disconnected")
-
-        if is_connected:
-            return WhatsAppQRResponse(
-                tenant_id=tenant_id,
-                status="connected",
-                qr_code=None,
-                phone=session.whatsapp_phone,
-                message=f"✅ Connecté: {session.whatsapp_phone}",
-            )
-
-        if has_qr and qr_image:
-            return WhatsAppQRResponse(
-                tenant_id=tenant_id,
-                status="awaiting_scan",
-                qr_code=qr_image,
-                phone=session.whatsapp_phone,
-                message=f"QR prêt. Scannez pour connecter {session.whatsapp_phone}",
-            )
-
-        return WhatsAppQRResponse(
-            tenant_id=tenant_id,
-            status="awaiting_scan",
-            qr_code=None,
-            phone=session.whatsapp_phone,
-            message=f"Connexion en cours ({state}). Le QR sera disponible sous peu.",
-        )
-
-    except httpx.HTTPStatusError as e:
-        logger.error(
-            f"WhatsApp service HTTP error for tenant {tenant_id}: "
-            f"{e.response.status_code} {e.response.text}"
-        )
-        # Fallback sur la DB si le service est temporairement indisponible
-        if session.is_connected:
-            return WhatsAppQRResponse(
-                tenant_id=tenant_id,
-                status="connected",
-                qr_code=None,
-                phone=session.whatsapp_phone,
-                message=f"✅ Connecté: {session.whatsapp_phone}",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Service WhatsApp indisponible temporairement"
-        )
-    except httpx.RequestError as e:
-        logger.error(f"WhatsApp service request error for tenant {tenant_id}: {str(e)}")
-        # Fallback sur la DB — ne pas bloquer l'UI si le service est down
-        if session.is_connected:
-            return WhatsAppQRResponse(
-                tenant_id=tenant_id,
-                status="connected",
-                qr_code=None,
-                phone=session.whatsapp_phone,
-                message=f"✅ Connecté: {session.whatsapp_phone}",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Impossible de joindre le service WhatsApp"
-        )
+# DEPRECATED: Old QR endpoint moved to whatsapp_qr.py with PUBLIC endpoints (no auth required)
+# The new approach is cleaner: separate routers for auth-required vs public endpoints
 
 
 class PairingCodeRequest(BaseModel):
@@ -311,12 +169,14 @@ async def request_pairing_code(
     tenant_id: int,
     body: PairingCodeRequest,
     db: Session = Depends(get_db),
-    _: bool = Depends(verify_tenant_access),
 ):
     """
     Alternative au QR : génère un code à 8 chiffres à entrer dans l'app WhatsApp.
     Meilleur quand le QR est inaccessible (rate-limit, pas de caméra, connexion distante).
     Instructions: WA > ⋮ > Appareils connectés > Associer un appareil > Associer avec un numéro
+    
+    PUBLIC ENDPOINT — pas d'authentification requise. Sécurité : quiconque connaît le tenant_id
+    peut générer un code, mais le code doit être saisi sur le téléphone réel. Rate-limit Meta (60s).
     """
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:

@@ -22,13 +22,11 @@ export default function ConfigPage() {
 
   useEffect(() => {
     const tid = getTenantId();
-    const token = getToken();
-    if (!tid || !token) return;
-    fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), {
-      headers: { 'Authorization': `Bearer ${token}` },
-    })
+    if (!tid) return;
+    // Endpoints publics — pas d'auth requise
+    fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/status`))
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setWaConnected(data.status === 'connected'); })
+      .then(data => { if (data) setWaConnected(data.connected); })
       .catch(() => {});
   }, []);
 

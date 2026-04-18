@@ -169,12 +169,12 @@ export default function DashboardPage() {
       Promise.all([
         fetch(buildApiUrl(`/api/tenants/${tid}/usage`), { headers }).then(r => r.ok ? r.json() : null),
         fetch(buildApiUrl(`/api/tenants/${tid}/dashboard/stats`), { headers }).then(r => r.ok ? r.json() : null),
-        fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/qr`), { headers }).then(r => r.ok ? r.json() : null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/status`)).then(r => r.ok ? r.json() : null),
         fetch(buildApiUrl(`/api/tenants/${tid}/agents/active`), { headers }).then(r => r.ok ? r.json() : null),
       ])
         .then(([usageData, statsData, waData, agentData]) => {
           setHasAgent(agentData !== null && agentData?.id !== undefined);
-          const waOk = waData?.status === 'connected';
+          const waOk = waData?.connected === true;
           setWaConnected(waOk);
           if (usageData) {
             const superadmin = usageData.is_superadmin ?? false;
