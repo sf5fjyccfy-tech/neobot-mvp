@@ -3,18 +3,23 @@
 import { useState, useEffect } from 'react';
 
 /**
- * Retourne true si la largeur de l'écran est < 768px (mobile / tablette portrait).
- * Utilise un event listener resize pour réagir aux changements.
+ * Détecte si l'appareil est réellement mobile (par userAgent).
+ * Window width < 768px ≠ mobile réel (ex: desktop avec fenêtre étroite).
+ * 
+ * Retourne true seulement si:
+ * - Device réel: Android, iPhone, iPad, iPod
+ * - Pas si: desktop avec fenêtre resizée
  */
-export function useIsMobile(breakpoint = 768): boolean {
+export function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < breakpoint);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, [breakpoint]);
+    // Détecte le vrai type d'appareil par userAgent
+    const isRealMobile = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    setIsMobile(isRealMobile);
+  }, []);
 
   return isMobile;
 }
