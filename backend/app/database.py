@@ -19,11 +19,11 @@ DATABASE_URL = os.getenv(
     "postgresql://neobot:neobot_secure_password@localhost:5432/neobot_db"
 )
 
-# Pool configuration — réduit pour VPS (Neon limite ~20 connexions)
-# 5 + 10 overflow = 15 max simultanées (sûr pour un petit VPS)
-POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 5))
-MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 10))
-POOL_TIMEOUT = int(os.getenv("DATABASE_POOL_TIMEOUT", 30))
+# Pool configuration — Neon limite ~20, mais sous load haute faut 15-20 simultanées
+# 15 + 15 overflow = 30 max (robuste pour pollings multiples + API calls)
+POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 15))
+MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 15))
+POOL_TIMEOUT = int(os.getenv("DATABASE_POOL_TIMEOUT", 60))
 
 # ========== ENGINE CREATION ==========
 engine = create_engine(
@@ -77,7 +77,10 @@ def init_db():
 # ========== CONNECTION POOL EVENTS ==========
 @event.listens_for(Engine, "connect")
 def receive_connect(dbapi_conn, connection_record):
-    """Event listener pour les connexions"""
+    """Event listener pour les connexions — gestion SSL de Neon"""
+    # Neon ferme les connexions SSL après inactivité — pool_pre_ping les détecte
+    # et les recycle automatiquement. Rien à faire ici.
+    pass
     try:
         cursor = dbapi_conn.cursor()
         cursor.execute("SELECT 1")

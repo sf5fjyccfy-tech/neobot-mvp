@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp:3001")
 QR_CACHE_TTL_SECONDS = 5  # Cache local pendant 5 sec pour éviter surcharge
 
+# Cache en mémoire pour les réponses QR — déduplicates les polls frontend
+_qr_response_cache: Dict[int, tuple[Dict[str, Any], datetime]] = {}
+
 
 def _generate_qr_image_from_raw(qr_raw: str) -> str:
     """
@@ -66,8 +69,8 @@ class WhatsAppQRService:
         """
         Récupère le QR code pour un tenant.
         
-        Si un QR valide existe en DB et n'a pas expiré → le retourner
-        Sinon → appeler le service WhatsApp pour générer un nouveau
+        OPTIMISATION: Cache en mémoire 5s pour réduire les requêtes DB lors du polling frontend.
+        Chaque requête frontend poll le QR toutes les 5s — sans cache, ça crève le pool.
         
         Args:
             tenant_id: ID du tenant
@@ -86,6 +89,17 @@ class WhatsAppQRService:
                 "timestamp": "2026-04-18T..."
             }
         """
+        # ✅ CHECK CACHE — Si un résultat existe et n'a pas expiré, le retourner
+        # Cela réduit drastiquement les requêtes DB lors du polling frontend
+        if not force_refresh and tenant_id in _qr_response_cache:
+            cached_response, cache_time = _qr_response_cache[tenant_id]
+            if (datetime.utcnow() - cache_time).total_seconds() < QR_CACHE_TTL_SECONDS:
+                logger.debug(f"✅ QR cache hit (in-memory) for tenant {tenant_id}")
+                return cached_response
+            else:
+                # Cache expiré, le nettoyer
+                del _qr_response_cache[tenant_id]
+        
         # Vérifier que le tenant existe
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if not tenant:
@@ -104,11 +118,11 @@ class WhatsAppQRService:
                 .first()
             )
             if existing_qr and existing_qr.qr_code_data:
-                logger.debug(f"QR cache hit for tenant {tenant_id}")
+                logger.debug(f"✅ QR cache hit (DB) for tenant {tenant_id}")
                 expires_in = int(
                     (existing_qr.qr_expires_at - datetime.utcnow()).total_seconds()
                 )
-                return {
+                result = {
                     "tenant_id": tenant_id,
                     "status": "waiting_qr",
                     "qr_code": existing_qr.qr_code_data,
@@ -118,6 +132,9 @@ class WhatsAppQRService:
                     "connected": False,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
+                # Mettre en cache mémoire
+                _qr_response_cache[tenant_id] = (result, datetime.utcnow())
+                return result
 
         # Pas de QR valide en cache → appeler le service WhatsApp
         # IMPORTANT: D'abord appeler /connect pour initialiser la session si nécessaire
@@ -190,7 +207,7 @@ class WhatsAppQRService:
             logger.error(f"DB error saving QR for tenant {tenant_id}: {e}")
             # Continuer quand même — retourner le QR même si pas en DB
 
-        return {
+        result = {
             "tenant_id": tenant_id,
             "status": wa_data.get("state", "waiting_qr"),
             "qr_code": wa_data.get("qrImageDataUrl"),
@@ -200,6 +217,11 @@ class WhatsAppQRService:
             "connected": wa_data.get("connected", False),
             "timestamp": datetime.utcnow().isoformat(),
         }
+        
+        # ✅ Mettre en cache mémoire pour réduire les requêtes DB pendant le polling
+        _qr_response_cache[tenant_id] = (result, datetime.utcnow())
+        
+        return result
 
     @staticmethod
     async def get_connection_status(tenant_id: int, db: Session) -> Dict[str, Any]:
