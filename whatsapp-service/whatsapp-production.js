@@ -57,7 +57,7 @@ const MAX_RECONNECT_DELAY_MS = 300000; // 5min max entre retries
 const ERROR_AUTORECOVERY_MS = 15 * 60 * 1000; // 15min avant auto-recovery depuis état error
 // Debounce messages entrants : agréger les messages rapides d'un même expéditeur avant de les envoyer au backend
 const MSG_DEBOUNCE_MS = Number(process.env.MSG_DEBOUNCE_MS) || 2500;
-const QR_TTL_MS = 60_000;
+const QR_TTL_MS = 120_000; // 2 minutes — Meta besoin ~60-90s pour completer le scan
 const WATCHDOG_INTERVAL_MS = 30_000;
 const BAILEYS_VERSION_CACHE_MS = 4 * 60 * 60 * 1000;
 
