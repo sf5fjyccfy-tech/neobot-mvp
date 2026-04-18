@@ -77,6 +77,7 @@ async def get_whatsapp_status(
     Returns:
     {
         "status": "disconnected" | "waiting_qr" | "connected",
+        "connected": true|false (booléen dérivé de status),
         "phone": "+237... ou null",
         "connected_since": "2026-04-18T..." ou null,
         "timestamp": "2026-04-18T..."
@@ -87,6 +88,8 @@ async def get_whatsapp_status(
             tenant_id=tenant_id,
             db=db
         )
+        # Ajouter le booléen 'connected' pour compatibilité frontend
+        result['connected'] = result.get('status') == 'connected'
         return result
     except ValueError as e:
         logger.warning(f"Invalid tenant {tenant_id}: {e}")
