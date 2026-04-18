@@ -639,9 +639,9 @@ async function connectTenant(tenantId, options = {}) {
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: true,
-      connectTimeoutMs: 30_000,
-      keepAliveIntervalMs: 30_000,
-      defaultQueryTimeoutMs: 60_000,
+      connectTimeoutMs: 90_000,        // ← AUGMENTÉ: Meta prend du temps au démarrage
+      keepAliveIntervalMs: 10_000,     // ← RÉDUIT: moins agressif comme le Pairing socket
+      defaultQueryTimeoutMs: 0,        // ← ZÉRO: pas d'interference avec le handshake
       retryRequestDelayMs: 250,
       maxMsgRetryCount: 5,
       shouldSyncHistoryMessage: () => false,
@@ -662,6 +662,10 @@ async function connectTenant(tenantId, options = {}) {
     });
 
     session.socket = socket;
+
+    // Attendre ~300ms que le handshake WS interne démarre, exactement comme le Pairing socket.
+    // Sans ce délai, le socket peut timeout avant que Meta envoie les données initiales.
+    await new Promise(r => setTimeout(r, 300));
 
     socket.ev.on('creds.update', saveCreds);
 
