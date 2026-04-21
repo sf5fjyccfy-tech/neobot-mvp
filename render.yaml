@@ -46,7 +46,7 @@ services:
       - key: FRONTEND_URL
         sync: false           # URL finale Cloudflare Pages ou Render frontend
       - key: ALLOWED_ORIGINS
-        sync: false           # Même URL que FRONTEND_URL
+        value: "https://neobot-ai.com,https://www.neobot-ai.com"
       - key: INTERNAL_API_KEY
         sync: false
       - key: NEOPAY_ALERT_EMAIL
