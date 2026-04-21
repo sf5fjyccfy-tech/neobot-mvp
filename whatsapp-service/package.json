@@ -1,6 +1,7 @@
 {
   "name": "neobot-whatsapp",
   "version": "3.0.0",
+  "engines": { "node": "20.x" },
   "type": "module",
   "main": "whatsapp-production.js",
   "scripts": {
