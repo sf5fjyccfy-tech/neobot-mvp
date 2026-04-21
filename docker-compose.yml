@@ -24,6 +24,8 @@ services:
     environment:
       # Overrides pour s'assurer que le service WhatsApp est adressé en interne
       WHATSAPP_SERVICE_URL: "http://whatsapp:3001"
+      # Env var loaded from .env file — default to localhost for dev
+      # NEXT_PUBLIC_API_URL is injected at build time via .env
     ports:
       - "8000:8000"
     volumes:

@@ -46,7 +46,7 @@ services:
       - key: FRONTEND_URL
         sync: false           # URL finale Cloudflare Pages ou Render frontend
       - key: ALLOWED_ORIGINS
-        value: "https://neobot-ai.com,https://www.neobot-ai.com,https://neobot-frontend-kcgmpxkbd-patrix561s-projects.vercel.app"
+        value: "https://neobot-ai.com,https://www.neobot-ai.com,https://*.vercel.app"
       - key: INTERNAL_API_KEY
         sync: false
       - key: NEOPAY_ALERT_EMAIL

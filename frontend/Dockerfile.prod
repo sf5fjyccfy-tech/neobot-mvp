@@ -8,7 +8,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Injecter l'URL du backend au moment du build (embedded dans les chunks JS)
-ENV NEXT_PUBLIC_API_URL=https://api.neobot-ai.com
+# Default: Render backend. Doit être overridé par Vercel env vars au build time.
+ARG NEXT_PUBLIC_API_URL=https://neobot-mvp-backend-jn2v.onrender.com
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build

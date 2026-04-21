@@ -293,7 +293,7 @@ async def register(
         raw_verification_token = secrets.token_urlsafe(32)
         new_user.email_verification_token = hashlib.sha256(raw_verification_token.encode()).hexdigest()
         db.commit()
-        BACKEND_URL = os.getenv("BACKEND_URL", "https://api.neobot-ai.com")
+        BACKEND_URL = os.getenv("BACKEND_URL", os.getenv("FRONTEND_URL", "https://neobot-ai.com"))
         verification_link = f"{BACKEND_URL}/api/auth/verify-email?token={raw_verification_token}"
         background_tasks.add_task(
             send_confirmation_email,
@@ -543,7 +543,7 @@ async def resend_verification(
     current_user.email_verification_token = hashlib.sha256(raw_token.encode()).hexdigest()
     db.commit()
 
-    BACKEND_URL = os.getenv("BACKEND_URL", "https://api.neobot-ai.com")
+    BACKEND_URL = os.getenv("BACKEND_URL", os.getenv("FRONTEND_URL", "https://neobot-ai.com"))
     verification_link = f"{BACKEND_URL}/api/auth/verify-email?token={raw_token}"
 
     from app.services.email_service import send_confirmation_email
