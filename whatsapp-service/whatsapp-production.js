@@ -14,7 +14,10 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   Browsers,
 } from '@whiskeysockets/baileys';
-import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state.js';
+// Supabase adapter pour session persistence Baileys
+// Change: pg-auth-state.js → pg-auth-state-supabase.js
+// DATABASE_URL doit pointer vers Supabase pooler (pas Neon)
+import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state-supabase.js';
 import NodeCache from '@cacheable/node-cache';
 import qrcodeTerminal from 'qrcode-terminal';
 import QRCode from 'qrcode';
