@@ -1,5 +1,5 @@
 services:
-  # ─── Backend FastAPI ──────────────────────────────────────────
+  # ─── Backend FastAPI ───────────────────────────────────────
   - type: web
     name: neobot-backend
     env: python
@@ -16,7 +16,7 @@ services:
       - key: APP_ENV
         value: production
       - key: DATABASE_URL
-        sync: false           # À copier depuis Neon dashboard
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: KORAPAY_SECRET_KEY
@@ -44,7 +44,7 @@ services:
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: FRONTEND_URL
-        sync: false           # URL finale Cloudflare Pages ou Render frontend
+        sync: false
       - key: ALLOWED_ORIGINS
         value: "https://neobot-ai.com,https://www.neobot-ai.com,https://*.vercel.app"
       - key: INTERNAL_API_KEY
@@ -52,7 +52,7 @@ services:
       - key: NEOPAY_ALERT_EMAIL
         value: neobot561@gmail.com
       - key: WHATSAPP_SERVICE_URL
-        sync: false           # URL publique Render du service WhatsApp
+        sync: false
       - key: WHATSAPP_WEBHOOK_SECRET
         sync: false
       - key: ADMIN_WHATSAPP
@@ -62,7 +62,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
 
-  # ─── Service WhatsApp Node.js / Baileys ──────────────────────
+  # ─── Service WhatsApp Node.js / Baileys ───────────────────
   - type: web
     name: neobot-whatsapp
     env: node
@@ -70,7 +70,7 @@ services:
     plan: free
     rootDir: whatsapp-service
     buildCommand: "npm install"
-    startCommand: "node --import ./instrument.js whatsapp-production.js"
+    startCommand: "node whatsapp-production.js"
     healthCheckPath: /health
     buildFilter:
       paths:
@@ -80,23 +80,19 @@ services:
       - key: NODE_ENV
         value: production
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=350 --max-semi-space-size=4"  # 350MB V8 heap + jeune génération réduite → GC plus agressif, laisse ~160MB pour buffers natifs Baileys (free tier = 512MB)
+        value: "--max-old-space-size=350 --max-semi-space-size=4"
       - key: DATABASE_URL
-        sync: false           # Même URL Neon que le backend
+        sync: false
       - key: SENTRY_DSN
         sync: false
       - key: WHATSAPP_BACKEND_URL
-        sync: false           # URL publique Render du backend
+        sync: false
       - key: WHATSAPP_WEBHOOK_SECRET
         sync: false
       - key: INTERNAL_API_KEY
         sync: false
 
-  # ─── Frontend Next.js (Render Web Service Node.js) ───────────
-  # Note : Cloudflare Pages nécessite @cloudflare/next-on-pages
-  # pour les routes dynamiques (/pay/[token]). Pour le MVP,
-  # on sert le frontend depuis Render et Cloudflare joue le rôle
-  # de proxy DNS/CDN (orange-cloud) devant l'URL Render.
+  # ─── Frontend Next.js ─────────────────────────────────────
   - type: web
     name: neobot-frontend
     env: node
@@ -114,6 +110,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_URL
-        sync: false           # URL publique Render du backend (ex: https://neobot-backend.onrender.com)
+        sync: false
       - key: NEXT_PUBLIC_SENTRY_DSN
         sync: false
