@@ -547,7 +547,7 @@ async function connectTenant(tenantId, options = {}) {
       browser: getBrowserForTenant(tenantId),
       printQRInTerminal: false,
       syncFullHistory: false,
-      markOnlineOnConnect: true,
+      markOnlineOnConnect: false,
       connectTimeoutMs: 90_000,
       keepAliveIntervalMs: 15_000,
       defaultQueryTimeoutMs: 0,
@@ -970,6 +970,31 @@ app.post('/api/whatsapp/tenants/:id/send-message', async (req, res) => {
     } catch (_) { }
     res.json({ status: 'sent', tenantId, id: result?.key?.id || null });
   } catch (e) {
+    res.status(503).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/tenants/:id/send-image', async (req, res) => {
+  const tenantId = parseInt(req.params.id, 10);
+  const { to, imageBase64, caption = '', mimetype = 'image/jpeg' } = req.body || {};
+  if (!tenantId || tenantId <= 0) return res.status(400).json({ error: 'Invalid tenantId' });
+  if (!to || !imageBase64) return res.status(400).json({ error: 'Missing: to, imageBase64' });
+  const session = getTenantSession(tenantId);
+  if (!session.connected || !session.socket) return res.status(503).json({ error: 'Not connected' });
+  try {
+    const jid = normalizeJid(to);
+    const buffer = Buffer.from(
+      imageBase64.replace(/^data:[^;]+;base64,/, ''),
+      'base64'
+    );
+    const result = await session.socket.sendMessage(jid, {
+      image: buffer,
+      caption,
+      mimetype,
+    });
+    res.json({ status: 'sent', tenantId, id: result?.key?.id || null });
+  } catch (e) {
+    logger.error('send-image failed', { tenantId, error: e.message });
     res.status(503).json({ error: e.message });
   }
 });

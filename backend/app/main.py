@@ -162,52 +162,54 @@ async def _startup_tasks():
                 db_reset.close()
 
         # Initialiser les types de business
-        db = next(get_db())
-        BusinessKBService.initialize_business_types(db)
-
-        # Auto-configurer le tenant 1 comme NéoBot si pas encore configuré
         from app.models import TenantBusinessConfig, BusinessTypeModel
         import json
 
-        existing_config = db.query(TenantBusinessConfig).filter(
-            TenantBusinessConfig.tenant_id == 1
-        ).first()
+        db = next(get_db())
+        try:
+            BusinessKBService.initialize_business_types(db)
 
-        if not existing_config:
-            neobot_type = db.query(BusinessTypeModel).filter(
-                BusinessTypeModel.slug == "neobot"
+            existing_config = db.query(TenantBusinessConfig).filter(
+                TenantBusinessConfig.tenant_id == 1
             ).first()
 
-            if neobot_type:
-                new_config = TenantBusinessConfig(
-                    tenant_id=1,
-                    business_type_id=neobot_type.id,
-                    company_name="NéoBot",
-                    company_description="Plateforme SaaS africaine d'automatisation WhatsApp par IA — PME africaines, réponses 24h/24 7j/7",
-                    tone="Professional, Friendly, Expert, Persuasif",
-                    selling_focus="Automatisation WhatsApp, gain de clients, disponibilité 24h/24",
-                    products_services=json.dumps([
-                        {
-                            "name": "Essential",
-                            "price": 20000,
-                            "description": "2 500 messages/mois — 1 agent IA — Sources Texte + PDF — Essai 14j gratuit",
-                            "features": [
-                                "2 500 messages WhatsApp/mois",
-                                "1 agent IA actif",
-                                "Sources de connaissance : Texte + PDF (3 max)",
-                                "Génération de prompt par IA",
-                                "Délai de réponse configurable",
-                                "Rappels RDV automatiques",
-                                "Dashboard Analytics 30 jours",
-                                "Support par email",
-                                "Essai gratuit 14 jours — aucune carte bancaire requise"
-                            ]
-                        }
-                    ])
-                )
-                db.add(new_config)
-                db.commit()
-                logger.info("✅ NéoBot tenant configuration initialized")
+            if not existing_config:
+                neobot_type = db.query(BusinessTypeModel).filter(
+                    BusinessTypeModel.slug == "neobot"
+                ).first()
+
+                if neobot_type:
+                    new_config = TenantBusinessConfig(
+                        tenant_id=1,
+                        business_type_id=neobot_type.id,
+                        company_name="NéoBot",
+                        company_description="Plateforme SaaS africaine d'automatisation WhatsApp par IA — PME africaines, réponses 24h/24 7j/7",
+                        tone="Professional, Friendly, Expert, Persuasif",
+                        selling_focus="Automatisation WhatsApp, gain de clients, disponibilité 24h/24",
+                        products_services=json.dumps([
+                            {
+                                "name": "Essential",
+                                "price": 20000,
+                                "description": "2 500 messages/mois — 1 agent IA — Sources Texte + PDF — Essai 14j gratuit",
+                                "features": [
+                                    "2 500 messages WhatsApp/mois",
+                                    "1 agent IA actif",
+                                    "Sources de connaissance : Texte + PDF (3 max)",
+                                    "Génération de prompt par IA",
+                                    "Délai de réponse configurable",
+                                    "Rappels RDV automatiques",
+                                    "Dashboard Analytics 30 jours",
+                                    "Support par email",
+                                    "Essai gratuit 14 jours — aucune carte bancaire requise"
+                                ]
+                            }
+                        ])
+                    )
+                    db.add(new_config)
+                    db.commit()
+                    logger.info("✅ NéoBot tenant configuration initialized")
+        finally:
+            db.close()
 
         logger.info("✅ Application démarrée")
     except Exception as e:
