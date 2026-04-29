@@ -123,7 +123,13 @@ async def _startup_tasks():
         _h.addFilter(_f)
 
     try:
-        init_db()
+        try:
+            init_db()
+            logger.info("✅ init_db() réussi — tables créées/vérifiées")
+        except Exception as _init_err:
+            logger.critical("❌ init_db() échoué : %s — les endpoints DB renverront 500", _init_err)
+            import sentry_sdk as _s; _s.capture_exception(_init_err)
+            # On continue quand même — les tables existantes restent utilisables
 
         # ── Migrations auto — chaque colonne dans son propre bloc (idempotent) ──
         _migrations = [
@@ -412,16 +418,26 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Handler global pour les exceptions non gérées (500)
-# CRITIQUE : sans ça, les 500 passent par ServerErrorMiddleware (plus externe que
-# CORSMiddleware) → réponse sans headers CORS → erreur "Access-Control-Allow-Origin manquant".
-# En enregistrant ce handler ICI, l'exception est capturée par ExceptionMiddleware
-# de FastAPI (qui est DANS le stack CORSMiddleware) → CORS headers ajoutés correctement.
+# Les headers CORS sont injectés directement ici comme défense en profondeur :
+# même si une exception échappe au CORSMiddleware et atteint ServerErrorMiddleware,
+# la réponse contiendra toujours les headers CORS corrects.
+def _cors_headers_for(request: Request) -> dict:
+    origin = request.headers.get("origin", "")
+    if origin and origin in _CORS_ORIGINS:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "false",
+            "Vary": "Origin",
+        }
+    return {}
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled exception [%s %s]: %s", request.method, request.url.path, exc, exc_info=True)
     return JSONResponse(
         status_code=500,
         content={"detail": "Erreur interne du serveur. Veuillez réessayer."},
+        headers=_cors_headers_for(request),
     )
 
 # ========== INCLUDE ROUTERS ==========
@@ -691,8 +707,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """Handler personnalisé pour les erreurs HTTP"""
     detail = getattr(exc, "detail", str(exc))
     status_code = getattr(exc, "status_code", 500)
-    # Forwarder les headers de l'exception (ex. WWW-Authenticate sur 401)
     exc_headers = getattr(exc, "headers", None) or {}
+    # CORS headers fusionnés avec les headers de l'exception (ex. WWW-Authenticate sur 401)
+    merged = {**_cors_headers_for(request), **exc_headers}
     return JSONResponse(
         status_code=status_code,
         content={
@@ -700,7 +717,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "status": "error",
             "timestamp": datetime.utcnow().isoformat()
         },
-        headers=exc_headers,
+        headers=merged,
     )
 
 # (Doublon supprimé — voir @app.exception_handler(Exception) à ligne 412)

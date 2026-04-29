@@ -162,13 +162,21 @@ async def login(
     """
     ip = request.client.host if request.client else "unknown"
 
-    # Anti-brute-force : verif AVANT authenticate_user
-    _check_brute_force(db, ip)
+    # Anti-brute-force — ignoré si la table n'existe pas encore (migration en retard)
+    try:
+        _check_brute_force(db, ip)
+    except HTTPException:
+        raise  # 429 légitime — on le propage
+    except Exception as _bfe:
+        logger.warning("Brute-force check ignoré (table absente ?) : %s", _bfe)
 
     user = authenticate_user(db, body.email, body.password)
 
     if not user:
-        _log_login_attempt(db, ip, body.email, success=False)
+        try:
+            _log_login_attempt(db, ip, body.email, success=False)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect",
@@ -185,14 +193,21 @@ async def login(
         )
 
     # Login reussi
-    _log_login_attempt(db, ip, body.email, success=True)
+    try:
+        _log_login_attempt(db, ip, body.email, success=True)
+    except Exception:
+        pass
     user.last_login = datetime.now(timezone.utc)
     db.commit()
 
     access_token = create_access_token(
         data={"sub": user.email, "user_id": user.id, "tenant_id": user.tenant_id}
     )
-    refresh_tok = _issue_refresh_token(db, user.id)
+    try:
+        refresh_tok = _issue_refresh_token(db, user.id)
+    except Exception as _rte:
+        logger.warning("Refresh token non émis (table absente ?) : %s", _rte)
+        refresh_tok = None
 
     return {
         "access_token": access_token,
