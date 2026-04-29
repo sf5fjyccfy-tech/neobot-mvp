@@ -472,6 +472,11 @@ logger.info(f"CORS allow_origins : {_CORS_ORIGINS}")
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(SubscriptionMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+# CORSMiddleware DERNIER = PREMIER à s'exécuter = traite TOUTES les requêtes/réponses,
+# y compris les 500 qui remontent jusqu'à ServerErrorMiddleware.
+# CORSMiddleware est un ASGI middleware pur (pas BaseHTTPMiddleware), il capture
+# toutes les réponses sans laisser les exceptions s'échapper.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
@@ -480,8 +485,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
     max_age=3600,
 )
-# SecurityHeadersMiddleware DERNIER = PREMIER à s'exécuter = ajoute les headers de sécurité sur TOUTES les réponses
-app.add_middleware(SecurityHeadersMiddleware)
 
 # ========== COMMIT HASH — Lecture au démarrage, pas à chaque requête ==========
 # Lire le commit une seule fois pour éviter appels subprocess répétés
