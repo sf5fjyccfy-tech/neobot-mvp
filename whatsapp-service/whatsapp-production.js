@@ -62,7 +62,7 @@ const WEBHOOK_SECRET =
   '';
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const DEFAULT_TENANT_ID = parseInt(process.env.TENANT_ID || '1', 10);
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
+const INTERNAL_API_KEY = (process.env.INTERNAL_API_KEY || '').trim();
 
 // Reconnection
 const MAX_RETRIES = 8;
