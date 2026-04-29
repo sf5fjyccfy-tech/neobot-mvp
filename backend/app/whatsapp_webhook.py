@@ -358,7 +358,7 @@ Ou posez votre question!
                     extra_context=enriched_context,
                 )
                 messages = [{"role": "user", "content": sales_prompt}]
-                max_tokens = 500
+                max_tokens = 200
                 logger.info(f"📝 No active agent — fallback SalesPromptGenerator (intent={intent})")
 
             # ✅ STEP 5: APPELER DEEPSEEK

@@ -65,7 +65,7 @@ class DeepSeekClient:
         self.base_url = base_url
         self.model = "deepseek-chat"
     
-    async def call(self, messages: list, temperature: float = 0.7, max_tokens: int = 1024) -> str:
+    async def call(self, messages: list, temperature: float = 0.7, max_tokens: int = 200) -> str:
         """
         Call DeepSeek API with the global pooled HTTP client
         

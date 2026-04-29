@@ -557,7 +557,6 @@ async def docs_info():
         "endpoints": {
             "health": "GET /health",
             "tenants": "GET /api/tenants",
-            "whatsapp": "POST /api/whatsapp/message",
             "conversations": "GET /api/conversations/{tenant_id}"
         }
     }
@@ -632,91 +631,6 @@ async def create_tenant(data: dict, db: Session = Depends(get_db), _: User = Dep
         logger.error(f"❌ Erreur création tenant: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# ========== WHATSAPP WEBHOOK ==========
-@app.post("/api/whatsapp/message")
-async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
-    """
-    Webhook WhatsApp: recevoir les messages et générer des réponses
-    """
-    try:
-        data = await request.json()
-        phone = data.get("from")
-        message_text = data.get("message")
-        tenant_id = data.get("tenant_id", 1)
-        
-        logger.info(f"📨 Message reçu de {phone}: {message_text}")
-        
-        # Vérifier le tenant
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-        if not tenant:
-            return {"error": "Tenant not found"}, 404
-        
-        # Créer/récupérer la conversation
-        conversation = db.query(Conversation).filter(
-            Conversation.tenant_id == tenant_id,
-            Conversation.customer_phone == phone
-        ).first()
-        
-        if not conversation:
-            conversation = Conversation(
-                tenant_id=tenant_id,
-                customer_phone=phone,
-                customer_name=f"Client {phone[-4:]}"
-            )
-            db.add(conversation)
-            db.commit()
-            db.refresh(conversation)
-            logger.info(f"📝 Conversation créée: {conversation.id}")
-        
-        # Sauvegarder le message entrant
-        incoming_msg = Message(
-            conversation_id=conversation.id,
-            content=message_text,
-            direction="incoming",
-            is_ai=False
-        )
-        db.add(incoming_msg)
-        
-        # Générer la réponse IA
-        ai_response = await get_ai_response(message_text, tenant.name)
-        
-        # Sauvegarder la réponse
-        outgoing_msg = Message(
-            conversation_id=conversation.id,
-            content=ai_response,
-            direction="outgoing",
-            is_ai=True
-        )
-        db.add(outgoing_msg)
-        
-        # Mettre à jour les métriques
-        tenant.messages_used += 2
-        conversation.last_message_at = datetime.utcnow()
-        
-        db.commit()
-        
-        logger.info(f"✅ Réponse générée: {ai_response[:50]}...")
-        
-        return {
-            "status": "ok",
-            "phone": phone,
-            "message": message_text,
-            "response": ai_response,
-            "conversation_id": conversation.id
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"❌ Erreur webhook: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": str(e),
-                "response": "Désolé, une erreur s'est produite."
-            }
-        )
-
 # ========== CONVERSATION ENDPOINTS ==========
 @app.get("/api/conversations/{tenant_id}")
 async def get_conversations(tenant_id: int, db: Session = Depends(get_db)):
@@ -762,71 +676,6 @@ async def get_messages(conversation_id: int, db: Session = Depends(get_db)):
             for m in messages
         ]
     }
-
-# ========== IA INTEGRATION ==========
-async def get_ai_response(message: str, business_name: str = "NéoBot") -> str:
-    """
-    Générer une réponse IA via DeepSeek
-    """
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        logger.warning("⚠️ DEEPSEEK_API_KEY not set, using fallback")
-        return get_fallback_response(message, business_name)
-    
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://api.deepseek.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": f"Tu es l'assistant de {business_name}. Réponds en français, sois courtois et concis (max 2 phrases)."
-                        },
-                        {
-                            "role": "user",
-                            "content": message
-                        }
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 150
-                }
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                ai_response = data['choices'][0]['message']['content']
-                logger.info(f"🤖 IA réponse générée")
-                return ai_response
-            else:
-                logger.warning(f"⚠️ DeepSeek API error: {response.status_code}")
-                return get_fallback_response(message, business_name)
-                
-    except Exception as e:
-        logger.error(f"❌ Erreur IA: {e}")
-        return get_fallback_response(message, business_name)
-
-def get_fallback_response(message: str, business_name: str = "NéoBot") -> str:
-    """
-    Réponse de fallback quand l'IA ne répond pas
-    """
-    msg_lower = message.lower()
-    
-    if any(word in msg_lower for word in ["bonjour", "salut", "hello", "hi"]):
-        return f"👋 Bonjour ! Bienvenue chez {business_name}. Comment puis-je vous aider ?"
-    elif any(word in msg_lower for word in ["prix", "tarif", "coût", "combien"]):
-        return f"💰 Pour plus d'informations sur nos tarifs, veuillez nous contacter directement."
-    elif any(word in msg_lower for word in ["horaire", "ouvert", "ferme"]):
-        return f"🕐 Pour connaître nos horaires, veuillez nous contacter."
-    elif any(word in msg_lower for word in ["merci", "thank"]):
-        return f"😊 De rien ! Avez-vous autre chose ?"
-    else:
-        return f"✅ Merci pour votre message ! Notre équipe vous répondra rapidement."
 
 # ========== ERROR HANDLERS ==========
 @app.exception_handler(HTTPException)
