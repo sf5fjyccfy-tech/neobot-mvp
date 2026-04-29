@@ -14,10 +14,9 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # ========== CONFIGURATION DATABASE ==========
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql://neobot:neobot_secure_password@localhost:5432/neobot_db"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL env var must be set")
 
 # Pool réduit pour Neon free tier (191.9h compute/mois)
 # Chaque connexion maintenue active = compute consommé

@@ -8,7 +8,6 @@ from datetime import timedelta, datetime, timezone
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import os, io, base64
-import re
 
 import pyotp
 import qrcode
@@ -151,7 +150,7 @@ class TokenResponse(BaseModel):
 # ========== ENDPOINTS ==========
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 async def login(
     request: Request,
     body: LoginRequest,

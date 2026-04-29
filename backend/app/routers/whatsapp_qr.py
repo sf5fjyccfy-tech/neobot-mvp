@@ -3,7 +3,7 @@ WhatsApp QR Code Endpoints - Production Integration avec Baileys
 Récupère les QR codes du service WhatsApp Node.js, gère les sessions.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Path
+from fastapi import APIRouter, HTTPException, Depends, Path, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
@@ -11,6 +11,7 @@ import logging
 from ..database import get_db
 from ..models import Tenant
 from ..services.whatsapp_qr_service import WhatsAppQRService
+from ..limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,9 @@ router = APIRouter(prefix="/api", tags=["whatsapp"])
 # ========== PUBLIC ENDPOINTS (pas d'authentification) ==========
 
 @router.get("/tenants/{tenant_id}/whatsapp/qr", response_model=dict)
+@limiter.limit("30/minute")
 async def get_whatsapp_qr(
+    request: Request,
     tenant_id: int = Path(..., gt=0),
     db: Session = Depends(get_db),
 ):
@@ -64,7 +67,9 @@ async def get_whatsapp_qr(
 
 
 @router.get("/tenants/{tenant_id}/whatsapp/status", response_model=dict)
+@limiter.limit("60/minute")
 async def get_whatsapp_status(
+    request: Request,
     tenant_id: int = Path(..., gt=0),
     db: Session = Depends(get_db),
 ):
@@ -100,7 +105,9 @@ async def get_whatsapp_status(
 
 
 @router.post("/tenants/{tenant_id}/whatsapp/refresh-qr", response_model=dict)
+@limiter.limit("5/minute")
 async def refresh_whatsapp_qr(
+    request: Request,
     tenant_id: int = Path(..., gt=0),
     db: Session = Depends(get_db),
 ):

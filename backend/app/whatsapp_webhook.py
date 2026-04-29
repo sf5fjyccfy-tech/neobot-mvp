@@ -265,7 +265,6 @@ Ou posez votre question!
             
             # ✅ STEP 1: INTENT CLASSIFICATION
             from .services.intent_classifier import classify_intent
-            from .services.ai_service_rag import generate_ai_response_with_db
             from .services.knowledge_base_service import KnowledgeBaseService
             from .models import Tenant
             

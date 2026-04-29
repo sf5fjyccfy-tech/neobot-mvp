@@ -213,7 +213,11 @@ async def _startup_tasks():
 
         logger.info("✅ Application démarrée")
     except Exception as e:
-        logger.error(f"❌ Erreur startup: {e}")
+        logger.critical(f"❌ STARTUP FAILED — {type(e).__name__}: {e}")
+        import sentry_sdk as _sentry_startup
+        _sentry_startup.capture_exception(e)
+        # Ne pas bloquer le démarrage — les endpoints renverront 500 et les logs
+        # Render montreront l'erreur exacte (DB URL incorrecte, etc.)
 
 
 async def _shutdown_tasks():
@@ -457,11 +461,11 @@ _CORS_ORIGINS: list[str] = (
     [o.strip() for o in _raw_origins.split(",") if o.strip()]
     if _raw_origins
     else [
+        "https://neobot-ai.com",
+        "https://www.neobot-ai.com",
         "http://localhost:3000",
         "http://localhost:3001",
-        "http://localhost:3002",
         "http://127.0.0.1:3000",
-        "http://127.0.0.1:3002",
     ]
 )
 logger.info(f"CORS allow_origins : {_CORS_ORIGINS}")
