@@ -250,47 +250,78 @@ async def register(
         )
     
     # Créer le tenant
-    new_tenant = Tenant(
-        name=body.tenant_name,
-        email=body.email,
-        phone=body.whatsapp_number or _derive_tenant_phone(body.email),
-        business_type=body.business_type or "autre",
-        plan=PlanType.BASIC,
-        messages_used=0,
-        messages_limit=PLAN_LIMITS[PlanType.BASIC]["whatsapp_messages"],  # source: PLAN_LIMITS
-    )
-    db.add(new_tenant)
-    db.flush()  # Pour obtenir l'ID du tenant
-    
-    # Créer l'utilisateur
-    hashed_password = get_password_hash(body.password)
-    new_user = User(
-        tenant_id=new_tenant.id,
-        email=body.email,
-        hashed_password=hashed_password,
-        full_name=body.full_name,
-        is_active=True,
-    )
-    db.add(new_user)
-    
-    # AUTO-START 14-DAY TRIAL
-    trial_start = datetime.now(timezone.utc).date()
-    trial_end = trial_start + timedelta(days=14)
+    try:
+        new_tenant = Tenant(
+            name=body.tenant_name,
+            email=body.email,
+            phone=body.whatsapp_number or _derive_tenant_phone(body.email),
+            business_type=body.business_type or "autre",
+            plan=PlanType.BASIC,
+            messages_used=0,
+            messages_limit=PLAN_LIMITS[PlanType.BASIC]["whatsapp_messages"],
+        )
+        db.add(new_tenant)
+        db.flush()  # Pour obtenir l'ID du tenant
+    except Exception as _te:
+        db.rollback()
+        logger.error("Register — flush tenant échoué: %s", _te, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"[DEBUG tenant] {type(_te).__name__}: {_te}",
+        )
 
-    subscription = Subscription(
-        tenant_id=new_tenant.id,
-        plan="BASIC",  # Uniformisé avec neopay_service.py — was: "essential"
-        status="active",
-        is_trial=True,
-        trial_start_date=trial_start,
-        trial_end_date=trial_end,
-        subscription_start_date=datetime.now(timezone.utc),
-        next_billing_date=trial_end + timedelta(days=1),
-        auto_renew=False  # Manual upgrade after trial
-    )
-    db.add(subscription)
-    
-    db.commit()
+    # Créer l'utilisateur
+    try:
+        hashed_password = get_password_hash(body.password)
+        new_user = User(
+            tenant_id=new_tenant.id,
+            email=body.email,
+            hashed_password=hashed_password,
+            full_name=body.full_name,
+            is_active=True,
+        )
+        db.add(new_user)
+    except Exception as _ue:
+        db.rollback()
+        logger.error("Register — add user échoué: %s", _ue, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"[DEBUG user] {type(_ue).__name__}: {_ue}",
+        )
+
+    # AUTO-START 14-DAY TRIAL
+    try:
+        trial_start = datetime.now(timezone.utc)
+        trial_end = trial_start + timedelta(days=14)
+        subscription = Subscription(
+            tenant_id=new_tenant.id,
+            plan="BASIC",
+            status="active",
+            is_trial=True,
+            trial_start_date=trial_start,
+            trial_end_date=trial_end,
+            subscription_start_date=trial_start,
+            next_billing_date=trial_end + timedelta(days=1),
+            auto_renew=False,
+        )
+        db.add(subscription)
+    except Exception as _se:
+        db.rollback()
+        logger.error("Register — add subscription échoué: %s", _se, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"[DEBUG subscription] {type(_se).__name__}: {_se}",
+        )
+
+    try:
+        db.commit()
+    except Exception as _ce:
+        db.rollback()
+        logger.error("Register — commit échoué: %s", _ce, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"[DEBUG commit] {type(_ce).__name__}: {_ce}",
+        )
 
     # Créer le token JWT + refresh token
     access_token = create_access_token(
