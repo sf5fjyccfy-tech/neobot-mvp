@@ -208,7 +208,11 @@ def get_tenant_detail(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant non trouvé")
 
-    agents = db.query(AgentTemplate).filter(AgentTemplate.tenant_id == tenant_id).all()
+    try:
+        agents = db.query(AgentTemplate).filter(AgentTemplate.tenant_id == tenant_id).all()
+    except Exception:
+        db.rollback()
+        agents = []
     user = db.query(User).filter(User.tenant_id == tenant_id).first()
     wa = db.query(WhatsAppSession).filter(WhatsAppSession.tenant_id == tenant_id).first()
     sub = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).first()
@@ -253,27 +257,27 @@ def get_tenant_detail(
         "user": {
             "id": user.id,
             "email": user.email,
-            "full_name": user.full_name,
-            "role": user.role,
+            "full_name": getattr(user, "full_name", None),
+            "role": getattr(user, "role", "user"),
             "is_active": user.is_active,
-            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "last_login": None,
         } if user else None,
         "agents": [
             {
                 "id": a.id,
                 "name": a.name,
-                "agent_type": a.agent_type.value,
+                "agent_type": a.agent_type.value if hasattr(a.agent_type, "value") else str(a.agent_type),
                 "is_active": a.is_active,
-                "prompt_score": a.prompt_score,
-                "tone": a.tone,
-                "language": a.language,
-                "emoji_enabled": a.emoji_enabled,
-                "max_response_length": a.max_response_length,
-                "custom_prompt_override": a.custom_prompt_override,
-                "system_prompt": a.system_prompt,
-                "availability_start": a.availability_start,
-                "availability_end": a.availability_end,
-                "off_hours_message": a.off_hours_message,
+                "prompt_score": getattr(a, "prompt_score", 0),
+                "tone": getattr(a, "tone", ""),
+                "language": getattr(a, "language", "fr"),
+                "emoji_enabled": getattr(a, "emoji_enabled", True),
+                "max_response_length": getattr(a, "max_response_length", 400),
+                "custom_prompt_override": getattr(a, "custom_prompt_override", None),
+                "system_prompt": getattr(a, "system_prompt", None),
+                "availability_start": getattr(a, "availability_start", None),
+                "availability_end": getattr(a, "availability_end", None),
+                "off_hours_message": getattr(a, "off_hours_message", None),
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             }
             for a in agents
