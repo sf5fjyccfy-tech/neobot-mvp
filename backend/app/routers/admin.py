@@ -119,16 +119,6 @@ def list_tenants(
     db: Session = Depends(get_db),
     _: User = Depends(get_superadmin_user),
 ):
-    import traceback as _tb
-    try:
-        return _list_tenants_inner(search, plan, suspended, db)
-    except Exception as e:
-        db.rollback()
-        logger.error("Admin /tenants 500:\n%s", _tb.format_exc())
-        raise HTTPException(status_code=500, detail=f"[DEBUG] {type(e).__name__}: {e}")
-
-
-def _list_tenants_inner(search, plan, suspended, db):
     q = db.query(Tenant).filter(Tenant.is_deleted == False)
     if search:
         q = q.filter(
@@ -155,9 +145,13 @@ def _list_tenants_inner(search, plan, suspended, db):
     result = []
     for t in tenants:
         wa = db.query(WhatsAppSession).filter(WhatsAppSession.tenant_id == t.id).first()
-        agent_count = db.query(func.count(AgentTemplate.id)).filter(
-            AgentTemplate.tenant_id == t.id
-        ).scalar()
+        try:
+            agent_count = db.query(func.count(AgentTemplate.id)).filter(
+                AgentTemplate.tenant_id == t.id
+            ).scalar() or 0
+        except Exception:
+            db.rollback()
+            agent_count = 0
         user = db.query(User).filter(User.tenant_id == t.id).first()
         sub = db.query(Subscription).filter(Subscription.tenant_id == t.id).first()
         last_conv_at = db.query(func.max(Conversation.created_at)).filter(

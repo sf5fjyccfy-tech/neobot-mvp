@@ -174,6 +174,7 @@ async def _startup_tasks():
             "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS whatsapp_messages_used INTEGER DEFAULT 0;",
             "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS month_year VARCHAR(7);",
             # agent_templates : colonnes ajoutées progressivement
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id);",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS response_delay VARCHAR(20) DEFAULT 'natural';",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS off_hours_message TEXT;",
@@ -181,6 +182,11 @@ async def _startup_tasks():
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS availability_end VARCHAR(5);",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS custom_prompt_override TEXT;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS prompt_score INTEGER DEFAULT 0;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS tone VARCHAR(100) DEFAULT 'Friendly, Professional';",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'fr';",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS emoji_enabled BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS max_response_length INTEGER DEFAULT 400;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS typing_indicator BOOLEAN DEFAULT TRUE;",
         ]
         for sql in _migrations:
             try:
