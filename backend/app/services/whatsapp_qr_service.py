@@ -195,7 +195,7 @@ class WhatsAppQRService:
 
         # Sauvegarder en DB
         now = datetime.utcnow()
-        qr_expires = now + timedelta(minutes=2)  # QR valide 2 min
+        qr_expires = now + timedelta(seconds=15)  # Baileys rotate les QR ~15s
         
         session_qr = WhatsAppSessionQR(
             tenant_id=tenant_id,
@@ -215,18 +215,22 @@ class WhatsAppQRService:
             logger.error(f"DB error saving QR for tenant {tenant_id}: {e}")
             # Continuer quand même — retourner le QR même si pas en DB
 
+        # expires_in : prendre la valeur du service Node.js si dispo, sinon 15s
+        service_expires_in = wa_data.get("expires_in")
+        expires_in = int(service_expires_in) if service_expires_in else 15
+
         result = {
             "tenant_id": tenant_id,
-            "status": wa_data.get("state", "waiting_qr"),
-            "qr_code": wa_data.get("qrImageDataUrl"),
-            "expires_in": 120,
+            "status": wa_data.get("status", "waiting_qr"),
+            "qr_code": qr_image_data,
+            "expires_in": expires_in,
             "message": wa_data.get("message", "Scannez ce code QR avec WhatsApp"),
             "phone": wa_data.get("phone"),
             "connected": wa_data.get("connected", False),
             "timestamp": datetime.utcnow().isoformat(),
         }
-        
-        # ✅ Mettre en cache mémoire pour réduire les requêtes DB pendant le polling
+
+        # Cache mémoire 5s max — assez pour absorber le polling frontend sans servir un QR périmé
         _qr_response_cache[tenant_id] = (result, datetime.utcnow())
         
         return result
