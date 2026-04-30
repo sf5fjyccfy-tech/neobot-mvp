@@ -3,8 +3,11 @@ Admin Router — Accès superadmin uniquement
 Gestion globale : tenants, agents, stats, suspension, impersonation
 """
 import os
+import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -116,6 +119,16 @@ def list_tenants(
     db: Session = Depends(get_db),
     _: User = Depends(get_superadmin_user),
 ):
+    import traceback as _tb
+    try:
+        return _list_tenants_inner(search, plan, suspended, db)
+    except Exception as e:
+        db.rollback()
+        logger.error("Admin /tenants 500:\n%s", _tb.format_exc())
+        raise HTTPException(status_code=500, detail=f"[DEBUG] {type(e).__name__}: {e}")
+
+
+def _list_tenants_inner(search, plan, suspended, db):
     q = db.query(Tenant).filter(Tenant.is_deleted == False)
     if search:
         q = q.filter(
