@@ -65,12 +65,35 @@ def get_db():
 
 # ========== DATABASE INIT ==========
 def init_db():
-    """Créer toutes les tables"""
+    """Créer toutes les tables — idempotent même si les types Enum existent déjà."""
+    from sqlalchemy import text as _text
+
+    # Pré-créer les types Enum PostgreSQL avec IF NOT EXISTS.
+    # Sans ça, create_all() plante au redémarrage car les types existent déjà.
+    _enum_types = [
+        ("agenttype",          "'libre','rdv','support','faq','vente','qualification'"),
+        ("knowledgesourcetype","'url','pdf','youtube','faq','text'"),
+        ("plantype",           "'NEOBOT','BASIC','STANDARD','PRO'"),
+        ("conversationstatus", "'active','pending','closed','archived'"),
+        ("businesstype",       "'neobot','restaurant','ecommerce','travel','salon','fitness','consulting','custom'"),
+    ]
+    with engine.begin() as conn:
+        for type_name, values in _enum_types:
+            try:
+                conn.execute(_text(
+                    f"DO $$ BEGIN "
+                    f"  CREATE TYPE {type_name} AS ENUM ({values}); "
+                    f"EXCEPTION WHEN duplicate_object THEN NULL; "
+                    f"END $$;"
+                ))
+            except Exception as _et:
+                logger.debug("Enum %s ignoré: %s", type_name, _et)
+
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Base de données initialisée")
     except Exception as e:
-        logger.error(f"❌ Erreur init DB: {e}")
+        logger.error("❌ Erreur init DB: %s", e)
         raise
 
 # ========== CONNECTION POOL EVENTS ==========

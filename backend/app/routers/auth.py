@@ -169,8 +169,16 @@ async def login(
         raise  # 429 légitime — on le propage
     except Exception as _bfe:
         logger.warning("Brute-force check ignoré (table absente ?) : %s", _bfe)
+        db.rollback()  # évite "InFailedSqlTransaction" sur les requêtes suivantes
 
-    user = authenticate_user(db, body.email, body.password)
+    try:
+        user = authenticate_user(db, body.email, body.password)
+    except Exception as _auth_err:
+        logger.error("Erreur authenticate_user : %s", _auth_err)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service temporairement indisponible. Réessayez dans quelques instants.",
+        )
 
     if not user:
         try:

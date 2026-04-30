@@ -133,9 +133,38 @@ async def _startup_tasks():
 
         # ── Migrations auto — chaque colonne dans son propre bloc (idempotent) ──
         _migrations = [
+            # users
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR;",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(64);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE;",
+            # tenants
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_provider VARCHAR(50) DEFAULT 'WASENDER_API';",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_connected BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS suspension_reason TEXT;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS messages_period_start TIMESTAMP WITH TIME ZONE;",
+            # login_attempts : la migration SQL avait les mauvaises colonnes
+            "ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS email VARCHAR(255);",
+            "ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS attempted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            # subscriptions : la migration SQL avait un schéma incomplet
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan VARCHAR(50);",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_start_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_end_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS subscription_start_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS subscription_end_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_billing_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_billing_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN DEFAULT TRUE;",
         ]
         for sql in _migrations:
             try:
