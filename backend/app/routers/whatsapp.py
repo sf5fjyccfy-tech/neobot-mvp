@@ -263,15 +263,19 @@ async def mark_whatsapp_connected(
     session.is_connected = True
     session.last_connected_at = datetime.utcnow()
     session.failed_attempts = 0
-    # Mettre à jour le numéro si Baileys le fournit (vrai JID extrait des creds)
     if body.phone and body.phone.strip():
         session.whatsapp_phone = body.phone.strip()
+
+    # Synchroniser tenants.whatsapp_connected (lu par le panel admin et le dashboard)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant:
+        tenant.whatsapp_connected = True
 
     db.commit()
     db.refresh(session)
 
     logger.info(f"✅ WhatsApp session marked as connected for tenant {tenant_id}: {session.whatsapp_phone}")
-    
+
     return {
         "status": "success",
         "message": f"Session connectée: {session.whatsapp_phone}"
@@ -293,7 +297,6 @@ async def mark_whatsapp_disconnected(
     ).first()
 
     if not session:
-        # Auto-créer la session si absente (tenants créés avant cette fonctionnalité)
         session = WhatsAppSession(
             tenant_id=tenant_id,
             whatsapp_phone=f"pending-{tenant_id}",
@@ -304,6 +307,11 @@ async def mark_whatsapp_disconnected(
     else:
         session.is_connected = False
         session.failed_attempts += 1
+
+    # Synchroniser tenants.whatsapp_connected
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant:
+        tenant.whatsapp_connected = False
 
     db.commit()
 

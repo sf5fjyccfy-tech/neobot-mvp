@@ -201,6 +201,75 @@ async def _startup_tasks():
             finally:
                 db_reset.close()
 
+        # ── Bootstrap superadmin — auto-set is_superadmin=True pour SUPERADMIN_EMAILS ──
+        # Évite d'avoir à mettre SUPERADMIN_RESET_PASSWORD manuellement sur Render.
+        _superadmin_emails = {
+            e.strip().lower()
+            for e in os.getenv("SUPERADMIN_EMAILS", "").split(",")
+            if e.strip()
+        }
+        if _superadmin_emails:
+            db_sa = next(get_db())
+            try:
+                to_promote = db_sa.query(User).filter(
+                    User.email.in_(_superadmin_emails),
+                    User.is_superadmin == False,  # noqa: E712
+                ).all()
+                for u in to_promote:
+                    u.is_superadmin = True
+                    logger.info(f"✅ Bootstrap: {u.email} promu superadmin")
+                if to_promote:
+                    db_sa.commit()
+            except Exception as _sae:
+                logger.warning(f"⚠ Bootstrap superadmin échoué: {_sae}")
+                db_sa.rollback()
+            finally:
+                db_sa.close()
+
+        # ── Bootstrap agent NéoBot (tenant 1) ──
+        # agent_service.NEOBOT_AGENT_ID=1 attend un agent pour tenant_id=1.
+        # Si la DB est fraîche, créer l'agent par défaut.
+        from app.models import AgentTemplate
+        from app.models import AgentType as _AgentType
+        db_ag = next(get_db())
+        try:
+            neobot_agent = db_ag.query(AgentTemplate).filter(
+                AgentTemplate.tenant_id == 1
+            ).first()
+            if not neobot_agent:
+                neobot_tenant = db_ag.query(Tenant).filter(Tenant.id == 1).first()
+                if neobot_tenant:
+                    new_agent = AgentTemplate(
+                        tenant_id=1,
+                        name="NéoBot Commercial",
+                        agent_type=_AgentType.VENTE,
+                        is_active=True,
+                        is_default=True,
+                        tone="Professional, Friendly, Expert",
+                        language="fr",
+                        emoji_enabled=True,
+                        max_response_length=400,
+                        response_delay="natural",
+                        system_prompt=(
+                            "Tu es NéoBot, l'assistant commercial de NéoBot SaaS — "
+                            "une plateforme WhatsApp IA pour PME africaines. "
+                            "Réponds en français, sois professionnel et persuasif."
+                        ),
+                    )
+                    db_ag.add(new_agent)
+                    db_ag.commit()
+                    db_ag.refresh(new_agent)
+                    logger.info(f"✅ Bootstrap: NéoBot agent créé (id={new_agent.id})")
+                else:
+                    logger.warning("⚠ Bootstrap agent: tenant 1 introuvable")
+            else:
+                logger.info(f"✅ Bootstrap: agent tenant 1 OK (id={neobot_agent.id})")
+        except Exception as _age:
+            logger.warning(f"⚠ Bootstrap agent échoué: {_age}")
+            db_ag.rollback()
+        finally:
+            db_ag.close()
+
         # Initialiser les types de business
         from app.models import TenantBusinessConfig, BusinessTypeModel
         import json

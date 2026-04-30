@@ -315,12 +315,20 @@ class AgentService:
         quel que soit son flag is_active (protection contre les désactivations accidentelles).
         """
         if tenant_id == NEOBOT_TENANT_ID:
+            # Chercher d'abord par id=1 (historique), sinon n'importe quel agent actif du tenant
             agent = db.query(AgentTemplate).filter(
                 AgentTemplate.id == NEOBOT_AGENT_ID,
                 AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
             ).first()
+            if not agent:
+                # id=1 absent (DB réinitialisée) — trouver l'agent actif ou le premier disponible
+                agent = db.query(AgentTemplate).filter(
+                    AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
+                    AgentTemplate.is_active == True,
+                ).first() or db.query(AgentTemplate).filter(
+                    AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
+                ).first()
             if agent:
-                # S'assurer qu'il est toujours actif en DB
                 if not agent.is_active:
                     agent.is_active = True
                     db.commit()
