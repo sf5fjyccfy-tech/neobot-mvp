@@ -173,17 +173,25 @@ class WhatsAppQRService:
             raise RuntimeError("Service WhatsApp indisponible — veuillez réessayer")
 
         # Valider les données du service WhatsApp
-        qr_image_data = wa_data.get("qrImageDataUrl")
+        # Le service Node.js retourne "qr_image" (ancienne convention: "qrImageDataUrl")
+        qr_image_data = wa_data.get("qr_image") or wa_data.get("qrImageDataUrl")
         qr_raw = wa_data.get("qrRaw")
-        
-        # Si le service n'a pas encore généré l'image, on la génère nous-mêmes
+
+        # Si le service n'a pas encore généré l'image, on la génère depuis le raw
         if not qr_image_data and qr_raw:
             logger.debug(f"Generating QR image from qrRaw for tenant {tenant_id}")
             qr_image_data = _generate_qr_image_from_raw(qr_raw)
-        
+
         if not qr_image_data:
-            logger.warn(f"No QR data available for tenant {tenant_id} (qrImageDataUrl={bool(wa_data.get('qrImageDataUrl'))}, qrRaw={bool(wa_data.get('qrRaw'))})")
-            raise RuntimeError("Impossible de générer le QR — veuillez réessayer")
+            has_qr = wa_data.get("has_qr_code", False)
+            state = wa_data.get("status", "unknown")
+            logger.warning(
+                "No QR data for tenant %s (state=%s, has_qr=%s, keys=%s)",
+                tenant_id, state, has_qr, list(wa_data.keys())
+            )
+            if state in ("connected",):
+                raise RuntimeError("WhatsApp déjà connecté")
+            raise RuntimeError("QR en cours de génération — veuillez réessayer dans 3 secondes")
 
         # Sauvegarder en DB
         now = datetime.utcnow()
@@ -192,7 +200,7 @@ class WhatsAppQRService:
         session_qr = WhatsAppSessionQR(
             tenant_id=tenant_id,
             session_id=f"tenant_{tenant_id}_{now.timestamp()}",
-            qr_code_data=wa_data.get("qrImageDataUrl"),
+            qr_code_data=qr_image_data,
             status="pending",
             qr_generated_at=now,
             qr_expires_at=qr_expires,
