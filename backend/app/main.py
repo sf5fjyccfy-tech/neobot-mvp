@@ -165,6 +165,11 @@ async def _startup_tasks():
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_billing_date TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_billing_date TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN DEFAULT TRUE;",
+            # whatsapp_sessions : la migration SQL avait connection_status au lieu des colonnes du modèle
+            "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS is_connected BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_connected_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0;",
+            "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS baileys_session_file TEXT;",
         ]
         for sql in _migrations:
             try:
