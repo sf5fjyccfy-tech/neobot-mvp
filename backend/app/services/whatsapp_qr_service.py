@@ -254,7 +254,7 @@ class WhatsAppQRService:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
-                    f"{WHATSAPP_SERVICE_URL}/api/whatsapp/status",
+                    f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/status",
                     headers={"Accept": "application/json"}
                 )
                 response.raise_for_status()
@@ -270,7 +270,7 @@ class WhatsAppQRService:
 
         return {
             "status": wa_status.get("state", "disconnected"),
-            "phone": wa_status.get("connectedPhone"),
+            "phone": wa_status.get("phone"),
             "connected_since": wa_status.get("connectedAt"),
             "timestamp": datetime.utcnow().isoformat(),
         }

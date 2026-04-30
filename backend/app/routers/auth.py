@@ -14,7 +14,7 @@ import qrcode
 import logging
 
 from app.database import get_db
-from app.models import User, Tenant, PlanType, Subscription, AgentType, PLAN_LIMITS, LoginAttempt, RefreshToken
+from app.models import User, Tenant, PlanType, Subscription, AgentType, PLAN_LIMITS, LoginAttempt, RefreshToken, WhatsAppSession
 from app.services.auth_service import (
     authenticate_user,
     create_access_token,
@@ -298,6 +298,21 @@ async def register(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erreur lors de la création du compte. Veuillez réessayer.",
         )
+
+    # Créer la session WhatsApp — requise pour que mark-connected/mark-disconnected fonctionnent
+    # whatsapp_phone = placeholder unique; mis à jour par Baileys après connexion réussie
+    try:
+        wa_session = WhatsAppSession(
+            tenant_id=new_tenant.id,
+            whatsapp_phone=f"pending-{new_tenant.id}",
+            is_connected=False,
+            failed_attempts=0,
+        )
+        db.add(wa_session)
+        db.commit()
+    except Exception as _wa_err:
+        db.rollback()
+        logger.warning("WhatsAppSession non créée pour tenant %s: %s", new_tenant.id, _wa_err)
 
     # Créer le token JWT + refresh token
     access_token = create_access_token(

@@ -20,6 +20,8 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   Browsers,
 } from '@whiskeysockets/baileys';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state.js';
 import NodeCache from '@cacheable/node-cache';
 import QRCode from 'qrcode';
@@ -63,6 +65,18 @@ const WEBHOOK_SECRET =
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const DEFAULT_TENANT_ID = parseInt(process.env.TENANT_ID || '1', 10);
 const INTERNAL_API_KEY = (process.env.INTERNAL_API_KEY || '').trim();
+
+// Proxy — configure WS_PROXY_URL to route Baileys through a residential/mobile IP
+// Examples: socks5://user:pass@host:port  or  https://user:pass@host:port
+const WS_PROXY_URL = process.env.WS_PROXY_URL;
+const proxyAgent = WS_PROXY_URL
+  ? (WS_PROXY_URL.startsWith('socks')
+      ? new SocksProxyAgent(WS_PROXY_URL)
+      : new HttpsProxyAgent(WS_PROXY_URL))
+  : undefined;
+if (proxyAgent) {
+  console.log('[proxy] WebSocket proxy configured:', WS_PROXY_URL.replace(/:[^:@]+@/, ':***@'));
+}
 
 // Reconnection
 const MAX_RETRIES = 8;
@@ -403,6 +417,10 @@ async function onConnectionUpdate(session, update) {
     session.connected = false;
     session.initializing = false;
     session.state = 'disconnected';
+    // Clear stale QR immediately — user shouldn't scan a QR from a dead socket
+    session.qrRaw = null;
+    session.qr_image = null;
+    session.qrExpiresAt = null;
     const code = extractStatusCode(lastDisconnect);
     session.lastDisconnectCode = code;
     session.lastError = `connection closed (code=${code ?? 'unknown'})`;
@@ -549,7 +567,8 @@ async function connectTenant(tenantId, options = {}) {
       syncFullHistory: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 90_000,
-      keepAliveIntervalMs: 15_000,
+      keepAliveIntervalMs: 8_000,
+      ...(proxyAgent && { agent: proxyAgent, fetchAgent: proxyAgent }),
       defaultQueryTimeoutMs: 0,
       retryRequestDelayMs: 500,
       maxMsgRetryCount: 5,
