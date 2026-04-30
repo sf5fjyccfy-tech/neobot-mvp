@@ -75,18 +75,24 @@ def get_global_stats(
     db: Session = Depends(get_db),
     _: User = Depends(get_superadmin_user),
 ):
-    total_tenants = db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False).scalar()
-    active_tenants = db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False, Tenant.is_suspended == False).scalar()
-    suspended_count = db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False, Tenant.is_suspended == True).scalar()
-    wa_connected = db.query(func.count(WhatsAppSession.id)).filter(
-        WhatsAppSession.is_connected == True
-    ).scalar()
-    total_conversations = db.query(func.count(Conversation.id)).scalar()
-    total_agents = db.query(func.count(AgentTemplate.id)).scalar()
-    messages_total = db.query(func.sum(Tenant.messages_used)).filter(Tenant.is_deleted == False).scalar() or 0
+    # Utiliser datetime.utcnow() (naive) pour compatibilité avec TIMESTAMP sans timezone
+    week_ago = datetime.utcnow() - timedelta(days=7)
 
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    new_this_week = db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False, Tenant.created_at >= week_ago).scalar()
+    def _count(q):
+        try:
+            return q.scalar() or 0
+        except Exception:
+            db.rollback()
+            return 0
+
+    total_tenants    = _count(db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False))  # noqa: E712
+    active_tenants   = _count(db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False, Tenant.is_suspended == False))  # noqa: E712
+    suspended_count  = _count(db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False, Tenant.is_suspended == True))  # noqa: E712
+    wa_connected     = _count(db.query(func.count(WhatsAppSession.id)).filter(WhatsAppSession.is_connected == True))  # noqa: E712
+    total_conversations = _count(db.query(func.count(Conversation.id)))
+    total_agents     = _count(db.query(func.count(AgentTemplate.id)))
+    messages_total   = _count(db.query(func.sum(Tenant.messages_used)).filter(Tenant.is_deleted == False))  # noqa: E712
+    new_this_week    = _count(db.query(func.count(Tenant.id)).filter(Tenant.is_deleted == False, Tenant.created_at >= week_ago))  # noqa: E712
 
     return {
         "total_tenants": total_tenants,
@@ -149,7 +155,7 @@ def list_tenants(
         trial_ends_at = None
         trial_days_remaining = None
         if sub and sub.is_trial and sub.trial_end_date:
-            today = datetime.now(timezone.utc).date()
+            today = datetime.utcnow().date()  # naive — compatible avec TIMESTAMP sans timezone
             end_date = sub.trial_end_date.date() if hasattr(sub.trial_end_date, 'date') else sub.trial_end_date
             trial_ends_at = end_date.isoformat()
             trial_days_remaining = (end_date - today).days
@@ -209,7 +215,7 @@ def get_tenant_detail(
     trial_ends_at = None
     trial_days_remaining = None
     if sub and sub.is_trial and sub.trial_end_date:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.utcnow().date()
         end_date = sub.trial_end_date.date() if hasattr(sub.trial_end_date, 'date') else sub.trial_end_date
         trial_ends_at = end_date.isoformat()
         trial_days_remaining = (end_date - today).days
@@ -289,7 +295,7 @@ def suspend_tenant(
 
     tenant.is_suspended = True
     tenant.suspension_reason = body.reason or "Suspension administrative"
-    tenant.suspended_at = datetime.now(timezone.utc)
+    tenant.suspended_at = datetime.utcnow()
     db.commit()
     return {"status": "suspended", "tenant_id": tenant_id}
 
@@ -459,7 +465,7 @@ def soft_delete_tenant(
 
     tenant.is_deleted = True
     tenant.is_suspended = True  # coupe l'accès immédiatement
-    tenant.deleted_at = datetime.now(timezone.utc)
+    tenant.deleted_at = datetime.utcnow()
     tenant.suspension_reason = "Supprimé via panel admin"
     db.commit()
     return {"status": "deleted", "tenant_id": tenant_id, "tenant_name": tenant.name}
@@ -488,7 +494,7 @@ def bulk_delete_tenants(
         raise HTTPException(status_code=400, detail="Aucun tenant valide à supprimer (tenant fondateur et votre tenant sont protégés)")
 
     results = []
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     for tid in ids:
         tenant = db.query(Tenant).filter(Tenant.id == tid).first()
