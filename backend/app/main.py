@@ -170,6 +170,17 @@ async def _startup_tasks():
             "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS last_connected_at TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0;",
             "ALTER TABLE whatsapp_sessions ADD COLUMN IF NOT EXISTS baileys_session_file TEXT;",
+            # usage_tracking : créée par init_db mais peut manquer de colonnes
+            "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS whatsapp_messages_used INTEGER DEFAULT 0;",
+            "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS month_year VARCHAR(7);",
+            # agent_templates : colonnes ajoutées progressivement
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS response_delay VARCHAR(20) DEFAULT 'natural';",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS off_hours_message TEXT;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS availability_start VARCHAR(5);",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS availability_end VARCHAR(5);",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS custom_prompt_override TEXT;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS prompt_score INTEGER DEFAULT 0;",
         ]
         for sql in _migrations:
             try:

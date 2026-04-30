@@ -122,12 +122,16 @@ def list_tenants(
 
     tenants = q.order_by(Tenant.created_at.desc()).all()
 
-    # Bulk-query usage_tracking pour le mois courant — évite N+1
+    # Bulk-query usage_tracking — table peut ne pas exister sur DB fraîche
     current_month = datetime.now().strftime('%Y-%m')
-    usage_records = db.query(UsageTracking).filter(
-        UsageTracking.month_year == current_month
-    ).all()
-    usage_map = {u.tenant_id: u.whatsapp_messages_used for u in usage_records}
+    try:
+        usage_records = db.query(UsageTracking).filter(
+            UsageTracking.month_year == current_month
+        ).all()
+        usage_map = {u.tenant_id: u.whatsapp_messages_used for u in usage_records}
+    except Exception:
+        db.rollback()
+        usage_map = {}
 
     result = []
     for t in tenants:
