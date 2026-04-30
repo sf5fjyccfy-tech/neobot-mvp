@@ -251,23 +251,25 @@ async def mark_whatsapp_connected(
     session = db.query(WhatsAppSession).filter(
         WhatsAppSession.tenant_id == tenant_id
     ).first()
-    
+
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session WhatsApp non trouvée"
+        # Auto-créer la session si absente (tenants créés avant cette fonctionnalité)
+        session = WhatsAppSession(
+            tenant_id=tenant_id,
+            whatsapp_phone=body.phone or f"pending-{tenant_id}",
         )
-    
+        db.add(session)
+
     session.is_connected = True
     session.last_connected_at = datetime.utcnow()
     session.failed_attempts = 0
     # Mettre à jour le numéro si Baileys le fournit (vrai JID extrait des creds)
     if body.phone and body.phone.strip():
         session.whatsapp_phone = body.phone.strip()
-    
+
     db.commit()
     db.refresh(session)
-    
+
     logger.info(f"✅ WhatsApp session marked as connected for tenant {tenant_id}: {session.whatsapp_phone}")
     
     return {
@@ -289,18 +291,22 @@ async def mark_whatsapp_disconnected(
     session = db.query(WhatsAppSession).filter(
         WhatsAppSession.tenant_id == tenant_id
     ).first()
-    
+
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session WhatsApp non trouvée"
+        # Auto-créer la session si absente (tenants créés avant cette fonctionnalité)
+        session = WhatsAppSession(
+            tenant_id=tenant_id,
+            whatsapp_phone=f"pending-{tenant_id}",
         )
-    
-    session.is_connected = False
-    session.failed_attempts += 1
-    
+        db.add(session)
+        session.is_connected = False
+        session.failed_attempts = 1
+    else:
+        session.is_connected = False
+        session.failed_attempts += 1
+
     db.commit()
-    
+
     logger.warning(f"⚠️  WhatsApp session disconnected for tenant {tenant_id}")
     
     return {

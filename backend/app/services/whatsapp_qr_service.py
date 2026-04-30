@@ -137,26 +137,12 @@ class WhatsAppQRService:
                 return result
 
         # Pas de QR valide en cache → appeler le service WhatsApp
-        # IMPORTANT: D'abord appeler /connect pour initialiser la session si nécessaire
-        # Ensuite, récupérer le QR code
+        # Stratégie: d'abord GET /qr pour voir si un QR existe déjà.
+        # POST /connect uniquement si le service n'a pas encore de socket actif.
+        # Appeler /connect quand un QR est déjà prêt tuerait le socket (code:null storm).
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                # 1. POST /connect pour initialiser si pas encore fait
-                logger.debug(f"Initializing session for tenant {tenant_id}...")
-                try:
-                    connect_resp = await client.post(
-                        f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/connect",
-                        json={},
-                        timeout=10.0
-                    )
-                    # Ne pas raise ici — le service peut être en train de générer le QR
-                    logger.debug(f"Connect response: {connect_resp.status_code}")
-                except httpx.TimeoutException:
-                    logger.debug(f"Connect request timed out (service generating QR)")
-                except httpx.HTTPError as e:
-                    logger.debug(f"Connect request error: {e}")
-                
-                # 2. GET QR — le service doit maintenant l'avoir généré
+                # 1. GET QR d'abord — évite de tuer un socket actif
                 logger.debug(f"Fetching QR for tenant {tenant_id}...")
                 response = await client.get(
                     f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/qr",
@@ -165,6 +151,32 @@ class WhatsAppQRService:
                 )
                 response.raise_for_status()
                 wa_data = response.json()
+
+                # 2. POST /connect seulement si pas de QR ni de connexion
+                if not wa_data.get("qr_image") and not wa_data.get("connected"):
+                    logger.debug(f"No active QR — triggering connect for tenant {tenant_id}...")
+                    try:
+                        connect_resp = await client.post(
+                            f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/connect",
+                            json={},
+                            timeout=10.0
+                        )
+                        logger.debug(f"Connect response: {connect_resp.status_code}")
+                    except httpx.TimeoutException:
+                        logger.debug(f"Connect request timed out (service generating QR)")
+                    except httpx.HTTPError as e:
+                        logger.debug(f"Connect request error: {e}")
+                    # Re-fetch QR après le connect (le socket a besoin ~300ms pour générer le QR)
+                    try:
+                        response2 = await client.get(
+                            f"{WHATSAPP_SERVICE_URL}/api/whatsapp/tenants/{tenant_id}/qr",
+                            headers={"Accept": "application/json"},
+                            timeout=15.0
+                        )
+                        if response2.status_code == 200:
+                            wa_data = response2.json()
+                    except Exception:
+                        pass  # Garder wa_data du premier GET si le second échoue
         except httpx.TimeoutException:
             logger.error(f"WhatsApp service timeout for tenant {tenant_id}")
             raise RuntimeError("WhatsApp service timeout — veuillez réessayer")
@@ -195,7 +207,7 @@ class WhatsAppQRService:
 
         # Sauvegarder en DB
         now = datetime.utcnow()
-        qr_expires = now + timedelta(seconds=15)  # Baileys rotate les QR ~15s
+        qr_expires = now + timedelta(seconds=60)  # Node.js QR_TTL_MS = 60s
         
         session_qr = WhatsAppSessionQR(
             tenant_id=tenant_id,

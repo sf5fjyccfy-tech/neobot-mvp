@@ -532,10 +532,17 @@ function scheduleReconnect(session, reason) {
 
 // ── Connect tenant ────────────────────────────────────────────────────────────
 async function connectTenant(tenantId, options = {}) {
-  const { reason = 'manual' } = options;
+  const { reason = 'manual', force = false } = options;
   const session = getTenantSession(tenantId);
 
   if (session.initializing) return session.snapshot();
+
+  // Don't kill an active socket (has QR ready or connected) unless explicitly forced.
+  // The Python backend calls /connect on every QR poll — without this guard,
+  // it would destroy the socket every 15s and cause rapid code:null disconnects.
+  if (!force && session.socket && (session.connected || session.state === 'waiting_qr')) {
+    return session.snapshot();
+  }
 
   await stopSocket(session);
   ensureDir(ROOT_AUTH_DIR);
@@ -904,9 +911,11 @@ app.post('/api/whatsapp/tenants/:id/connect', async (req, res) => {
   const tenantId = parseInt(req.params.id, 10);
   if (!tenantId || tenantId <= 0) return res.status(400).json({ error: 'Invalid tenantId' });
   try {
-    getTenantSession(tenantId).autoConnectEnabled = true;
-    const state = await connectTenant(tenantId, { reason: 'api-connect' });
-    res.json({ status: 'initializing', state });
+    const session = getTenantSession(tenantId);
+    session.autoConnectEnabled = true;
+    const force = req.body?.force === true;
+    const state = await connectTenant(tenantId, { reason: 'api-connect', force });
+    res.json({ status: session.connected ? 'connected' : 'initializing', state });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
