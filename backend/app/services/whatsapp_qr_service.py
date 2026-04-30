@@ -184,6 +184,22 @@ class WhatsAppQRService:
             logger.error(f"WhatsApp service error for tenant {tenant_id}: {e}")
             raise RuntimeError("Service WhatsApp indisponible — veuillez réessayer")
 
+        # Si WhatsApp est déjà connecté, retourner le statut connecté directement
+        if wa_data.get("connected") or wa_data.get("status") == "connected":
+            result = {
+                "tenant_id": tenant_id,
+                "status": "connected",
+                "qr_code": None,
+                "expires_in": None,
+                "message": "WhatsApp connecté",
+                "phone": wa_data.get("phone"),
+                "connected": True,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            _qr_response_cache[tenant_id] = (result, datetime.utcnow())
+            logger.info(f"✅ WhatsApp already connected for tenant {tenant_id}: {wa_data.get('phone')}")
+            return result
+
         # Valider les données du service WhatsApp
         # Le service Node.js retourne "qr_image" (ancienne convention: "qrImageDataUrl")
         qr_image_data = wa_data.get("qr_image") or wa_data.get("qrImageDataUrl")
@@ -201,8 +217,6 @@ class WhatsAppQRService:
                 "No QR data for tenant %s (state=%s, has_qr=%s, keys=%s)",
                 tenant_id, state, has_qr, list(wa_data.keys())
             )
-            if state in ("connected",):
-                raise RuntimeError("WhatsApp déjà connecté")
             raise RuntimeError("QR en cours de génération — veuillez réessayer dans 3 secondes")
 
         # Sauvegarder en DB
