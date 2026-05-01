@@ -455,6 +455,100 @@ def renew_subscription(
     }
 
 
+class ActivateSubscriptionRequest(BaseModel):
+    days: int = 30
+    plan: Optional[str] = None  # Si fourni, change aussi le plan
+
+
+@router.post("/tenants/{tenant_id}/activate-subscription")
+def activate_subscription(
+    tenant_id: int,
+    body: ActivateSubscriptionRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """Active manuellement l'abonnement d'un tenant (paiement confirmé par admin)."""
+    from datetime import datetime, timedelta
+    from app.models import Subscription
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+
+    now = datetime.utcnow()
+    expires = now + timedelta(days=body.days)
+
+    # Mettre à jour le tenant
+    tenant.is_trial = False
+    tenant.subscription_expires_at = expires
+    if body.plan:
+        try:
+            tenant.plan = PlanType(body.plan)
+            plan_config = PLAN_LIMITS.get(tenant.plan, {})
+            if plan_config.get("whatsapp_messages", 0) > 0:
+                tenant.messages_limit = plan_config["whatsapp_messages"]
+        except ValueError:
+            pass
+
+    # Mettre à jour ou créer la Subscription
+    sub = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).first()
+    if sub:
+        sub.is_trial = False
+        sub.status = "active"
+        sub.subscription_start_date = now
+        sub.subscription_end_date = expires
+        sub.next_billing_date = expires
+        if body.plan:
+            sub.plan = body.plan
+    else:
+        sub = Subscription(
+            tenant_id=tenant_id,
+            plan=body.plan or tenant.plan.value,
+            status="active",
+            is_trial=False,
+            trial_start_date=now,
+            trial_end_date=now,
+            subscription_start_date=now,
+            subscription_end_date=expires,
+        )
+        db.add(sub)
+
+    db.commit()
+    return {
+        "status": "activated",
+        "tenant_id": tenant_id,
+        "subscription_expires_at": expires.isoformat(),
+        "days": body.days,
+    }
+
+
+@router.post("/tenants/{tenant_id}/cancel-subscription")
+def cancel_subscription(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """Résilie l'abonnement d'un tenant (annulation ou non-renouvellement)."""
+    from datetime import datetime
+    from app.models import Subscription
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+
+    now = datetime.utcnow()
+    tenant.subscription_expires_at = now  # Expire immédiatement
+
+    sub = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).first()
+    if sub:
+        sub.status = "cancelled"
+        sub.cancelled_at = now
+        sub.auto_renew = False
+
+    db.commit()
+    return {"status": "cancelled", "tenant_id": tenant_id}
+
+
 # ======================== GESTION AGENTS ========================
 
 @router.patch("/agents/{agent_id}")

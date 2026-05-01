@@ -8,12 +8,48 @@ import { Skeleton } from '@/components/ui/Skeleton';
 const TEST_CREDITS_PER_SESSION = 20;
 
 const AGENT_TYPES = [
-  { value: 'libre',         label: 'Mode Libre',          icon: '✏️',  desc: 'Vous définissez tout' },
-  { value: 'rdv',           label: 'Agent RDV',           icon: '📅',  desc: 'Planification RDV' },
-  { value: 'support',       label: 'Agent Support',       icon: '🎧',  desc: 'Support client' },
-  { value: 'faq',           label: 'Agent FAQ',           icon: '❓',  desc: 'Questions / Réponses' },
-  { value: 'vente',         label: 'Agent Vente',         icon: '🔥',  desc: 'Closeur commercial' },
-  { value: 'qualification', label: 'Agent Qualification', icon: '🎯',  desc: 'Qualification prospects' },
+  {
+    value: 'vente',
+    label: 'Agent Vente',
+    icon: '🔥',
+    desc: 'Présente vos produits, répond aux objections et guide le client vers l\'achat. Idéal pour boutiques, e-commerce et tout business qui vend.',
+    best_for: 'Boutiques · E-commerce · Services',
+  },
+  {
+    value: 'rdv',
+    label: 'Agent RDV',
+    icon: '📅',
+    desc: 'Collecte les infos du client et fixe des rendez-vous selon vos disponibilités. Idéal pour cliniques, salons, coachs et prestataires de services.',
+    best_for: 'Santé · Beauté · Consulting · Fitness',
+  },
+  {
+    value: 'support',
+    label: 'Agent Support',
+    icon: '🎧',
+    desc: 'Répond aux problèmes et réclamations clients, suit les commandes et escalade les cas complexes à un humain. Idéal pour SAV et après-vente.',
+    best_for: 'SAV · Suivi commandes · Réclamations',
+  },
+  {
+    value: 'faq',
+    label: 'Agent FAQ',
+    icon: '❓',
+    desc: 'Répond instantanément aux questions fréquentes sur vos horaires, tarifs, produits et services. Réduit les appels entrants inutiles.',
+    best_for: 'Toutes entreprises · Info produits · Tarifs',
+  },
+  {
+    value: 'qualification',
+    label: 'Agent Qualification',
+    icon: '🎯',
+    desc: 'Pose des questions ciblées pour identifier les bons prospects et filtrer les curieux. Transmet les leads qualifiés à votre équipe commerciale.',
+    best_for: 'Immobilier · B2B · Consulting · Assurance',
+  },
+  {
+    value: 'libre',
+    label: 'Mode Libre',
+    icon: '✏️',
+    desc: 'Vous rédigez vous-même les instructions de l\'agent. Pour les cas sur-mesure ou si aucun des types ci-dessus ne correspond à votre activité.',
+    best_for: 'Usage avancé · Cas spécifiques',
+  },
 ];
 
 // Mapping secteur d'activité → type d'agent recommandé
@@ -1315,7 +1351,7 @@ export default function AgentPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-2 uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Type d&apos;agent</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   {AGENT_TYPES.map(t => {
                     const sel = createForm.agent_type === t.value;
                     return (
@@ -1323,16 +1359,20 @@ export default function AgentPage() {
                         key={t.value}
                         type="button"
                         onClick={() => setCreateForm(p => ({ ...p, agent_type: t.value }))}
-                        className="flex items-center gap-2.5 p-3 rounded-xl text-left transition-all"
+                        className="flex items-start gap-3 p-3 rounded-xl text-left transition-all"
                         style={{
                           background: sel ? 'rgba(255,77,0,0.08)' : 'rgba(255,255,255,0.03)',
                           border:     sel ? '1px solid rgba(255,77,0,0.4)' : '1px solid rgba(255,255,255,0.07)',
                         }}
                       >
-                        <span className="text-xl">{t.icon}</span>
-                        <div>
-                          <p className="text-sm font-semibold text-white leading-tight">{t.label}</p>
-                          <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.3)' }}>{t.desc}</p>
+                        <span className="text-2xl mt-0.5 flex-shrink-0">{t.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-bold text-white leading-tight">{t.label}</p>
+                            {sel && <span style={{ fontSize: 9, color: '#FF4D00', background: 'rgba(255,77,0,0.15)', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>SÉLECTIONNÉ</span>}
+                          </div>
+                          <p className="text-xs mt-1 leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>{t.desc}</p>
+                          <p className="text-[10px] mt-1 font-semibold" style={{ color: 'rgba(255,255,255,0.25)' }}>📌 {t.best_for}</p>
                         </div>
                       </button>
                     );

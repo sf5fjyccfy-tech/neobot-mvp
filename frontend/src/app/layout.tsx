@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Syne, DM_Sans } from 'next/font/google';
 import './globals.css';
 import GalaxyCanvas from '@/components/ui/GalaxyCanvas';
@@ -19,6 +19,12 @@ const dmSans = DM_Sans({
 });
 
 // VERSION_MARKER: 929b345 — modifié le 8 avril 2026
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://neobot-ai.com'),
   title: 'NéoBot — Assistant IA WhatsApp pour les entreprises africaines',

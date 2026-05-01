@@ -571,7 +571,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Getting started */}
+          {/* Getting started — masqué pour le superadmin */}
+          {!isSuperadminDash && (
           <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24 }}>
             <h2 style={{
               fontFamily: '"Syne", sans-serif',
@@ -621,38 +622,39 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Plan badge — masqué pour le superadmin */}
-            {!isSuperadminDash && (
-              <div style={{
-                marginTop: 20,
-                padding: '14px 16px',
-                background: `${NEON}08`,
-                border: `1px solid ${NEON}30`,
-                borderRadius: 10,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ color: isTrial ? '#E67F00' : NEON, fontSize: 12, fontWeight: 700 }}>
-                    {isTrial ? `Essai gratuit${trialDaysLeft !== null ? ` · ${trialDaysLeft}j` : ''}` : 'Plan Essential'}
-                  </span>
-                  <Link href={isTrial ? '/pricing' : '/billing'} style={{ textDecoration: 'none' }}>
-                    <span style={{ color: MUTED, fontSize: 11 }}>{isTrial ? 'Activer →' : 'Gérer →'}</span>
-                  </Link>
-                </div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  {['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload'].map((feat, i) => (
-                    <span key={i} style={{
-                      fontSize: 11,
-                      color: TEXT,
-                      background: `${NEON}10`,
-                      border: `1px solid ${NEON}20`,
-                      padding: '2px 8px',
-                      borderRadius: 6,
-                    }}>✓ {feat}</span>
-                  ))}
-                </div>
+            {/* Plan badge */}
+            <div style={{
+              marginTop: 20,
+              padding: '14px 16px',
+              background: isTrial ? 'rgba(230,127,0,0.06)' : `${NEON}08`,
+              border: `1px solid ${isTrial ? 'rgba(230,127,0,0.25)' : `${NEON}30`}`,
+              borderRadius: 10,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ color: isTrial ? '#E67F00' : NEON, fontSize: 12, fontWeight: 700 }}>
+                  {isTrial
+                    ? `⏳ Essai gratuit${trialDaysLeft !== null ? ` · ${trialDaysLeft}j restants` : ''}`
+                    : `Plan ${planLabel ?? 'Essential'}`}
+                </span>
+                <Link href={isTrial ? '/pricing' : '/billing'} style={{ textDecoration: 'none' }}>
+                  <span style={{ color: MUTED, fontSize: 11 }}>{isTrial ? 'Activer →' : 'Gérer →'}</span>
+                </Link>
               </div>
-            )}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload'].map((feat, i) => (
+                  <span key={i} style={{
+                    fontSize: 11,
+                    color: TEXT,
+                    background: isTrial ? 'rgba(230,127,0,0.08)' : `${NEON}10`,
+                    border: `1px solid ${isTrial ? 'rgba(230,127,0,0.2)' : `${NEON}20`}`,
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                  }}>✓ {feat}</span>
+                ))}
+              </div>
+            </div>
           </div>
+          )}
         </div>
 
         {/* Bottom activity feed — affiché uniquement quand il y a des données */}

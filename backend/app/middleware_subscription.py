@@ -13,7 +13,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Routes qui ne nécessitent PAS de subscription active
 PUBLIC_PREFIXES = (
     "/health",
     "/api/health",
@@ -23,13 +22,9 @@ PUBLIC_PREFIXES = (
     "/api/auth/refresh",
     "/docs",
     "/redoc",
-    "/webhook/",       # webhooks entrants (Baileys, Korapay)
+    "/webhook/",
 )
 
-# Routes protégées par la subscription.
-# Toutes les routes métier listées ici — un tenant expiré sera bloqué à 402.
-# NB : les routes admin (/api/admin/*) sont à ajouter uniquement si les superadmins
-# peuvent avoir une subscription (actuellement ils bypassent via _is_superadmin).
 SUBSCRIPTION_REQUIRED_PREFIXES = (
     "/api/tenants/",
     "/api/analytics/",
@@ -38,7 +33,7 @@ SUBSCRIPTION_REQUIRED_PREFIXES = (
     "/api/contacts/",
     "/api/messages/",
     "/api/whatsapp/",
-    "/api/neopay/payment-links",  # Création liens paiement — pas les webhooks
+    "/api/neopay/payment-links",
 )
 
 
@@ -46,104 +41,92 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
     """
     Middleware léger : extrait tenant_id depuis JWT, vérifie subscription en DB.
     Si trial expiré ou subscription inactive → 402 Payment Required.
-    Ne bloque jamais en cas d'erreur inattendue (let endpoint handle it).
+    En cas d'erreur inattendue → fail-open (laisser passer, l'endpoint gère).
     """
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # Bypass sur les routes publiques
         if any(path.startswith(p) for p in PUBLIC_PREFIXES):
             return await call_next(request)
 
-        # Bypass si la route n'est pas dans le périmètre subscription
         if not any(path.startswith(p) for p in SUBSCRIPTION_REQUIRED_PREFIXES):
             return await call_next(request)
 
-        # Extraire le tenant_id depuis le JWT
         auth_header = request.headers.get("authorization", "")
         if not auth_header.startswith("Bearer "):
-            return await call_next(request)  # Pas de token → 401 géré par l'endpoint
+            return await call_next(request)
 
         token = auth_header[7:]
         tenant_id = self._extract_tenant_id(token)
         if tenant_id is None:
-            return await call_next(request)  # Token invalide → 401 géré par l'endpoint
+            return await call_next(request)
 
-        # Vérifier la subscription — requête sync directe (session non-async)
+        # Fast-path : tenant 1 (NéoBot admin) bypass toujours
+        if tenant_id == 1:
+            return await call_next(request)
+
+        # Vérifier subscription — toujours fail-open en cas d'erreur
+        block_reason: str | None = None
+        trial_warning: str | None = None
+
         try:
             from app.database import SessionLocal
-            from app.models import Subscription
+            from app.models import Subscription, User
 
             db = SessionLocal()
             try:
-                # Superadmin bypass : aucune limitation d'abonnement
-                if self._is_superadmin(token, db):
+                # Superadmin bypass
+                is_sa = self._is_superadmin_db(token, db)
+                if is_sa:
                     return await call_next(request)
 
                 sub = db.execute(
-                    select(Subscription).where(
-                        Subscription.tenant_id == tenant_id
-                    )
+                    select(Subscription).where(Subscription.tenant_id == tenant_id)
                 ).scalar_one_or_none()
+
+                if sub is None:
+                    block_reason = "Aucun abonnement actif. Veuillez activer votre compte."
+                else:
+                    is_active = sub.status == "active"
+                    if sub.is_trial and sub.trial_end_date:
+                        today = datetime.now().date()
+                        trial_end = sub.trial_end_date
+                        if hasattr(trial_end, 'date'):
+                            trial_end = trial_end.date()
+                        elif isinstance(trial_end, str):
+                            trial_end = datetime.fromisoformat(trial_end).date()
+                        if today > trial_end:
+                            is_active = False
+                        elif is_active:
+                            days_left = (trial_end - today).days
+                            if 0 < days_left <= 7:
+                                trial_warning = f"Trial expire dans {days_left} jour(s)"
+
+                    if not is_active:
+                        block_reason = "Votre période d'essai est expirée ou votre abonnement est inactif."
             finally:
                 db.close()
 
-            if sub is None:
-                # Pas d'abonnement → bloquer
-                return JSONResponse(
-                    status_code=402,
-                    content={"detail": "Aucun abonnement actif. Veuillez activer votre compte."},
-                )
-
-            is_active = sub.status == "active"
-            if sub.is_trial and sub.trial_end_date:
-                today = datetime.now().date()
-                trial_end = sub.trial_end_date
-                if hasattr(trial_end, 'date'):
-                    trial_end = trial_end.date()
-                elif isinstance(trial_end, str):
-                    trial_end = datetime.fromisoformat(trial_end).date()
-                if today > trial_end:
-                    is_active = False
-
-            if not is_active:
-                return JSONResponse(
-                    status_code=402,
-                    content={"detail": "Votre période d'essai est expirée ou votre abonnement est inactif. Veuillez upgrader."},
-                )
-
-            # Avertissement trial bientôt expiré (header non bloquant)
-            if sub.is_trial and sub.trial_end_date:
-                today = datetime.now().date()
-                trial_end = sub.trial_end_date
-                if hasattr(trial_end, 'date'):
-                    trial_end = trial_end.date()
-                elif isinstance(trial_end, str):
-                    trial_end = datetime.fromisoformat(trial_end).date()
-                days_left = (trial_end - today).days
-                if 0 < days_left <= 7:
-                    request.state.trial_warning = f"Trial expire dans {days_left} jour(s)"
-
         except Exception as e:
-            logger.error(f"SubscriptionMiddleware erreur critique: {e}")
-            # Fail-secure : si la DB est down pendant la vérification d'abonnement,
-            # on retourne 503 plutôt que de laisser passer (fail-open serait dangereux)
+            # Fail-open : en cas d'erreur DB transitoire, laisser passer
+            # L'endpoint gérera ses propres erreurs DB
+            logger.warning(f"SubscriptionMiddleware: erreur non-critique, fail-open: {e}")
+            return await call_next(request)
+
+        if block_reason:
             return JSONResponse(
-                status_code=503,
-                content={"detail": "Service temporairement indisponible. Veuillez réessayer dans quelques instants."},
+                status_code=402,
+                content={"detail": block_reason},
             )
 
         response = await call_next(request)
-
-        if hasattr(request.state, "trial_warning"):
-            response.headers["X-Trial-Warning"] = request.state.trial_warning
-
+        if trial_warning:
+            response.headers["X-Trial-Warning"] = trial_warning
         return response
 
     @staticmethod
     def _extract_tenant_id(token: str) -> int | None:
-        """Décode le JWT et retourne le tenant_id, ou None si invalide."""
         try:
             from app.services.auth_service import decode_access_token
             payload = decode_access_token(token)
@@ -154,8 +137,7 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
         return None
 
     @staticmethod
-    def _is_superadmin(token: str, db_session) -> bool:
-        """Vérifie si le token appartient à un superadmin — requiert une session DB ouverte."""
+    def _is_superadmin_db(token: str, db_session) -> bool:
         try:
             from app.services.auth_service import decode_access_token
             from app.models import User
