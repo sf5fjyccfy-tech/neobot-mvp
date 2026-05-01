@@ -611,7 +611,7 @@ async def send_internal_alert(subject: str, body: str) -> bool:
     Alerte technique interne (crédits API, paiements, incidents).
     Envoyé à NEOPAY_ALERT_EMAIL. Design minimaliste fonctionnel.
     """
-    alert_email = os.getenv("NEOPAY_ALERT_EMAIL", "")
+    alert_email = os.getenv("NEOPAY_ALERT_EMAIL", "neobot561@gmail.com")
     if not alert_email:
         logger.warning("NEOPAY_ALERT_EMAIL non défini — alerte ignorée : %s", subject)
         return False
