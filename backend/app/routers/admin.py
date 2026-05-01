@@ -392,6 +392,69 @@ def reset_messages_counter(
     return {"status": "reset", "tenant_id": tenant_id}
 
 
+class AddMessagesRequest(BaseModel):
+    amount: int  # Messages bonus à ajouter à la limite
+
+
+@router.post("/tenants/{tenant_id}/add-messages")
+def add_bonus_messages(
+    tenant_id: int,
+    body: AddMessagesRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """Ajoute N messages à la limite du tenant (pour paiement confirmé)."""
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Le montant doit être positif")
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+    current_limit = tenant.messages_limit or 0
+    if current_limit == -1:
+        return {"status": "unlimited", "messages_limit": -1}
+    tenant.messages_limit = current_limit + body.amount
+    db.commit()
+    return {
+        "status": "added",
+        "added": body.amount,
+        "messages_limit": tenant.messages_limit,
+    }
+
+
+class RenewSubscriptionRequest(BaseModel):
+    days: int = 30  # Durée du renouvellement
+
+
+@router.post("/tenants/{tenant_id}/renew-subscription")
+def renew_subscription(
+    tenant_id: int,
+    body: RenewSubscriptionRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """Renouvelle l'abonnement du tenant de N jours à partir d'aujourd'hui (ou de l'expiration existante)."""
+    if body.days <= 0:
+        raise HTTPException(status_code=400, detail="La durée doit être positive")
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    # Partir de l'expiration existante si elle est dans le futur, sinon partir d'aujourd'hui
+    base = tenant.subscription_expires_at if (tenant.subscription_expires_at and tenant.subscription_expires_at > now) else now
+    tenant.subscription_expires_at = base + timedelta(days=body.days)
+    # Réinitialiser le trial si applicable
+    if tenant.is_trial:
+        tenant.is_trial = False
+    db.commit()
+    return {
+        "status": "renewed",
+        "subscription_expires_at": tenant.subscription_expires_at.isoformat(),
+        "days_added": body.days,
+    }
+
+
 # ======================== GESTION AGENTS ========================
 
 @router.patch("/agents/{agent_id}")

@@ -720,6 +720,8 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
 }) {
   const [newPlan, setNewPlan] = useState(detail.plan);
   const [newLimit, setNewLimit] = useState(String(detail.messages_limit));
+  const [bonusMessages, setBonusMessages] = useState('500');
+  const [renewDays, setRenewDays] = useState('30');
   const [suspendReason, setSuspendReason] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
@@ -829,26 +831,65 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
       </div>
 
       {/* Plan */}
-      <div className="bg-[#0D0D1A] rounded-xl p-5 border border-[#1A1A2E]">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3">Plan & Limites messages</h3>
-        <div className="flex gap-2 flex-wrap">
-          <select aria-label="Plan" value={newPlan} onChange={e => setNewPlan(e.target.value)}
-            className="flex-1 min-w-32 bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-yellow-500/50">
-            <option value="BASIC">Essential (BASIC)</option>
-            <option value="STANDARD">Standard</option>
-            <option value="PRO">Pro</option>
-            <option value="NEOBOT">NéoBot (illimité)</option>
-          </select>
-          <input type="number" value={newLimit} onChange={e => setNewLimit(e.target.value)}
-            placeholder="Msgs limite"
-            className="w-28 bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-yellow-500/50" />
-          <button onClick={() => onAction(`/api/admin/tenants/${detail.id}/plan`, 'PATCH', { plan: newPlan, messages_limit: parseInt(newLimit) || undefined })}
-            className="bg-yellow-600 hover:bg-yellow-500 text-black text-sm font-semibold px-4 py-2 rounded-lg transition">
-            Appliquer
-          </button>
+      <div className="bg-[#0D0D1A] rounded-xl p-5 border border-[#1A1A2E] space-y-4">
+        <h3 className="text-sm font-semibold text-gray-300">Plan & Abonnement</h3>
+
+        {/* Changer le plan */}
+        <div>
+          <p className="text-xs text-gray-500 mb-1.5">Changer le plan</p>
+          <div className="flex gap-2 flex-wrap">
+            <select aria-label="Plan" value={newPlan} onChange={e => setNewPlan(e.target.value)}
+              className="flex-1 min-w-32 bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-yellow-500/50">
+              <option value="BASIC">Essential (BASIC)</option>
+              <option value="STANDARD">Standard</option>
+              <option value="PRO">Pro</option>
+              <option value="NEOBOT">NéoBot (illimité)</option>
+            </select>
+            <input type="number" value={newLimit} onChange={e => setNewLimit(e.target.value)}
+              placeholder="Msgs limite"
+              className="w-28 bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-yellow-500/50" />
+            <button onClick={() => onAction(`/api/admin/tenants/${detail.id}/plan`, 'PATCH', { plan: newPlan, messages_limit: parseInt(newLimit) || undefined })}
+              className="bg-yellow-600 hover:bg-yellow-500 text-black text-sm font-semibold px-4 py-2 rounded-lg transition">
+              Appliquer
+            </button>
+          </div>
         </div>
+
+        {/* Ajouter des messages bonus */}
+        <div>
+          <p className="text-xs text-gray-500 mb-1.5">Ajouter des messages (paiement confirmé)</p>
+          <div className="flex gap-2">
+            <input type="number" value={bonusMessages} onChange={e => setBonusMessages(e.target.value)}
+              min={1} placeholder="500"
+              className="w-24 bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50" />
+            <button onClick={() => onAction(`/api/admin/tenants/${detail.id}/add-messages`, 'POST', { amount: parseInt(bonusMessages) || 500 })}
+              className="bg-green-700 hover:bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+              + Ajouter
+            </button>
+          </div>
+        </div>
+
+        {/* Renouveler abonnement */}
+        <div>
+          <p className="text-xs text-gray-500 mb-1.5">Renouveler l&apos;abonnement</p>
+          <div className="flex gap-2">
+            <select value={renewDays} onChange={e => setRenewDays(e.target.value)}
+              className="bg-[#0A0A18] border border-[#1A1A2E] rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-blue-500/50">
+              <option value="7">7 jours</option>
+              <option value="30">30 jours</option>
+              <option value="60">60 jours</option>
+              <option value="90">90 jours</option>
+              <option value="365">1 an</option>
+            </select>
+            <button onClick={() => onAction(`/api/admin/tenants/${detail.id}/renew-subscription`, 'POST', { days: parseInt(renewDays) })}
+              className="bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+              Renouveler
+            </button>
+          </div>
+        </div>
+
         <button onClick={() => onAction(`/api/admin/tenants/${detail.id}/reset-messages`)}
-          className="mt-2 text-xs text-gray-600 hover:text-orange-400 transition">
+          className="text-xs text-gray-600 hover:text-orange-400 transition">
           Remettre le compteur de messages à 0
         </button>
       </div>
