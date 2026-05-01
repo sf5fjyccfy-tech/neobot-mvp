@@ -140,7 +140,10 @@ def list_tenants(
             (Tenant.name.ilike(f"%{search}%")) | (Tenant.email.ilike(f"%{search}%"))
         )
     if plan:
-        q = q.filter(Tenant.plan == plan)
+        try:
+            q = q.filter(Tenant.plan == PlanType(plan.upper()))
+        except ValueError:
+            pass  # filtre ignoré si valeur invalide
     if suspended is not None:
         q = q.filter(Tenant.is_suspended == suspended)
 
@@ -360,20 +363,25 @@ def change_tenant_plan(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant non trouvé")
 
-    plan_config = PLAN_LIMITS.get(body.plan, {})
-    tenant.plan = body.plan
-    if body.messages_limit is not None:
-        tenant.messages_limit = body.messages_limit
-    elif plan_config.get("whatsapp_messages") and plan_config["whatsapp_messages"] > 0:
-        tenant.messages_limit = plan_config["whatsapp_messages"]
+    try:
+        plan_config = PLAN_LIMITS.get(body.plan, {})
+        tenant.plan = body.plan
+        if body.messages_limit is not None:
+            tenant.messages_limit = body.messages_limit
+        elif plan_config.get("whatsapp_messages") and plan_config["whatsapp_messages"] > 0:
+            tenant.messages_limit = plan_config["whatsapp_messages"]
 
-    db.commit()
-    return {
-        "status": "updated",
-        "tenant_id": tenant_id,
-        "plan": body.plan.value,
-        "messages_limit": tenant.messages_limit,
-    }
+        db.commit()
+        return {
+            "status": "updated",
+            "tenant_id": tenant_id,
+            "plan": body.plan.value,
+            "messages_limit": tenant.messages_limit,
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"change_tenant_plan error tenant={tenant_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.patch("/tenants/{tenant_id}/messages-limit")
