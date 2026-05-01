@@ -173,9 +173,16 @@ async def _startup_tasks():
             # usage_tracking : créée par init_db mais peut manquer de colonnes
             "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS whatsapp_messages_used INTEGER DEFAULT 0;",
             "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS month_year VARCHAR(7);",
-            # agent_templates : convertir agent_type en VARCHAR pour éviter les blocages enum PostgreSQL
-            "ALTER TABLE agent_templates ALTER COLUMN agent_type TYPE VARCHAR(50) USING agent_type::text;",
-            # agent_templates : colonnes ajoutées progressivement
+            # agent_templates : la DB a d'anciens noms de colonnes (type→agent_type, prompt_template→system_prompt)
+            # + colonnes manquantes (is_active, description, updated_at, system_prompt, agent_type)
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS agent_type VARCHAR(50) DEFAULT 'libre';",
+            "UPDATE agent_templates SET agent_type = type WHERE type IS NOT NULL AND (agent_type IS NULL OR agent_type = 'libre');",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS system_prompt TEXT;",
+            "UPDATE agent_templates SET system_prompt = prompt_template WHERE prompt_template IS NOT NULL AND system_prompt IS NULL;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS description TEXT;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();",
+            # colonnes ajoutées progressivement
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id);",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS response_delay VARCHAR(20) DEFAULT 'natural';",
@@ -189,8 +196,6 @@ async def _startup_tasks():
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS emoji_enabled BOOLEAN DEFAULT TRUE;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS max_response_length INTEGER DEFAULT 400;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS typing_indicator BOOLEAN DEFAULT TRUE;",
-            # Corriger les valeurs agent_type invalides (ex: 'notification' supprimé de l'enum)
-            "UPDATE agent_templates SET agent_type = 'support' WHERE agent_type NOT IN ('libre', 'rdv', 'support', 'faq', 'vente', 'qualification');",
             # S'assurer que tous les tenants actifs ont une ligne subscription
             """
             INSERT INTO subscriptions (tenant_id, plan, status, is_trial, trial_start_date, trial_end_date, subscription_start_date, next_billing_date, auto_renew)
