@@ -243,7 +243,7 @@ def build_agent_system_prompt(agent: AgentTemplate, db: Session) -> str:
         for source in sources:
             knowledge_block += f"\n--- {source.name or source.source_type} ---\n"
             # 8000 chars par source — suffisant pour toute la KB NéoBot
-            content = (source.content_extracted or source.content_text or "")[:8000]
+            content = (source.content_extracted or "")[:8000]
             knowledge_block += content + "\n"
         base_prompt += knowledge_block
 

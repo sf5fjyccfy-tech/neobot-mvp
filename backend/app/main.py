@@ -198,6 +198,23 @@ async def _startup_tasks():
               AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id)
             ON CONFLICT DO NOTHING;
             """,
+            # conversations : colonnes ajoutées après création initiale
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS outcome_type VARCHAR(50);",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS outcome_detected_at TIMESTAMP WITH TIME ZONE;",
+            # messages : colonnes potentiellement manquantes
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS tenant_id INTEGER;",
+            # contacts : colonnes ajoutées progressivement
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_whitelisted BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_blacklisted BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_contact_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_contact_date TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS message_count INTEGER DEFAULT 0;",
+            # knowledge_sources : content_text (ancien nom, conservé pour compatibilité)
+            "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS content_text TEXT;",
+            # tenants : colonnes supplémentaires
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS messages_this_month INTEGER DEFAULT 0;",
             # payment_events : transaction_id et autres colonnes manquantes
             "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255);",
             "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS provider VARCHAR(20);",
