@@ -423,6 +423,72 @@ def list_payments(
     }
 
 
+def _fmt_dt(dt) -> str | None:
+    if dt is None:
+        return None
+    try:
+        from datetime import timezone as _tz
+        if hasattr(dt, 'utcoffset') and dt.utcoffset() is not None:
+            dt = dt.astimezone(_tz.utc).replace(tzinfo=None)
+    except Exception:
+        pass
+    return dt.strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+
+
+# ─── GET /api/neopay/bot-orders — Commandes WhatsApp en attente ───────────────
+
+@router.get("/bot-orders", summary="Commandes WhatsApp bot en attente (superadmin)")
+def list_bot_orders(db: Session = Depends(get_db), _=Depends(get_superadmin_user)):
+    events = (
+        db.query(PaymentEvent)
+        .filter(PaymentEvent.status == "bot_pending")
+        .order_by(PaymentEvent.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": e.id,
+            "transaction_id": e.transaction_id,
+            "customer_name": (e.payment_metadata or {}).get("customer_name", "—") if isinstance(e.payment_metadata, dict) else "—",
+            "customer_email": e.customer_email or "—",
+            "customer_phone": e.customer_phone or "—",
+            "plan": e.plan,
+            "amount": e.amount,
+            "currency": e.currency,
+            "created_at": _fmt_dt(e.created_at),
+        }
+        for e in events
+    ]
+
+
+@router.post("/bot-orders/{order_id}/mark-done", summary="Marquer commande bot comme traitée (superadmin)")
+def mark_bot_order_done(order_id: int, db: Session = Depends(get_db), _=Depends(get_superadmin_user)):
+    event = db.query(PaymentEvent).filter(
+        PaymentEvent.id == order_id,
+        PaymentEvent.status == "bot_pending",
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Commande introuvable ou déjà traitée")
+    event.status = "confirmed"
+    event.updated_at = datetime.utcnow()
+    db.commit()
+    return {"status": "done", "id": order_id}
+
+
+@router.delete("/bot-orders/{order_id}", summary="Annuler commande bot (superadmin)")
+def cancel_bot_order(order_id: int, db: Session = Depends(get_db), _=Depends(get_superadmin_user)):
+    event = db.query(PaymentEvent).filter(
+        PaymentEvent.id == order_id,
+        PaymentEvent.status == "bot_pending",
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+    event.status = "cancelled"
+    event.updated_at = datetime.utcnow()
+    db.commit()
+    return {"status": "cancelled"}
+
+
 # ─── GET /api/neopay/webhook-events — Superadmin ─────────────────────────────
 
 @router.get("/webhook-events", summary="Historique webhooks (superadmin)")

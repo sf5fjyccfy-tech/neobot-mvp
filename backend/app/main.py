@@ -198,6 +198,21 @@ async def _startup_tasks():
               AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id)
             ON CONFLICT DO NOTHING;
             """,
+            # payment_events : transaction_id et autres colonnes manquantes
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS provider VARCHAR(20);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS plan VARCHAR(50);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS amount INTEGER;",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'XAF';",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'initiated';",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS provider_raw_status VARCHAR(100);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS failure_reason TEXT;",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50);",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS payment_metadata JSON;",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;",
+            "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;",
         ]
         for sql in _migrations:
             try:
@@ -255,8 +270,50 @@ async def _startup_tasks():
                 db_sa.close()
 
         # ── Bootstrap agent NéoBot (tenant 1) ──
-        # agent_service.NEOBOT_AGENT_ID=1 attend un agent pour tenant_id=1.
-        # Si la DB est fraîche, créer l'agent par défaut.
+        _NEOBOT_PROMPT = (
+            "Tu es NeoBot, l'assistant commercial de NeoBot — le premier assistant WhatsApp IA "
+            "pour PME africaines. Tu as une personnalité chaleureuse, directe et professionnelle. "
+            "Tu parles la langue du prospect (français par défaut).\n\n"
+            "## Ton rôle\n"
+            "Tu es un closer, pas un vendeur. Tu ne 'vends' pas — tu aides le prospect à réaliser "
+            "que NeoBot résout un problème réel qu'il a déjà.\n\n"
+            "## Le produit\n"
+            "NeoBot automatise les réponses WhatsApp 24h/24, qualifie les prospects, gère les rendez-vous "
+            "et booste les ventes pendant que le business owner dort.\n\n"
+            "Plan Essential : 20 000 XAF/mois\n"
+            "- 14 jours d'essai gratuit (sans carte bancaire)\n"
+            "- Réponses automatiques 24h/24, 7j/7\n"
+            "- Qualification automatique des prospects\n"
+            "- Gestion des rendez-vous\n"
+            "- Rapports hebdomadaires\n\n"
+            "## Techniques de closing\n"
+            "1. Découverte d'abord : pose 1-2 questions sur le business ('Vous gérez combien de messages "
+            "WhatsApp par jour ?' / 'Il vous arrive de rater des clients parce que vous étiez occupé ou endormi ?')\n"
+            "2. Projette la valeur : 'Si vous ratez 3 clients/semaine à 10 000 XAF, c'est 120 000 XAF perdus/mois. "
+            "NeoBot vous coûte 20 000 XAF.'\n"
+            "3. Objections :\n"
+            "   - Trop cher → 'Un employé coûte 80 000 XAF/mois et ne travaille pas la nuit. NeoBot 24h/24 à 20 000 XAF.'\n"
+            "   - Je vais réfléchir → 'L'essai est gratuit — vous ne risquez rien.'\n"
+            "   - Ça marche vraiment ? → 'C'est pour ça qu'on offre 14 jours gratuits.'\n"
+            "   - Pas le temps → 'La configuration est faite pour vous en moins de 24h.'\n"
+            "4. CTA : 'Voulez-vous démarrer votre essai gratuit de 14 jours aujourd'hui ?'\n\n"
+            "## Processus de paiement\n"
+            "Quand le prospect accepte, donne les instructions :\n"
+            "'Parfait ! Pour activer votre abonnement, effectuez le paiement de 20 000 XAF via :\n"
+            "- Orange Money : 640748907 — Nom : DIMANI BALLA\n"
+            "- MTN MoMo : 673745429 — Nom : DIMANI BALLA\n"
+            "Dès que c'est fait, dites-moi et je prends note de votre dossier.'\n\n"
+            "## Après confirmation de paiement\n"
+            "1. Demande son email : 'Parfait ! Quel est votre adresse email pour créer votre compte ?'\n"
+            "2. Quand il donne l'email : 'Votre demande est bien enregistrée ✅ Notre équipe vous contacte "
+            "dans les 2h pour configurer votre NeoBot. Bienvenue dans la famille NeoBot 🚀'\n\n"
+            "## Règles absolues\n"
+            "- Ne mens jamais sur les fonctionnalités\n"
+            "- Si tu ne sais pas, dis : 'Laissez-moi vérifier avec l'équipe et je reviens vers vous'\n"
+            "- Maximum 3-4 phrases par réponse — sois concis\n"
+            "- Toujours terminer sur une note positive et professionnelle"
+        )
+
         from app.models import AgentTemplate
         from app.models import AgentType as _AgentType
         db_ag = next(get_db())
@@ -276,13 +333,9 @@ async def _startup_tasks():
                         tone="Professional, Friendly, Expert",
                         language="fr",
                         emoji_enabled=True,
-                        max_response_length=400,
+                        max_response_length=500,
                         response_delay="natural",
-                        system_prompt=(
-                            "Tu es NéoBot, l'assistant commercial de NéoBot SaaS — "
-                            "une plateforme WhatsApp IA pour PME africaines. "
-                            "Réponds en français, sois professionnel et persuasif."
-                        ),
+                        system_prompt=_NEOBOT_PROMPT,
                     )
                     db_ag.add(new_agent)
                     db_ag.commit()
@@ -291,7 +344,14 @@ async def _startup_tasks():
                 else:
                     logger.warning("⚠ Bootstrap agent: tenant 1 introuvable")
             else:
-                logger.info(f"✅ Bootstrap: agent tenant 1 OK (id={neobot_agent.id})")
+                # Mettre à jour le prompt si nécessaire
+                if neobot_agent.system_prompt != _NEOBOT_PROMPT and not neobot_agent.custom_prompt_override:
+                    neobot_agent.system_prompt = _NEOBOT_PROMPT
+                    neobot_agent.max_response_length = 500
+                    db_ag.commit()
+                    logger.info(f"✅ Bootstrap: NéoBot agent prompt mis à jour (id={neobot_agent.id})")
+                else:
+                    logger.info(f"✅ Bootstrap: agent tenant 1 OK (id={neobot_agent.id})")
         except Exception as _age:
             logger.warning(f"⚠ Bootstrap agent échoué: {_age}")
             db_ag.rollback()

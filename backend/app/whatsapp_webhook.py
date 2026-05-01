@@ -382,6 +382,89 @@ Ou posez votre question!
 brain = BrainOrchestrator()
 
 
+# ── Bot payment detection helpers ─────────────────────────────────────────────
+
+import re as _re_pay
+_EMAIL_RE = _re_pay.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b')
+_PAYMENT_KW = [
+    "j'ai payé", "j'ai envoyé", "j'ai transféré", "j'ai effectué",
+    "paiement fait", "c'est fait", "c'est envoyé", "i paid", "payment done",
+    "payé", "transféré", "virement fait", "envoi effectué", "transaction faite",
+    "j ai payé", "j ai envoyé", "j ai transféré", "jai payé", "jai envoyé",
+]
+
+def _extract_email(text: str):
+    m = _EMAIL_RE.search(text)
+    return m.group(0).lower() if m else None
+
+def _has_payment_context(conversation_id: int, db) -> bool:
+    try:
+        msgs = db.query(Message).filter(
+            Message.conversation_id == conversation_id,
+            Message.direction == "incoming",
+        ).order_by(Message.id.desc()).limit(12).all()
+        for msg in msgs:
+            low = msg.content.lower()
+            if any(kw in low for kw in _PAYMENT_KW):
+                return True
+        return False
+    except Exception:
+        return False
+
+async def _record_bot_payment(conversation_id: int, customer_name: str,
+                               customer_phone: str, customer_email: str, db) -> None:
+    try:
+        from .models import PaymentEvent
+        from .services.email_service import send_internal_alert
+        # Idempotence — ne pas créer deux fois pour le même numéro
+        existing = db.query(PaymentEvent).filter(
+            PaymentEvent.customer_phone == customer_phone,
+            PaymentEvent.status == "bot_pending",
+        ).first()
+        if existing:
+            logger.info(f"PaymentEvent bot déjà enregistré pour {customer_phone}")
+            return
+        txid = f"bot_{customer_phone}_{int(datetime.utcnow().timestamp())}"
+        event = PaymentEvent(
+            transaction_id=txid,
+            provider="bot_whatsapp",
+            payment_link_id=None,
+            tenant_id=1,
+            plan="BASIC",
+            amount=20000,
+            currency="XAF",
+            payment_method="mobile_money",
+            status="bot_pending",
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            payment_metadata={"customer_name": customer_name, "conversation_id": conversation_id},
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db.add(event)
+        db.commit()
+        body = (
+            f"🚨 NOUVEAU PAIEMENT EN ATTENTE — Plan Essential\n\n"
+            f"👤 Nom       : {customer_name}\n"
+            f"📞 Téléphone : {customer_phone}\n"
+            f"📧 Email     : {customer_email}\n"
+            f"💰 Montant   : 20 000 XAF (Plan Essential)\n"
+            f"🔗 Réf       : {txid}\n\n"
+            f"👉 Actions requises :\n"
+            f"1. Vérifier le paiement dans votre compte OM/MoMo\n"
+            f"2. Créer le compte dans le panel admin : https://neobot-ai.com/admin\n"
+            f"3. Activer l'abonnement depuis la fiche tenant\n\n"
+            f"⏰ Reçu le : {datetime.utcnow().strftime('%d/%m/%Y à %Hh%M')} UTC"
+        )
+        await send_internal_alert(
+            subject=f"💰 Paiement bot — {customer_name} ({customer_phone})",
+            body=body,
+        )
+        logger.info(f"✅ PaymentEvent bot créé pour {customer_email} ({customer_phone})")
+    except Exception as _e:
+        logger.error(f"_record_bot_payment failed: {_e}", exc_info=True)
+
+
 # ===== Webhook Endpoint =====
 
 @router.post("/api/v1/webhooks/whatsapp")
@@ -498,6 +581,18 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             conversation_id=conversation.id
         )
         
+        # ── Détection paiement bot (tenant NéoBot uniquement) ──────────────
+        if tenant_id == 1:
+            _email = _extract_email(message.text)
+            if _email and _has_payment_context(conversation.id, db):
+                await _record_bot_payment(
+                    conversation_id=conversation.id,
+                    customer_name=message.senderName,
+                    customer_phone=phone,
+                    customer_email=_email,
+                    db=db,
+                )
+
         # Save outgoing message to database
         _, outgoing_msg = await save_message_to_db(
             phone=phone,

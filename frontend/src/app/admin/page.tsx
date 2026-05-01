@@ -47,6 +47,12 @@ type TenantDetail = {
   agents: AgentData[];
 };
 
+type BotOrder = {
+  id: number; transaction_id: string;
+  customer_name: string; customer_email: string; customer_phone: string;
+  plan: string; amount: number; currency: string; created_at: string;
+};
+
 type AgentData = {
   id: number; name: string; agent_type: string; is_active: boolean;
   prompt_score: number; tone: string; language: string; emoji_enabled: boolean;
@@ -113,7 +119,9 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'hub' | 'clients'>('hub');
+  const [view, setView] = useState<'hub' | 'clients' | 'orders'>('hub');
+  const [orders, setOrders] = useState<BotOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [filterPlan, setFilterPlan] = useState('');
   const [filterSuspended, setFilterSuspended] = useState('');
@@ -191,6 +199,18 @@ export default function AdminPage() {
     } catch (e: any) {
       console.error('[action]', e);
       showToast(`❌ ${e.message}`);
+    }
+  };
+
+  const loadOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const data = await adminCall('/api/neopay/bot-orders').then(r => r.json());
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error('[loadOrders]', e);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -300,7 +320,7 @@ export default function AdminPage() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {toast && <span className="text-xs font-medium animate-pulse truncate max-w-[120px] sm:max-w-none">{toast}</span>}
-          {view === 'clients' ? (
+          {view === 'clients' || view === 'orders' ? (
             <button onClick={() => setView('hub')}
               className="text-xs text-gray-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-[#1A1A2E] hover:border-gray-600 transition whitespace-nowrap">
               ← Hub
@@ -333,6 +353,83 @@ export default function AdminPage() {
     </>
   );
 
+  // ── VUE COMMANDES BOT ─────────────────────────────────────────────────────
+  if (view === 'orders') return (
+    <div className="min-h-screen bg-[#05050F] text-white flex flex-col">
+      {sharedHeader}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-bold text-white">💰 Commandes WhatsApp en attente</h2>
+          <button onClick={loadOrders}
+            className="text-xs text-gray-400 hover:text-white border border-[#1A1A2E] hover:border-gray-600 px-3 py-1.5 rounded-lg transition">
+            ↻ Actualiser
+          </button>
+        </div>
+        {ordersLoading ? (
+          <div className="text-sm text-gray-500 text-center py-12">Chargement...</div>
+        ) : orders.length === 0 ? (
+          <div className="bg-[#0D0D1A] border border-[#1A1A2E] rounded-xl p-8 text-center">
+            <div className="text-3xl mb-3">✅</div>
+            <p className="text-sm text-gray-500">Aucune commande en attente</p>
+            <p className="text-xs text-gray-600 mt-1">Les paiements confirmés via WhatsApp apparaîtront ici</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {orders.map(o => (
+              <div key={o.id} className="bg-[#0D0D1A] border border-[#1A1A2E] rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-white text-sm">{o.customer_name}</div>
+                    <div className="text-xs text-green-400 font-mono mt-0.5">{o.customer_email}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">📞 {o.customer_phone}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-base font-bold text-green-400">{o.amount?.toLocaleString()} {o.currency}</div>
+                    <div className="text-[10px] text-gray-600 mt-0.5">Plan Essential</div>
+                  </div>
+                </div>
+                <div className="text-[10px] text-gray-600 mb-3 font-mono">{o.transaction_id}</div>
+                <div className="text-[11px] text-gray-500 mb-3">
+                  Reçu le {o.created_at ? new Date(o.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setView('clients'); }}
+                    className="flex-1 text-xs bg-blue-900/30 text-blue-400 border border-blue-800/40 px-3 py-1.5 rounded-lg hover:bg-blue-900/60 transition">
+                    👤 Créer le compte
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await adminCall(`/api/neopay/bot-orders/${o.id}/mark-done`, { method: 'POST' });
+                        showToast('✅ Marqué comme traité');
+                        loadOrders();
+                      } catch (e: any) { showToast(`❌ ${e.message}`); }
+                    }}
+                    className="flex-1 text-xs bg-green-900/30 text-green-400 border border-green-800/40 px-3 py-1.5 rounded-lg hover:bg-green-900/60 transition">
+                    ✅ Traité
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Annuler cette commande ?')) return;
+                      try {
+                        await adminCall(`/api/neopay/bot-orders/${o.id}`, { method: 'DELETE' });
+                        showToast('✅ Annulé');
+                        loadOrders();
+                      } catch (e: any) { showToast(`❌ ${e.message}`); }
+                    }}
+                    className="text-xs text-red-600 hover:text-red-400 border border-red-900/40 px-3 py-1.5 rounded-lg transition">
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   // ── VUE HUB ────────────────────────────────────────────────────────────────
   if (view === 'hub') return (
     <div className="min-h-screen bg-[#05050F] text-white flex flex-col">
@@ -346,6 +443,7 @@ export default function AdminPage() {
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
             {([
               { icon: '👥', label: 'Gestion clients', sub: `${stats?.total_tenants ?? '—'} tenants`, color: 'hover:border-yellow-500/40 group-hover:text-yellow-400', onClick: () => setView('clients') },
+              { icon: '💰', label: 'Commandes bot', sub: 'Paiements WhatsApp', color: 'hover:border-green-500/40 group-hover:text-green-400', onClick: () => { setView('orders'); loadOrders(); } },
               { icon: '💳', label: 'Crédits API', sub: 'DeepSeek · Anthropic', color: 'hover:border-blue-500/40 group-hover:text-blue-400', onClick: () => router.push('/admin/credits') },
               { icon: '🤖', label: 'Bot NeoBot', sub: 'Config agent officiel', color: 'hover:border-emerald-500/40 group-hover:text-emerald-400', onClick: () => impersonate(13, '/config') },
               { icon: '📧', label: 'Email à tous', sub: `${stats?.active_tenants ?? '—'} destinataires`, color: 'hover:border-purple-500/40 group-hover:text-purple-400', onClick: () => { setBroadcastOpen(true); setBroadcastResult(null); setBroadcastSubject(''); setBroadcastBody(''); } },
