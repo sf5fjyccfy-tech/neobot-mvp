@@ -40,7 +40,7 @@ SUBSCRIPTION_REQUIRED_PREFIXES = (
 class SubscriptionMiddleware(BaseHTTPMiddleware):
     """
     Middleware léger : extrait tenant_id depuis JWT, vérifie subscription en DB.
-    Si trial expiré ou subscription inactive → 402 Payment Required.
+    Si trial expiré et pas d'abonnement actif → 402 Payment Required.
     En cas d'erreur inattendue → fail-open (laisser passer, l'endpoint gère).
     """
 
@@ -66,13 +66,12 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
         if tenant_id == 1:
             return await call_next(request)
 
-        # Vérifier subscription — toujours fail-open en cas d'erreur
         block_reason: str | None = None
         trial_warning: str | None = None
 
         try:
             from app.database import SessionLocal
-            from app.models import Subscription, User
+            from app.models import Subscription, Tenant, User
 
             db = SessionLocal()
             try:
@@ -81,21 +80,72 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
                 if is_sa:
                     return await call_next(request)
 
-                sub = db.execute(
-                    select(Subscription).where(Subscription.tenant_id == tenant_id)
-                ).scalar_one_or_none()
+                # Charger le tenant pour vérifier subscription_expires_at (source de vérité admin)
+                tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+                now = datetime.utcnow()
+
+                # Si l'admin a activé un abonnement payant et qu'il est encore valide → toujours laisser passer
+                if tenant and tenant.subscription_expires_at:
+                    sub_exp = tenant.subscription_expires_at
+                    # Normaliser : si timezone-aware, convertir en naive UTC
+                    if hasattr(sub_exp, 'utcoffset') and sub_exp.utcoffset() is not None:
+                        from datetime import timezone as _tz
+                        sub_exp = sub_exp.astimezone(_tz.utc).replace(tzinfo=None)
+                    if sub_exp > now:
+                        # Abonnement payant actif → bypass complet
+                        return await call_next(request)
+
+                # Vérifier la table Subscription (trial ou abonnement)
+                try:
+                    sub = db.execute(
+                        select(Subscription).where(Subscription.tenant_id == tenant_id)
+                    ).scalar_one_or_none()
+                except Exception:
+                    # Plusieurs subscriptions → prendre la plus récente
+                    from sqlalchemy import desc
+                    sub = db.query(Subscription).filter(
+                        Subscription.tenant_id == tenant_id
+                    ).order_by(desc(Subscription.id)).first()
 
                 if sub is None:
-                    block_reason = "Aucun abonnement actif. Veuillez activer votre compte."
+                    # Pas de subscription du tout → créer un essai de 14j automatiquement
+                    if tenant:
+                        from datetime import timedelta
+                        trial_end = now + timedelta(days=14)
+                        new_sub = Subscription(
+                            tenant_id=tenant_id,
+                            plan=tenant.plan.value if hasattr(tenant.plan, 'value') else 'BASIC',
+                            status="active",
+                            is_trial=True,
+                            trial_start_date=now,
+                            trial_end_date=trial_end,
+                            subscription_start_date=now,
+                            next_billing_date=trial_end,
+                            auto_renew=False,
+                        )
+                        db.add(new_sub)
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+                        # Laisser passer — le compte vient d'être activé
+                        return await call_next(request)
+                    else:
+                        block_reason = "Aucun abonnement actif. Veuillez activer votre compte."
                 else:
                     is_active = sub.status == "active"
+
                     if sub.is_trial and sub.trial_end_date:
-                        today = datetime.now().date()
+                        today = now.date()
                         trial_end = sub.trial_end_date
                         if hasattr(trial_end, 'date'):
                             trial_end = trial_end.date()
                         elif isinstance(trial_end, str):
                             trial_end = datetime.fromisoformat(trial_end).date()
+                        # Normaliser si timezone-aware
+                        if hasattr(trial_end, 'utcoffset'):
+                            trial_end = trial_end.date()
+
                         if today > trial_end:
                             is_active = False
                         elif is_active:
@@ -105,12 +155,11 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
 
                     if not is_active:
                         block_reason = "Votre période d'essai est expirée ou votre abonnement est inactif."
+
             finally:
                 db.close()
 
         except Exception as e:
-            # Fail-open : en cas d'erreur DB transitoire, laisser passer
-            # L'endpoint gérera ses propres erreurs DB
             logger.warning(f"SubscriptionMiddleware: erreur non-critique, fail-open: {e}")
             return await call_next(request)
 

@@ -85,11 +85,16 @@ class GeneratePromptRequest(BaseModel):
 
 def _agent_to_dict(agent: AgentTemplate, expose_prompts: bool = False) -> dict:
     """Convert agent to dict. Prompts NEVER exposed to client by default."""
+    # Sérialisation sécurisée de l'agent_type (enum potentiellement invalide en DB)
+    try:
+        agent_type_val = agent.agent_type.value if hasattr(agent.agent_type, 'value') else str(agent.agent_type)
+    except Exception:
+        agent_type_val = "libre"
     data = {
         "id": agent.id,
         "tenant_id": agent.tenant_id,
         "name": agent.name,
-        "agent_type": agent.agent_type,
+        "agent_type": agent_type_val,
         "description": agent.description,
         "tone": agent.tone,
         "language": agent.language,
@@ -128,11 +133,36 @@ async def list_agents(
 ):
     """Liste tous les agents du tenant."""
     _check_tenant_access(tenant_id, current_user)
-    agents = AgentService.list_agents(tenant_id, db)
+    try:
+        agents = AgentService.list_agents(tenant_id, db)
+    except Exception as exc:
+        logger.error(f"list_agents({tenant_id}): {exc}", exc_info=True)
+        db.rollback()
+        agents = []
+    result = []
+    for a in agents:
+        try:
+            result.append(_agent_to_dict(a))
+        except Exception as exc2:
+            logger.error(f"_agent_to_dict(id={a.id}): {exc2}", exc_info=True)
+            # Agent corrompu — inclure version minimale sans crash
+            result.append({
+                "id": a.id,
+                "tenant_id": getattr(a, "tenant_id", tenant_id),
+                "name": getattr(a, "name", "Agent"),
+                "agent_type": str(getattr(a, "agent_type", "libre")),
+                "description": None, "tone": "Friendly, Professional",
+                "language": "fr", "emoji_enabled": True,
+                "max_response_length": 400, "availability_start": None,
+                "availability_end": None, "off_hours_message": None,
+                "response_delay": "natural", "typing_indicator": True,
+                "prompt_score": 0, "is_active": False,
+                "created_at": None, "updated_at": None,
+            })
     return {
         "tenant_id": tenant_id,
-        "agents": [_agent_to_dict(a) for a in agents],
-        "total": len(agents),
+        "agents": result,
+        "total": len(result),
     }
 
 

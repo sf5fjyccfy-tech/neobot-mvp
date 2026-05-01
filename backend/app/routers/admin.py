@@ -33,6 +33,21 @@ from app.services.email_service import (
     send_custom_broadcast,
 )
 
+
+def _fmt_dt(dt) -> str | None:
+    """Formate un datetime Python en ISO string UTC sans ambiguïté de timezone."""
+    if dt is None:
+        return None
+    # Si datetime timezone-aware, convertir en UTC puis strip le tzinfo
+    try:
+        from datetime import timezone as _tz
+        if hasattr(dt, 'utcoffset') and dt.utcoffset() is not None:
+            dt = dt.astimezone(_tz.utc).replace(tzinfo=None)
+    except Exception:
+        pass
+    return dt.strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+
+
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
@@ -191,7 +206,7 @@ def list_tenants(
             "trial_days_remaining": trial_days_remaining,
             "last_active_at": last_conv_at.isoformat() if last_conv_at else None,
             "messages_this_month": usage_map.get(t.id, 0),
-            "subscription_expires_at": (t.subscription_expires_at.isoformat() + "Z") if t.subscription_expires_at else None,
+            "subscription_expires_at": _fmt_dt(t.subscription_expires_at),
         })
     return result
 
@@ -253,7 +268,7 @@ def get_tenant_detail(
         "trial_ends_at": trial_ends_at,
         "trial_days_remaining": trial_days_remaining,
         "last_active_at": last_conv_at.isoformat() if last_conv_at else None,
-        "subscription_expires_at": (tenant.subscription_expires_at.isoformat() + "Z") if tenant.subscription_expires_at else None,
+        "subscription_expires_at": _fmt_dt(tenant.subscription_expires_at),
         "user": {
             "id": user.id,
             "email": user.email,
@@ -450,7 +465,7 @@ def renew_subscription(
     db.commit()
     return {
         "status": "renewed",
-        "subscription_expires_at": tenant.subscription_expires_at.isoformat() + "Z",
+        "subscription_expires_at": _fmt_dt(tenant.subscription_expires_at),
         "days_added": body.days,
     }
 
@@ -490,20 +505,22 @@ def activate_subscription(
         except ValueError:
             pass
 
-    # Mettre à jour ou créer la Subscription
-    sub = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).first()
-    if sub:
-        sub.is_trial = False
-        sub.status = "active"
-        sub.subscription_start_date = now
-        sub.subscription_end_date = expires
-        sub.next_billing_date = expires
-        if body.plan:
-            sub.plan = body.plan
+    # Mettre à jour toutes les Subscriptions de ce tenant (gérer les doublons)
+    subs = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).all()
+    if subs:
+        for sub in subs:
+            sub.is_trial = False
+            sub.status = "active"
+            sub.subscription_start_date = now
+            sub.subscription_end_date = expires
+            sub.next_billing_date = expires
+            if body.plan:
+                sub.plan = body.plan
     else:
+        plan_val = body.plan or (tenant.plan.value if hasattr(tenant.plan, 'value') else 'BASIC')
         sub = Subscription(
             tenant_id=tenant_id,
-            plan=body.plan or tenant.plan.value,
+            plan=plan_val,
             status="active",
             is_trial=False,
             trial_start_date=now,
@@ -518,7 +535,7 @@ def activate_subscription(
     return {
         "status": "activated",
         "tenant_id": tenant_id,
-        "subscription_expires_at": expires.isoformat() + "Z",
+        "subscription_expires_at": _fmt_dt(expires),
         "days": body.days,
     }
 
@@ -538,16 +555,19 @@ def cancel_subscription(
         raise HTTPException(status_code=404, detail="Tenant non trouvé")
 
     now = datetime.utcnow()
-    tenant.subscription_expires_at = now  # Expire immédiatement
+    # Mettre subscription_expires_at dans le passé (pas NOW() pour éviter l'ambiguïté)
+    from datetime import timedelta
+    tenant.subscription_expires_at = now - timedelta(seconds=1)
+    tenant.is_trial = False  # Assurer cohérence
 
-    sub = db.query(Subscription).filter(Subscription.tenant_id == tenant_id).first()
-    if sub:
+    for sub in db.query(Subscription).filter(Subscription.tenant_id == tenant_id).all():
         sub.status = "cancelled"
+        sub.is_trial = False
         sub.cancelled_at = now
         sub.auto_renew = False
 
     db.commit()
-    return {"status": "cancelled", "tenant_id": tenant_id}
+    return {"status": "cancelled", "tenant_id": tenant_id, "expires_at": _fmt_dt(tenant.subscription_expires_at)}
 
 
 # ======================== GESTION AGENTS ========================

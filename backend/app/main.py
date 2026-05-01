@@ -187,6 +187,17 @@ async def _startup_tasks():
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS emoji_enabled BOOLEAN DEFAULT TRUE;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS max_response_length INTEGER DEFAULT 400;",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS typing_indicator BOOLEAN DEFAULT TRUE;",
+            # Corriger les valeurs agent_type invalides (ex: 'notification' supprimé de l'enum)
+            "UPDATE agent_templates SET agent_type = 'support' WHERE agent_type NOT IN ('libre', 'rdv', 'support', 'faq', 'vente', 'qualification');",
+            # S'assurer que tous les tenants actifs ont une ligne subscription
+            """
+            INSERT INTO subscriptions (tenant_id, plan, status, is_trial, trial_start_date, trial_end_date, subscription_start_date, next_billing_date, auto_renew)
+            SELECT t.id, 'BASIC', 'active', TRUE, NOW(), NOW() + INTERVAL '14 days', NOW(), NOW() + INTERVAL '15 days', FALSE
+            FROM tenants t
+            WHERE t.is_deleted = FALSE
+              AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id)
+            ON CONFLICT DO NOTHING;
+            """,
         ]
         for sql in _migrations:
             try:

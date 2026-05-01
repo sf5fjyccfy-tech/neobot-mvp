@@ -44,6 +44,19 @@ class UsageHistoryItem(BaseModel):
 
 # ========== ENDPOINTS ==========
 
+
+def _fmt_sub_dt(dt) -> str | None:
+    if dt is None:
+        return None
+    try:
+        from datetime import timezone as _tz
+        if hasattr(dt, 'utcoffset') and dt.utcoffset() is not None:
+            dt = dt.astimezone(_tz.utc).replace(tzinfo=None)
+    except Exception:
+        pass
+    return dt.strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+
+
 @router.get("/{tenant_id}/usage", response_model=UsageSummaryResponse)
 async def get_usage_summary(
     tenant_id: int,
@@ -116,7 +129,7 @@ async def get_usage_summary(
 
     # Statut abonnement payant
     sub_expires = tenant.subscription_expires_at
-    summary["subscription_expires_at"] = sub_expires.isoformat() + "Z" if sub_expires else None
+    summary["subscription_expires_at"] = _fmt_sub_dt(sub_expires)
     summary["subscription_active"] = (
         not is_trial
         and sub_expires is not None

@@ -93,8 +93,16 @@ function relativeDate(iso: string | null): string {
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
-  const diff = Math.floor((new Date(iso).getTime() - Date.now()) / 86400000);
-  return diff;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return null;
+  return Math.floor((t - Date.now()) / 86400000);
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 const AGENT_TYPES = ['libre', 'rdv', 'support', 'faq', 'vente', 'qualification'];
@@ -796,7 +804,7 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
               )}
               {detail.subscription_expires_at && (
                 <div className={`flex items-center gap-1 mt-0.5 ${subExpDays !== null && subExpDays <= 7 ? 'text-orange-400' : 'text-gray-600'}`}>
-                  <span>Abonnement expire le {new Date(detail.subscription_expires_at).toLocaleDateString('fr')}</span>
+                  <span>Abonnement expire le {fmtDate(detail.subscription_expires_at)}</span>
                   {subExpDays !== null && subExpDays >= 0 && subExpDays <= 7 && (
                     <span className="text-orange-400 text-[10px]">⚠ dans {subExpDays}j</span>
                   )}
@@ -848,7 +856,7 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
             </span>
           ) : detail.subscription_expires_at ? (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-green-900/20 text-green-400 border-green-700/40">
-              ✓ ACTIF — expire {new Date(detail.subscription_expires_at).toLocaleDateString('fr')}
+              ✓ ACTIF — expire {fmtDate(detail.subscription_expires_at)}
             </span>
           ) : (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-gray-900/40 text-gray-500 border-gray-700/40">
