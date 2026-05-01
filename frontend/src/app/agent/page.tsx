@@ -1412,7 +1412,7 @@ export default function AgentPage() {
                 className="flex-1 py-3 rounded-xl text-sm font-bold disabled:opacity-40"
                 style={{ background: 'rgba(255,77,0,0.9)', color: '#06040E' }}
               >
-                {saving ? 'Création…' : "Créer l&apos;agent"}
+                {saving ? 'Création…' : "Créer l'agent"}
               </button>
             </div>
           </div>

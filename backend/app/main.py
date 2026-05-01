@@ -173,6 +173,13 @@ async def _startup_tasks():
             # usage_tracking : créée par init_db mais peut manquer de colonnes
             "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS whatsapp_messages_used INTEGER DEFAULT 0;",
             "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS month_year VARCHAR(7);",
+            # agent_templates : s'assurer que toutes les valeurs de l'enum agenttype existent en DB
+            "ALTER TYPE agenttype ADD VALUE IF NOT EXISTS 'libre';",
+            "ALTER TYPE agenttype ADD VALUE IF NOT EXISTS 'rdv';",
+            "ALTER TYPE agenttype ADD VALUE IF NOT EXISTS 'support';",
+            "ALTER TYPE agenttype ADD VALUE IF NOT EXISTS 'faq';",
+            "ALTER TYPE agenttype ADD VALUE IF NOT EXISTS 'vente';",
+            "ALTER TYPE agenttype ADD VALUE IF NOT EXISTS 'qualification';",
             # agent_templates : colonnes ajoutées progressivement
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id);",
             "ALTER TABLE agent_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;",

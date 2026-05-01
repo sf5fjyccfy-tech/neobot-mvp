@@ -361,11 +361,7 @@ class AgentService:
         off_hours_message: str = None,
         activate: bool = False,
     ) -> AgentTemplate:
-        """Crée un nouvel agent pour le tenant.
-        Le tenant NéoBot (id=1) est verrouillé — création bloquée via cette méthode.
-        """
-        if tenant_id == NEOBOT_TENANT_ID:
-            raise ValueError("Le tenant NéoBot est verrouillé. Modifie directement l'agent existant.")
+        """Crée un nouvel agent pour le tenant."""
         # Si on active ce nouvel agent, désactiver les autres
         if activate:
             db.query(AgentTemplate).filter(
@@ -428,12 +424,7 @@ class AgentService:
 
     @staticmethod
     def activate_agent(agent_id: int, tenant_id: int, db: Session) -> Optional[AgentTemplate]:
-        """Active un agent et désactive tous les autres du tenant.
-        Sur le tenant NéoBot (id=1) : seul NEOBOT_AGENT_ID peut être activé.
-        """
-        if tenant_id == NEOBOT_TENANT_ID and agent_id != NEOBOT_AGENT_ID:
-            raise ValueError("Le tenant NéoBot est verrouillé. Seul l'agent NéoBot Commercial peut être actif.")
-
+        """Active un agent et désactive tous les autres du tenant."""
         db.query(AgentTemplate).filter(
             AgentTemplate.tenant_id == tenant_id
         ).update({"is_active": False})

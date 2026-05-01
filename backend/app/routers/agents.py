@@ -175,11 +175,6 @@ async def create_agent(
 ):
     """Crée un nouvel agent pour le tenant."""
     _check_tenant_access(tenant_id, current_user)
-    if tenant_id == 1:
-        raise HTTPException(
-            status_code=403,
-            detail="Le tenant NéoBot (id=1) est verrouillé. Modifiez directement l'agent existant via PUT."
-        )
     agent = AgentService.create_agent(
         tenant_id=tenant_id,
         name=body.name,
@@ -266,11 +261,6 @@ async def activate_agent(
 ):
     """Active un agent (désactive les autres)."""
     _check_tenant_access(tenant_id, current_user)
-    if tenant_id == 1 and agent_id != 1:
-        raise HTTPException(
-            status_code=403,
-            detail="Le tenant NéoBot est verrouillé : seul l'agent NéoBot Commercial (id=1) peut être actif."
-        )
     agent = AgentService.activate_agent(agent_id, tenant_id, db)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent non trouvé")
