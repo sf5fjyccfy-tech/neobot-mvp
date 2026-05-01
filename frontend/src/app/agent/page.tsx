@@ -1417,6 +1417,7 @@ export default function AgentPage() {
             </div>
           </div>
         </div>
+        </div>
       )}
     </div>
     </AppShell>
