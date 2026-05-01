@@ -191,7 +191,7 @@ def list_tenants(
             "trial_days_remaining": trial_days_remaining,
             "last_active_at": last_conv_at.isoformat() if last_conv_at else None,
             "messages_this_month": usage_map.get(t.id, 0),
-            "subscription_expires_at": t.subscription_expires_at.isoformat() if t.subscription_expires_at else None,
+            "subscription_expires_at": (t.subscription_expires_at.isoformat() + "Z") if t.subscription_expires_at else None,
         })
     return result
 
@@ -253,7 +253,7 @@ def get_tenant_detail(
         "trial_ends_at": trial_ends_at,
         "trial_days_remaining": trial_days_remaining,
         "last_active_at": last_conv_at.isoformat() if last_conv_at else None,
-        "subscription_expires_at": tenant.subscription_expires_at.isoformat() if tenant.subscription_expires_at else None,
+        "subscription_expires_at": (tenant.subscription_expires_at.isoformat() + "Z") if tenant.subscription_expires_at else None,
         "user": {
             "id": user.id,
             "email": user.email,
@@ -450,7 +450,7 @@ def renew_subscription(
     db.commit()
     return {
         "status": "renewed",
-        "subscription_expires_at": tenant.subscription_expires_at.isoformat(),
+        "subscription_expires_at": tenant.subscription_expires_at.isoformat() + "Z",
         "days_added": body.days,
     }
 
@@ -514,10 +514,11 @@ def activate_subscription(
         db.add(sub)
 
     db.commit()
+    db.refresh(tenant)
     return {
         "status": "activated",
         "tenant_id": tenant_id,
-        "subscription_expires_at": expires.isoformat(),
+        "subscription_expires_at": expires.isoformat() + "Z",
         "days": body.days,
     }
 

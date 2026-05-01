@@ -36,6 +36,8 @@ interface UsageSummary {
   over_limit: boolean;
   is_trial?: boolean;
   trial_days_left?: number | null;
+  subscription_expires_at?: string | null;
+  subscription_active?: boolean;
 }
 
 export default function BillingPage() {
@@ -176,28 +178,40 @@ export default function BillingPage() {
                 {price} <span style={{ fontSize: 14, color: MUTED, fontWeight: 400 }}>FCFA/mois</span>
               </p>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+              {usage?.subscription_active && usage.subscription_expires_at && (
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: 11, color: '#10B981', fontWeight: 700, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '3px 10px', display: 'inline-block' }}>
+                    ✓ Abonnement actif
+                  </span>
+                  <p style={{ fontSize: 11, color: MUTED, margin: '4px 0 0', textAlign: 'right' }}>
+                    Expire le {new Date(usage.subscription_expires_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
               {usage?.is_trial && (
                 <span style={{ fontSize: 11, color: NEON, fontWeight: 600 }}>
                   ⏳ Essai — {usage.trial_days_left ?? 0}j restants
                 </span>
               )}
-              <button
-                onClick={() => setPayPickerOpen(true)}
-                style={{
-                  padding: '10px 22px',
-                  background: `linear-gradient(135deg, ${NEON}, #00E5CC)`,
-                  border: 'none',
-                  borderRadius: 10,
-                  color: '#06040E',
-                  fontSize: 13,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {usage?.is_trial ? '💳 Activer mon abonnement' : '💳 Mise à niveau'}
-              </button>
+              {!usage?.subscription_active && (
+                <button
+                  onClick={() => setPayPickerOpen(true)}
+                  style={{
+                    padding: '10px 22px',
+                    background: `linear-gradient(135deg, ${NEON}, #00E5CC)`,
+                    border: 'none',
+                    borderRadius: 10,
+                    color: '#06040E',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {usage?.is_trial ? '💳 Activer mon abonnement' : '💳 Mise à niveau'}
+                </button>
+              )}
             </div>
           </div>
         </div>

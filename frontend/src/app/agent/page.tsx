@@ -1322,14 +1322,16 @@ export default function AgentPage() {
       {/* Modal création agent */}
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
-          <div className="w-full max-w-md mx-4 rounded-3xl p-7 shadow-2xl" style={{ background: '#0C0916', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <h2 className="text-xl font-bold text-white mb-6" style={{ fontFamily: "'Syne', sans-serif" }}>Créer un agent</h2>
+          <div className="w-full max-w-md mx-4 rounded-3xl shadow-2xl flex flex-col" style={{ background: '#0C0916', border: '1px solid rgba(255,255,255,0.1)', maxHeight: 'calc(100dvh - 40px)', overflow: 'hidden' }}>
+                {/* Titre — fixe */}
+          <div className="px-7 pt-7 pb-0 flex-shrink-0">
+            <h2 className="text-xl font-bold text-white mb-4" style={{ fontFamily: "'Syne', sans-serif" }}>Créer un agent</h2>
             {(() => {
               const suggestion = getSuggestedAgentType();
               if (!suggestion) return null;
               const typeInfo = AGENT_TYPES.find(t => t.value === suggestion.agentType);
               return (
-                <div className="mb-5 px-4 py-3 rounded-xl flex items-start gap-3" style={{ background: 'rgba(255,213,0,0.06)', border: '1px solid rgba(255,213,0,0.2)' }}>
+                <div className="mb-4 px-4 py-3 rounded-xl flex items-start gap-3" style={{ background: 'rgba(255,213,0,0.06)', border: '1px solid rgba(255,213,0,0.2)' }}>
                   <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
                   <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)', margin: 0 }}>
                     Pour votre secteur <strong style={{ color: 'rgba(255,255,255,0.8)' }}>{suggestion.businessLabel}</strong>, nous recommandons{' '}
@@ -1338,13 +1340,16 @@ export default function AgentPage() {
                 </div>
               );
             })()}
-            <div className="space-y-5">
+          </div>
+          {/* Corps — scrollable */}
+          <div className="flex-1 overflow-y-auto px-7 min-h-0">
+            <div className="space-y-4 py-2">
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Nom de l&apos;agent</label>
                 <input
                   value={createForm.name}
                   onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="Ex : Mon Bot Vente"
+                  placeholder="Ex : Mon Bot Vente"
                   className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none placeholder:opacity-30"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', caretColor: '#FF4D00' }}
                 />
@@ -1372,7 +1377,7 @@ export default function AgentPage() {
                             {sel && <span style={{ fontSize: 9, color: '#FF4D00', background: 'rgba(255,77,0,0.15)', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>SÉLECTIONNÉ</span>}
                           </div>
                           <p className="text-xs mt-1 leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>{t.desc}</p>
-                          <p className="text-[10px] mt-1 font-semibold" style={{ color: 'rgba(255,255,255,0.25)' }}>📌 {t.best_for}</p>
+                          <p className="text-[10px] mt-0.5 font-semibold" style={{ color: 'rgba(255,255,255,0.25)' }}>📌 {t.best_for}</p>
                         </div>
                       </button>
                     );
@@ -1390,7 +1395,10 @@ export default function AgentPage() {
                 <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>Activer immédiatement cet agent</span>
               </label>
             </div>
-            <div className="flex gap-3 mt-7">
+          </div>
+          {/* Boutons — fixe en bas */}
+          <div className="px-7 py-5 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowCreateForm(false)}
                 className="flex-1 py-3 rounded-xl text-sm font-medium"
@@ -1404,7 +1412,7 @@ export default function AgentPage() {
                 className="flex-1 py-3 rounded-xl text-sm font-bold disabled:opacity-40"
                 style={{ background: 'rgba(255,77,0,0.9)', color: '#06040E' }}
               >
-                {saving ? 'Création…' : "Créer l’agent"}
+                {saving ? 'Création…' : "Créer l&apos;agent"}
               </button>
             </div>
           </div>

@@ -114,6 +114,15 @@ async def get_usage_summary(
     summary["trial_days_left"] = trial_days_left
     summary["is_superadmin"] = is_superadmin_tenant
 
+    # Statut abonnement payant
+    sub_expires = tenant.subscription_expires_at
+    summary["subscription_expires_at"] = sub_expires.isoformat() + "Z" if sub_expires else None
+    summary["subscription_active"] = (
+        not is_trial
+        and sub_expires is not None
+        and sub_expires > datetime.utcnow()
+    )
+
     # Messages reçus aujourd'hui (début du jour UTC)
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     today_count = (

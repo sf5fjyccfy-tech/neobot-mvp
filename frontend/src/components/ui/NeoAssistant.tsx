@@ -53,9 +53,9 @@ export function NeoAssistant() {
       }, 800);
       return () => clearTimeout(t);
     } else {
-      // Page déjà vue — juste le pulse d'invitation pendant 5s
+      // Page déjà vue — pulse d'invitation pendant 8s
       setPulsing(true);
-      const t = setTimeout(() => setPulsing(false), 5000);
+      const t = setTimeout(() => setPulsing(false), 8000);
       return () => clearTimeout(t);
     }
   }, [mounted, pageKey, steps, steps.length]);
@@ -348,10 +348,10 @@ export function NeoAssistant() {
           background: chatOpen
             ? `${NEON}`
             : `linear-gradient(135deg, #1a0e2e 0%, #0C0916 100%)`,
-          border: `2px solid ${chatOpen ? NEON : `${NEON}50`}`,
+          border: `2px solid ${chatOpen ? NEON : `${NEON}80`}`,
           boxShadow: chatOpen
             ? `0 8px 32px ${NEON}60, 0 0 0 0 ${NEON}00`
-            : `0 8px 24px rgba(0,0,0,0.5)`,
+            : `0 6px 20px rgba(0,0,0,0.6), 0 0 12px ${NEON}20`,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
