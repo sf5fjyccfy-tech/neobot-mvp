@@ -599,17 +599,19 @@ export default function AgentPage() {
               {agents.length} agent{agents.length !== 1 ? 's' : ''} configuré{agents.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button
-            onClick={() => {
-              const suggestion = getSuggestedAgentType();
-              setCreateForm(p => ({ ...p, agent_type: suggestion?.agentType ?? 'libre' }));
-              setShowCreateForm(true);
-            }}
-            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105"
-            style={{ background: 'rgba(255,77,0,0.12)', border: '1px solid rgba(255,77,0,0.3)', color: '#FF4D00' }}
-          >
-            + Nouvel agent
-          </button>
+          {!agents.some(a => a.is_active) && (
+            <button
+              onClick={() => {
+                const suggestion = getSuggestedAgentType();
+                setCreateForm(p => ({ ...p, agent_type: suggestion?.agentType ?? 'libre' }));
+                setShowCreateForm(true);
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105"
+              style={{ background: 'rgba(255,77,0,0.12)', border: '1px solid rgba(255,77,0,0.3)', color: '#FF4D00' }}
+            >
+              + Nouvel agent
+            </button>
+          )}
         </div>
       </div>
 
