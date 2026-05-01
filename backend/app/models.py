@@ -598,7 +598,7 @@ class AgentTemplate(Base):
     
     # Identité de l'agent
     name = Column(String(255), nullable=False)                          # "Mon Bot Vente"
-    agent_type = Column(SQLEnum(AgentType), nullable=False, default=AgentType.LIBRE)
+    agent_type = Column(String(50), nullable=False, default="libre")
     description = Column(Text, nullable=True)
     
     # Prompt système (couche 2 — modifiable par le tenant)
