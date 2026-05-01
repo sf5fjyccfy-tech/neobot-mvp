@@ -43,12 +43,19 @@ export default function BillingPage() {
   const [mounted, setMounted]   = useState(false);
   const [usage, setUsage]       = useState<UsageSummary | null>(null);
   const [loading, setLoading]   = useState(true);
+  const [payPickerOpen, setPayPickerOpen] = useState(false);
   const [omModalOpen, setOmModalOpen]   = useState(false);
   const [omPhone, setOmPhone]           = useState('');
   const [omSubmitting, setOmSubmitting] = useState(false);
   const [omSuccess, setOmSuccess]       = useState(false);
   const [omError, setOmError]           = useState('');
   const [copiedUssd, setCopiedUssd]     = useState(false);
+  const [mtnModalOpen, setMtnModalOpen] = useState(false);
+  const [mtnPhone, setMtnPhone]         = useState('');
+  const [mtnSubmitting, setMtnSubmitting] = useState(false);
+  const [mtnSuccess, setMtnSuccess]     = useState(false);
+  const [mtnError, setMtnError]         = useState('');
+  const [copiedMtn, setCopiedMtn]       = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -68,6 +75,33 @@ export default function BillingPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleMtnSubmit() {
+    const phoneDigits = mtnPhone.replace(/\s/g, '');
+    if (!phoneDigits) { setMtnError('Entrez votre numéro MTN Mobile Money'); return; }
+    if (!/^6\d{8}$/.test(phoneDigits)) { setMtnError('Format invalide — ex: 670 12 34 56'); return; }
+    const token = getToken();
+    if (!token) { window.location.href = '/login?redirect=/billing'; return; }
+    setMtnSubmitting(true);
+    setMtnError('');
+    try {
+      const res = await fetch(buildApiUrl('/api/neopay/om-request'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ plan: 'BASIC', customer_phone: phoneDigits, method: 'mtn' }),
+      });
+      if (res.ok) {
+        setMtnSuccess(true);
+      } else {
+        const data = await res.json();
+        setMtnError(data.detail || 'Erreur lors de la soumission. Réessayez.');
+      }
+    } catch {
+      setMtnError('Erreur réseau. Réessayez.');
+    } finally {
+      setMtnSubmitting(false);
+    }
+  }
 
   async function handleOmSubmit() {
     const phoneDigits = omPhone.replace(/\s/g, '');
@@ -149,7 +183,7 @@ export default function BillingPage() {
                 </span>
               )}
               <button
-                onClick={() => { setOmSuccess(false); setOmError(''); setOmPhone(''); setOmModalOpen(true); }}
+                onClick={() => setPayPickerOpen(true)}
                 style={{
                   padding: '10px 22px',
                   background: `linear-gradient(135deg, ${NEON}, #00E5CC)`,
@@ -268,7 +302,7 @@ export default function BillingPage() {
         }}>
           <span style={{ fontSize: 22 }}>📱</span>
           <div>
-            <p style={{ color: NEON, fontSize: 13, fontWeight: 700, margin: 0 }}>Paiement Orange Money uniquement</p>
+            <p style={{ color: NEON, fontSize: 13, fontWeight: 700, margin: 0 }}>Orange Money ou MTN Mobile Money</p>
             <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '3px 0 0' }}>
               Paiement vérifié manuellement sous 24h. Aucune carte de crédit requise.
             </p>
@@ -277,6 +311,232 @@ export default function BillingPage() {
 
       </div>
     </div>
+
+    {/* ── Modale sélection méthode de paiement ────────────────────────── */}
+    {payPickerOpen && (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 16,
+      }} onClick={e => { if (e.target === e.currentTarget) setPayPickerOpen(false); }}>
+        <div style={{
+          background: '#12091F', border: `1px solid ${BORDER}`, borderRadius: 20,
+          padding: 28, width: '100%', maxWidth: 400, position: 'relative',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+        }}>
+          <button
+            onClick={() => setPayPickerOpen(false)}
+            style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', color: MUTED, fontSize: 20, cursor: 'pointer' }}
+          >✕</button>
+          <h2 style={{ fontFamily: '"Syne",sans-serif', color: '#fff', fontSize: 18, fontWeight: 800, margin: '0 0 6px', textAlign: 'center' }}>
+            Choisir votre mode de paiement
+          </h2>
+          <p style={{ color: MUTED, fontSize: 13, textAlign: 'center', margin: '0 0 24px' }}>
+            Plan Essential — <strong style={{ color: NEON }}>20 000 FCFA</strong>/mois
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button
+              onClick={() => { setPayPickerOpen(false); setOmSuccess(false); setOmError(''); setOmPhone(''); setOmModalOpen(true); }}
+              style={{
+                padding: '16px 20px',
+                background: 'rgba(255,100,0,0.08)',
+                border: '1px solid rgba(255,100,0,0.3)',
+                borderRadius: 12,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: 28 }}>🟠</span>
+              <div>
+                <div style={{ color: '#FF6600', fontWeight: 800 }}>Orange Money</div>
+                <div style={{ color: MUTED, fontSize: 12, fontWeight: 400 }}>Paiement USSD — #150*46*3731154#</div>
+              </div>
+            </button>
+            <button
+              onClick={() => { setPayPickerOpen(false); setMtnSuccess(false); setMtnError(''); setMtnPhone(''); setMtnModalOpen(true); }}
+              style={{
+                padding: '16px 20px',
+                background: 'rgba(255,204,0,0.06)',
+                border: '1px solid rgba(255,204,0,0.25)',
+                borderRadius: 12,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: 28 }}>🟡</span>
+              <div>
+                <div style={{ color: '#FFCC00', fontWeight: 800 }}>MTN Mobile Money</div>
+                <div style={{ color: MUTED, fontSize: 12, fontWeight: 400 }}>Transfert vers 673 745 429 (DIMANI BALLA)</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Modale paiement MTN Mobile Money ─────────────────────────────── */}
+    {mtnModalOpen && (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 16,
+      }}>
+        <div style={{
+          background: '#12091F', border: `1px solid ${BORDER}`, borderRadius: 20,
+          padding: 28, width: '100%', maxWidth: 420, position: 'relative',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+        }}>
+          <button
+            onClick={() => setMtnModalOpen(false)}
+            style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', color: MUTED, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}
+          >✕</button>
+
+          {mtnSuccess ? (
+            <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+              <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
+              <h2 style={{ fontFamily: '"Syne",sans-serif', color: '#fff', fontSize: 20, fontWeight: 800, margin: '0 0 12px' }}>Demande envoyée !</h2>
+              <p style={{ color: MUTED, fontSize: 14, lineHeight: 1.7, margin: '0 0 10px' }}>
+                Votre demande a été enregistrée. Votre abonnement sera activé dans les{' '}
+                <strong style={{ color: '#FFCC00' }}>24h</strong> après vérification de votre paiement.
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, margin: 0 }}>
+                Un email de confirmation vous sera envoyé dès l&apos;activation.
+              </p>
+              <button
+                onClick={() => setMtnModalOpen(false)}
+                style={{ marginTop: 24, padding: '10px 28px', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, color: TEXT, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >Fermer</button>
+            </div>
+          ) : (
+            <>
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 700, background: 'rgba(34,197,94,0.1)', padding: '4px 14px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.25)', letterSpacing: 0.5 }}>
+                  🔒 PAIEMENT SÉCURISÉ
+                </span>
+              </div>
+
+              <h2 style={{ fontFamily: '"Syne",sans-serif', color: '#fff', fontSize: 18, fontWeight: 800, margin: '0 0 4px', textAlign: 'center' }}>Payer par MTN Mobile Money</h2>
+              <p style={{ color: MUTED, fontSize: 13, textAlign: 'center', margin: '0 0 24px' }}>Plan Essential — <strong style={{ color: '#FFCC00' }}>20 000 FCFA</strong>/mois</p>
+
+              <label style={{ fontSize: 12, fontWeight: 600, color: MUTED, display: 'block', marginBottom: 6 }}>Votre numéro MTN Mobile Money</label>
+              <input
+                type="tel"
+                value={mtnPhone}
+                onChange={e => { setMtnPhone(e.target.value); setMtnError(''); }}
+                placeholder="Ex: 670 12 34 56"
+                maxLength={12}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '11px 14px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${mtnError ? '#EF4444' : BORDER}`,
+                  borderRadius: 10,
+                  color: '#fff', fontSize: 15, fontWeight: 600,
+                  outline: 'none', marginBottom: 20,
+                  letterSpacing: 1.5,
+                }}
+              />
+
+              <div style={{
+                background: 'rgba(255,204,0,0.05)',
+                border: '1px solid rgba(255,204,0,0.2)',
+                borderRadius: 12, padding: '14px 16px', marginBottom: 16,
+              }}>
+                <p style={{ color: '#FFCC00', fontWeight: 700, fontSize: 12, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}>📱 Instructions de transfert</p>
+                <ol style={{ paddingLeft: 18, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>
+                    Composez <strong style={{ color: '#fff' }}>*126#</strong> ou ouvrez l&apos;app MoMo
+                  </li>
+                  <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>
+                    Choisissez <strong style={{ color: '#fff' }}>Envoyer de l&apos;argent</strong>
+                  </li>
+                  <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>
+                    Numéro destinataire&nbsp;:{' '}
+                    <strong style={{ color: '#fff', letterSpacing: 1 }}>673 745 429</strong>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText('673745429').then(() => {
+                          setCopiedMtn(true);
+                          setTimeout(() => setCopiedMtn(false), 2000);
+                        });
+                      }}
+                      style={{
+                        marginLeft: 8, padding: '2px 8px',
+                        background: copiedMtn ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
+                        border: `1px solid ${copiedMtn ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.15)'}`,
+                        borderRadius: 6, color: copiedMtn ? '#22c55e' : 'rgba(255,255,255,0.6)',
+                        fontSize: 11, fontWeight: 600, cursor: 'pointer', verticalAlign: 'middle',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {copiedMtn ? '✓ Copié' : 'Copier'}
+                    </button>
+                  </li>
+                  <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>
+                    Montant&nbsp;: <strong style={{ color: '#fff' }}>20 000 FCFA</strong>
+                  </li>
+                  <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>Entrez votre code PIN MTN MoMo et confirmez</li>
+                  <li style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 1.5 }}>Cliquez sur &quot;J&apos;ai effectué le paiement&quot; ci-dessous</li>
+                </ol>
+              </div>
+
+              <div style={{
+                background: 'rgba(34,197,94,0.05)',
+                border: '1px solid rgba(34,197,94,0.15)',
+                borderRadius: 10, padding: '11px 14px', marginBottom: 20,
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>🛡️</span>
+                <div>
+                  <p style={{ color: '#22c55e', fontWeight: 700, fontSize: 12, margin: 0 }}>Destinataire vérifié</p>
+                  <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, margin: '3px 0 0', lineHeight: 1.6 }}>
+                    Votre paiement sera reçu par <strong style={{ color: '#fff' }}>DIMANI BALLA</strong> (673 745 429), titulaire du compte MTN MoMo NeoBot.
+                    En cas de problème : <strong style={{ color: '#fff' }}>contact@neobot-ai.com</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {mtnError && (
+                <p style={{ color: '#EF4444', fontSize: 12, margin: '-8px 0 16px', fontWeight: 600 }}>⚠️ {mtnError}</p>
+              )}
+
+              <button
+                onClick={handleMtnSubmit}
+                disabled={mtnSubmitting}
+                style={{
+                  width: '100%', padding: '13px',
+                  background: mtnSubmitting ? 'rgba(255,204,0,0.2)' : 'linear-gradient(135deg, #FFCC00, #FF9900)',
+                  border: 'none', borderRadius: 12,
+                  color: mtnSubmitting ? MUTED : '#1A1200',
+                  fontSize: 14, fontWeight: 800,
+                  cursor: mtnSubmitting ? 'not-allowed' : 'pointer',
+                  letterSpacing: 0.3,
+                }}
+              >
+                {mtnSubmitting ? 'Envoi en cours...' : "✅ J'ai effectué le paiement"}
+              </button>
+
+              <p style={{ textAlign: 'center', marginTop: 14, marginBottom: 0, fontSize: 11, color: MUTED }}>
+                Votre abonnement sera activé sous 24h après vérification. Aucun remboursement automatique.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    )}
 
     {/* ── Modale paiement Orange Money ─────────────────────────────────── */}
     {omModalOpen && (

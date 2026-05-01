@@ -117,7 +117,7 @@ export default function AnalyticsPage() {
       const token = getToken();
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const r = await fetch(buildApiUrl(`/api/tenants/${tid}/analytics/dashboard`), { headers });
+      const r = await fetch(buildApiUrl(`/api/tenants/${tid}/analytics/dashboard?days=${days}`), { headers });
       const json = await r.json();
       if (json.status === 'success') setData(json.data);
     } catch (_) {}

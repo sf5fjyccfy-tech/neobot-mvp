@@ -79,14 +79,6 @@ export default function ConversationsPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<number | null>(null);
 
-  // Modal "Nouveau message"
-  const [showNewMsgModal, setShowNewMsgModal] = useState(false);
-  const [newPhone, setNewPhone] = useState('');
-  const [newMessage, setNewMessage] = useState('');
-  const [sendingNew, setSendingNew] = useState(false);
-  const [newMsgError, setNewMsgError] = useState<string | null>(null);
-  const [newMsgSuccess, setNewMsgSuccess] = useState(false);
-
   const filtered = conversations.filter(c => {
     const matchFilter = filter === 'all' || c.status === filter;
     const matchSearch = !search || c.customer_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -163,48 +155,6 @@ export default function ConversationsPage() {
       .catch(() => setBotPaused(false));
   }, [selected]);
 
-  async function initiateConversation() {
-    const tid = getTenantId();
-    const token = getToken();
-    if (!tid || !newPhone.trim() || !newMessage.trim()) return;
-    setSendingNew(true);
-    setNewMsgError(null);
-    try {
-      const r = await fetch(buildApiUrl(`/api/tenants/${tid}/conversations/initiate`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) },
-        body: JSON.stringify({ phone_number: newPhone.trim(), message: newMessage.trim() }),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        setNewMsgError(data?.detail || `Erreur ${r.status}`);
-        return;
-      }
-      setNewMsgSuccess(true);
-      setNewPhone('');
-      setNewMessage('');
-      // Rafraîchir la liste et sélectionner la conversation créée
-      const tid2 = getTenantId();
-      const token2 = getToken();
-      if (tid2) {
-        const r2 = await fetch(buildApiUrl(`/api/tenants/${tid2}/conversations`), {
-          headers: { ...(token2 && { 'Authorization': `Bearer ${token2}` }) },
-        });
-        const d2 = await r2.json();
-        if (d2?.conversations) {
-          setConversations(d2.conversations);
-          const created = d2.conversations.find((c: Conversation) => c.id === data.conversation_id);
-          if (created) { setSelected(created); if (isMobile) setMobileView('chat'); }
-        }
-      }
-      setTimeout(() => { setShowNewMsgModal(false); setNewMsgSuccess(false); }, 800);
-    } catch (e) {
-      setNewMsgError('Erreur réseau');
-    } finally {
-      setSendingNew(false);
-    }
-  }
-
   async function toggleBot(pause: boolean) {
     if (!selected) return;
     const tid = getTenantId();
@@ -274,7 +224,7 @@ export default function ConversationsPage() {
       }}>
         {/* Sidebar header */}
         <div style={{ padding: '20px 16px', borderBottom: `1px solid ${BORDER}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ marginBottom: 12 }}>
             <h2 style={{
               fontFamily: '"Syne", sans-serif',
               fontSize: 18,
@@ -284,22 +234,6 @@ export default function ConversationsPage() {
             }}>
               Conversations
             </h2>
-            <button
-              onClick={() => { setShowNewMsgModal(true); setNewMsgError(null); setNewMsgSuccess(false); }}
-              style={{
-                padding: '6px 12px',
-                background: NEON,
-                border: 'none',
-                borderRadius: 8,
-                color: '#fff',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              + Nouveau
-            </button>
           </div>
           {/* Search */}
           <input
@@ -589,88 +523,6 @@ export default function ConversationsPage() {
         )}
       </div>
     </div>
-      {/* Modal Nouveau message */}
-      {showNewMsgModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-        }} onClick={e => { if (e.target === e.currentTarget) setShowNewMsgModal(false); }}>
-          <div style={{
-            background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16,
-            padding: 28, width: '100%', maxWidth: 420,
-          }}>
-            <h3 style={{ fontFamily: '"Syne", sans-serif', fontSize: 18, fontWeight: 800, color: '#fff', margin: '0 0 20px' }}>
-              Envoyer un message
-            </h3>
-
-            <label style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 6 }}>
-              Numéro WhatsApp (avec indicatif pays)
-            </label>
-            <input
-              type="tel"
-              value={newPhone}
-              onChange={e => setNewPhone(e.target.value)}
-              placeholder="+22670000000"
-              disabled={sendingNew}
-              style={{
-                width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`,
-                borderRadius: 8, color: TEXT, fontSize: 14, outline: 'none',
-                boxSizing: 'border-box', marginBottom: 16,
-                opacity: sendingNew ? 0.6 : 1,
-              }}
-            />
-
-            <label style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 6 }}>
-              Message
-            </label>
-            <textarea
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              placeholder="Bonjour, je vous contacte au sujet de..."
-              disabled={sendingNew}
-              rows={4}
-              style={{
-                width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`,
-                borderRadius: 8, color: TEXT, fontSize: 13, outline: 'none',
-                boxSizing: 'border-box', resize: 'vertical', marginBottom: 16,
-                opacity: sendingNew ? 0.6 : 1, fontFamily: 'inherit',
-              }}
-            />
-
-            {newMsgError && (
-              <p style={{ fontSize: 12, color: '#EF4444', marginBottom: 12 }}>{newMsgError}</p>
-            )}
-            {newMsgSuccess && (
-              <p style={{ fontSize: 12, color: '#00E5CC', marginBottom: 12 }}>✓ Message envoyé !</p>
-            )}
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowNewMsgModal(false)}
-                disabled={sendingNew}
-                style={{
-                  padding: '9px 18px', background: 'transparent', border: `1px solid ${BORDER}`,
-                  borderRadius: 8, color: MUTED, fontSize: 13, cursor: 'pointer',
-                }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={initiateConversation}
-                disabled={sendingNew || !newPhone.trim() || !newMessage.trim()}
-                style={{
-                  padding: '9px 18px', background: NEON, border: 'none',
-                  borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700,
-                  cursor: (sendingNew || !newPhone.trim() || !newMessage.trim()) ? 'not-allowed' : 'pointer',
-                  opacity: (sendingNew || !newPhone.trim() || !newMessage.trim()) ? 0.6 : 1,
-                }}
-              >
-                {sendingNew ? 'Envoi...' : 'Envoyer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AppShell>
   );
 }

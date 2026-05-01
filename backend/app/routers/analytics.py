@@ -19,35 +19,13 @@ router = APIRouter(prefix="/api/tenants", tags=["analytics"])
 @router.get("/{tenant_id}/analytics/dashboard")
 async def get_analytics_dashboard(
     tenant_id: int,
+    days: int = 30,
     db: Session = Depends(get_db),
     _: bool = Depends(verify_tenant_access)
 ):
-    """
-    Récupère le tableau de bord analytique complet.
-    
-    Inclut:
-    - Stats de messages (total, tendance)
-    - Stats de conversations (actives, fermées)
-    - Stats de revenus (dépassements)
-    - Graphique messages/jour
-    - Top 10 clients
-    - Stats temps de réponse IA
-    
-    Exemple:
-    GET /api/tenants/1/analytics/dashboard
-    
-    Réponse:
-    {
-        "message_stats": {...},
-        "conversation_stats": {...},
-        "revenue_stats": {...},
-        "daily_chart": [...],
-        "top_clients": [...],
-        "response_stats": {...}
-    }
-    """
+    """Tableau de bord analytique complet. ?days=7|30|90"""
     try:
-        data = AnalyticsService.get_complete_dashboard(tenant_id, db=db)
+        data = AnalyticsService.get_complete_dashboard(tenant_id, days=days, db=db)
         return {
             "status": "success",
             "data": data

@@ -345,18 +345,18 @@ class AnalyticsService:
             return {}
     
     @staticmethod
-    def get_complete_dashboard(tenant_id: int, db: Session = None) -> dict:
+    def get_complete_dashboard(tenant_id: int, days: int = 30, db: Session = None) -> dict:
         """
         Récupère toutes les données pour le tableau de bord analytique.
         """
         try:
             return {
-                "message_stats": AnalyticsService.get_message_stats(tenant_id, db=db),
+                "message_stats": AnalyticsService.get_message_stats(tenant_id, days=days, db=db),
                 "conversation_stats": AnalyticsService.get_conversation_stats(tenant_id, db=db),
                 "revenue_stats": AnalyticsService.get_revenue_stats(tenant_id, db=db),
-                "daily_chart": AnalyticsService.get_daily_message_chart(tenant_id, db=db),
+                "daily_chart": AnalyticsService.get_daily_message_chart(tenant_id, days=days, db=db),
                 "top_clients": AnalyticsService.get_top_clients(tenant_id, db=db),
-                "response_stats": AnalyticsService.get_response_time_stats(tenant_id, db=db)
+                "response_stats": AnalyticsService.get_response_time_stats(tenant_id, days=days, db=db)
             }
         except Exception as e:
             logger.error(f"❌ Erreur tableau complet: {e}")
