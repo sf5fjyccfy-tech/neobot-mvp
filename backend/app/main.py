@@ -222,6 +222,9 @@ async def _startup_tasks():
             # tenants : colonnes supplémentaires
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS messages_this_month INTEGER DEFAULT 0;",
+            # usage_tracking : colonnes ajoutées après création initiale
+            "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS other_platform_messages_used INTEGER DEFAULT 0;",
+            "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();",
             # payment_events : transaction_id et autres colonnes manquantes
             "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255);",
             "ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS provider VARCHAR(20);",

@@ -182,6 +182,7 @@ class TenantSession {
     this.connectedPhone = null;
     this.errorSince = null;
     this.autoConnectEnabled = false;
+    this.qrCycleCount = 0;  // nombre de cycles QR sans authentification
     // Message debounce
     this.msgBuffers = new Map();
     this.msgDebounceTimers = new Map();
@@ -502,8 +503,20 @@ function scheduleReconnect(session, reason) {
     session.state = 'error';
     session.lastError = `Max retries (${MAX_RETRIES}). Last: ${reason}`;
     session.errorSince = Date.now();
-    logger.error('Max retries reached, auto-recovery in 15min', { tenantId: session.tenantId });
     clearReconnectTimer(session);
+
+    // Si la session n'a jamais été authentifiée (pas de téléphone connu),
+    // ne pas boucler indéfiniment — économise la DB et le CPU
+    if (!session.connectedPhone) {
+      session.qrCycleCount = (session.qrCycleCount || 0) + 1;
+      if (session.qrCycleCount >= 3) {
+        session.autoConnectEnabled = false;
+        logger.warn('QR never scanned after 3 cycles — auto-connect disabled', { tenantId: session.tenantId });
+        return;
+      }
+    }
+
+    logger.error('Max retries reached, auto-recovery in 15min', { tenantId: session.tenantId });
     session.scheduledReconnect = setTimeout(() => {
       session.scheduledReconnect = null;
       session.retryCount = 0;
@@ -781,12 +794,12 @@ function buildQRResponse(session) {
 
 // ── Watchdog ──────────────────────────────────────────────────────────────────
 function startWatchdog() {
-  // DB keepalive
+  // DB keepalive — 25min évite de garder Supabase actif en permanence
   setInterval(async () => {
     if (process.env.DATABASE_URL) {
       try { await pingPool(); } catch (_) { }
     }
-  }, 4 * 60_000);
+  }, 25 * 60_000);
 
   // Backend keepalive (prevent Render sleep)
   if (BACKEND_URL && !BACKEND_URL.includes('localhost')) {
