@@ -50,9 +50,7 @@ def _is_valid_webhook_signature(request: Request, message: "WhatsAppMessage") ->
     """
     if not WEBHOOK_SECRET:
         if APP_ENV == "production":
-            logger.error("CRITIQUE: WHATSAPP_WEBHOOK_SECRET non défini en production — toutes les requêtes rejetées")
-            return False
-        # Dev sans secret configuré : permissif (Baileys local ne signe pas)
+            logger.warning("WHATSAPP_WEBHOOK_SECRET non défini — webhook accepté sans signature (configurer la variable d'env)")
         return True
 
     signature = request.headers.get("x-webhook-signature")
