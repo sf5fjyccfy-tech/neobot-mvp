@@ -114,11 +114,11 @@ async def neo_chat(
 
     system_prompt = _NEO_SYSTEM_PROMPT.format(page=page_clean)
 
-    # Construire l'historique — limité à 10 derniers échanges (coût + sécurité)
+    # Historique limité à 4 derniers échanges × 300 chars max — économie de tokens
     messages: list = [{"role": "system", "content": system_prompt}]
-    for turn in (body.history or [])[-10:]:
-        messages.append({"role": turn.role, "content": turn.content[:2000]})
-    messages.append({"role": "user", "content": body.message[:1000]})
+    for turn in (body.history or [])[-4:]:
+        messages.append({"role": turn.role, "content": turn.content[:300]})
+    messages.append({"role": "user", "content": body.message[:500]})
 
     result = await DeepSeekClient.call(
         messages=messages,

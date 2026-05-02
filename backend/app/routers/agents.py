@@ -38,7 +38,7 @@ class AgentCreateRequest(BaseModel):
     tone: str = "Friendly, Professional"
     language: str = "fr"
     emoji_enabled: bool = True
-    max_response_length: int = Field(default=400, ge=50, le=2000)
+    max_response_length: int = Field(default=300, ge=50, le=400)
     availability_start: Optional[str] = None   # "08:00"
     availability_end: Optional[str] = None     # "22:00"
     off_hours_message: Optional[str] = None
@@ -53,7 +53,7 @@ class AgentUpdateRequest(BaseModel):
     tone: Optional[str] = None
     language: Optional[str] = None
     emoji_enabled: Optional[bool] = None
-    max_response_length: Optional[int] = Field(default=None, ge=50, le=2000)
+    max_response_length: Optional[int] = Field(default=None, ge=50, le=400)
     availability_start: Optional[str] = None
     availability_end: Optional[str] = None
     off_hours_message: Optional[str] = None

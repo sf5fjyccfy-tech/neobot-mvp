@@ -65,11 +65,19 @@ async def close_http_client():
         _http_client = None
         logger.info("✅ HTTP client closed")
 
+# ========== BUDGET JOURNALIER (partagé avec services/http_client.py) ==========
+# Limite globale pour éviter les fuites : 500 appels/jour max
+try:
+    from .services.http_client import _ds_budget_ok as _budget_ok
+except Exception:
+    def _budget_ok() -> bool:
+        return True  # fallback si import circulaire
+
 # ========== API CLIENTS ==========
 
 class DeepSeekClient:
     """Client pour l'API DeepSeek avec retry et fallback"""
-    
+
     DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     
@@ -88,8 +96,11 @@ class DeepSeekClient:
             if not DeepSeekClient.DEEPSEEK_API_KEY:
                 return {"error": "DEEPSEEK_API_KEY is not configured"}
 
+            if not _budget_ok():
+                return {"error": "Budget journalier DeepSeek atteint"}
+
             client = get_http_client()
-            
+
             response = await client.post(
                 DeepSeekClient.DEEPSEEK_URL,
                 headers={
@@ -100,7 +111,7 @@ class DeepSeekClient:
                     "model": model,
                     "messages": messages,
                     "temperature": temperature,
-                    "max_tokens": max_tokens,
+                    "max_tokens": min(max_tokens, 400),
                     "stream": False
                 },
                 timeout=HTTPX_TIMEOUT_AI,  # Override : LLM peut prendre jusqu'à 60s

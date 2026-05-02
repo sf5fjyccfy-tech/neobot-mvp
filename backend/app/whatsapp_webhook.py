@@ -296,19 +296,19 @@ Ou posez votre question!
                 "products_services": profile.get('products_services', [])
             }
             
-            # ✅ STEP 3: OBTENIR CONVERSATION HISTORY
+            # ✅ STEP 3: OBTENIR CONVERSATION HISTORY (3 échanges max, 400 chars/msg)
             conversation_history = None
             if db and conversation_id:
                 try:
                     messages = db.query(Message).filter(
                         Message.conversation_id == conversation_id
-                    ).order_by(Message.id.desc()).limit(5).all()
-                    
+                    ).order_by(Message.id.desc()).limit(6).all()
+
                     conversation_history = []
                     for msg in reversed(messages):
                         conversation_history.append({
                             "role": "user" if msg.direction == "incoming" else "assistant",
-                            "content": msg.content
+                            "content": (msg.content or "")[:400]
                         })
                 except Exception as e:
                     logger.warning(f"Could not get conversation history: {e}")
@@ -323,7 +323,7 @@ Ou posez votre question!
             if active_agent:
                 # Mode AGENT : utiliser le prompt système de l'agent configuré
                 system_prompt = build_agent_system_prompt(active_agent, db)
-                max_tokens = active_agent.max_response_length or 500
+                max_tokens = min(active_agent.max_response_length or 300, 350)
 
                 # CRM uniquement — history_text est déjà dans conversation_history[:-1]
                 # l'injecter ici aussi causerait une duplication → bot qui répète

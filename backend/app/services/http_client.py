@@ -55,16 +55,36 @@ async def close_http_client():
         logger.info("✅ Global HTTP client closed")
 
 
+# ── Budget journalier DeepSeek (reset à minuit UTC) ──────────────────────────
+_ds_daily_calls: int = 0
+_ds_daily_reset: str = ""
+_DS_DAILY_LIMIT: int = 500   # max appels/jour — protège contre les fuites
+
+
+def _ds_budget_ok() -> bool:
+    global _ds_daily_calls, _ds_daily_reset
+    from datetime import datetime as _dt, timezone as _tz
+    today = _dt.now(_tz.utc).strftime("%Y-%m-%d")
+    if _ds_daily_reset != today:
+        _ds_daily_calls = 0
+        _ds_daily_reset = today
+    if _ds_daily_calls >= _DS_DAILY_LIMIT:
+        logger.error("🚨 Budget journalier DeepSeek atteint (%d appels) — bloqué jusqu'à demain", _DS_DAILY_LIMIT)
+        return False
+    _ds_daily_calls += 1
+    return True
+
+
 class DeepSeekClient:
     """
     Client for DeepSeek API calls using global HTTP connection pooling
     """
-    
+
     def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
         self.api_key = api_key
         self.base_url = base_url
         self.model = "deepseek-chat"
-    
+
     async def call(self, messages: list, temperature: float = 0.7, max_tokens: int = 200) -> str:
         """
         Call DeepSeek API with the global pooled HTTP client
@@ -77,13 +97,16 @@ class DeepSeekClient:
         Returns:
             Response text from DeepSeek
         """
+        if not _ds_budget_ok():
+            raise Exception("Budget journalier DeepSeek atteint")
+
         client = get_http_client()
-        
+
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens
+            "max_tokens": min(max_tokens, 400),
         }
         
         headers = {
