@@ -37,10 +37,14 @@ DEMO_TENANT_ID = int(os.getenv("DEMO_TENANT_ID", "13"))
 _SESSION_TTL_MINUTES = 30
 _MAX_EXCHANGES = 5       # messages visiteur max par session
 _MAX_INPUT_CHARS = 480
+_DAILY_CALL_LIMIT = 100  # plafond global journalier pour toute la démo
 
 # ── Session store in-memory ───────────────────────────────────────────────
 # { session_id: { messages: [...], created_at: datetime, count: int } }
 _SESSIONS: Dict[str, dict] = {}
+# ── Compteur global journalier (reset à minuit UTC) ───────────────────────
+_daily_calls: int = 0
+_daily_reset_date: Optional[str] = None   # "YYYY-MM-DD"
 # ── Cache du prompt (chargé une seule fois par démarrage) ─────────────────
 _cached_system_prompt: Optional[str] = None
 
@@ -135,6 +139,21 @@ def _cleanup_expired() -> None:
         del _SESSIONS[sid]
 
 
+def _check_daily_limit() -> bool:
+    """Retourne True si le plafond journalier est atteint."""
+    global _daily_calls, _daily_reset_date
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    if _daily_reset_date != today:
+        _daily_calls = 0
+        _daily_reset_date = today
+    return _daily_calls >= _DAILY_CALL_LIMIT
+
+
+def _increment_daily() -> None:
+    global _daily_calls
+    _daily_calls += 1
+
+
 # ── Schémas ───────────────────────────────────────────────────────────────
 class DemoChatRequest(BaseModel):
     session_id: str = Field(..., min_length=8, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
@@ -157,6 +176,9 @@ async def demo_chat(request: Request, body: DemoChatRequest):
     """
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=503, detail="Service temporairement indisponible")
+
+    if _check_daily_limit():
+        raise HTTPException(status_code=429, detail="Démo temporairement indisponible, réessayez demain")
 
     _cleanup_expired()
 
@@ -199,6 +221,7 @@ async def demo_chat(request: Request, body: DemoChatRequest):
         raise HTTPException(status_code=502, detail="Erreur lors de la génération de la réponse")
 
     session["messages"].append({"role": "assistant", "content": reply})
+    _increment_daily()
 
     return DemoChatResponse(
         reply=reply,

@@ -21,6 +21,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 
 # Imports locaux
 from .database import get_db, init_db, Base, engine, SessionLocal
@@ -634,6 +635,7 @@ app = FastAPI(
 # Rate limiting via slowapi — identifie les clients par IP
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Handler global pour les exceptions non gérées (500)
 # Les headers CORS sont injectés directement ici comme défense en profondeur :
