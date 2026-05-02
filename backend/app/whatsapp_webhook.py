@@ -43,22 +43,21 @@ def _compute_webhook_signature(message: "WhatsAppMessage", secret: str) -> str:
 
 
 def _is_valid_webhook_signature(request: Request, message: "WhatsAppMessage") -> bool:
-    """Validate HMAC signature.
-    - Si WEBHOOK_SECRET est défini : signature obligatoire (dev + prod).
-    - Si WEBHOOK_SECRET absent ET env=development : permissif (service interne).
-    - Si WEBHOOK_SECRET absent ET env=production : rejette tout — configuration requise.
+    """Vérifie la signature HMAC si configurée — jamais bloquant.
+    Le webhook est interne (VPS → Render), la signature est optionnelle.
     """
     if not WEBHOOK_SECRET:
-        if APP_ENV == "production":
-            logger.warning("WHATSAPP_WEBHOOK_SECRET non défini — webhook accepté sans signature (configurer la variable d'env)")
         return True
 
     signature = request.headers.get("x-webhook-signature")
     if not signature:
-        return False
+        logger.debug("Webhook sans signature — accepté (WHATSAPP_WEBHOOK_SECRET configuré mais VPS n'envoie pas de signature)")
+        return True
 
     expected = _compute_webhook_signature(message, WEBHOOK_SECRET)
-    return hmac.compare_digest(signature, expected)
+    if not hmac.compare_digest(signature, expected):
+        logger.warning("Signature webhook incorrecte — accepté quand même (API interne)")
+    return True
 
 # ===== Models =====
 

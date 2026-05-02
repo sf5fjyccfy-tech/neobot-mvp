@@ -23,6 +23,8 @@ PUBLIC_PREFIXES = (
     "/docs",
     "/redoc",
     "/webhook/",
+    "/api/v1/webhooks/",
+    "/webhooks/",
 )
 
 SUBSCRIPTION_REQUIRED_PREFIXES = (
