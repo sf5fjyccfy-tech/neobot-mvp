@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 
 from app.database import get_db
-from app.models import AgentTemplate, AgentType, KnowledgeSource, PromptVariable, Tenant, User
+from app.models import AgentTemplate, AgentType, KnowledgeSource, PromptVariable, Tenant, User, PLAN_LIMITS
 from app.dependencies import get_current_user
 from app.services.agent_service import (
     AgentService,
@@ -175,6 +175,20 @@ async def create_agent(
 ):
     """Crée un nouvel agent pour le tenant."""
     _check_tenant_access(tenant_id, current_user)
+
+    # Vérifier la limite max_agents du plan
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant:
+        plan_config = PLAN_LIMITS.get(tenant.plan, {})
+        max_agents = plan_config.get("max_agents", 1)
+        if max_agents != -1:  # -1 = illimité (Enterprise, NeoBot)
+            existing = db.query(AgentTemplate).filter(AgentTemplate.tenant_id == tenant_id).count()
+            if existing >= max_agents:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Votre plan permet {max_agents} agent(s) maximum. Supprimez un agent existant ou passez au plan supérieur."
+                )
+
     agent = AgentService.create_agent(
         tenant_id=tenant_id,
         name=body.name,

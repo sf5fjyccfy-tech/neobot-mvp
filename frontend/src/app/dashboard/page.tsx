@@ -27,7 +27,7 @@ const STATS: StatCard[] = [
   { label: 'Messages aujourd\'hui', value: '—', sub: 'Chargement...', icon: MessageSquare, color: '#FF4D00' },
   { label: 'Conversations actives', value: '—', sub: 'Sessions ouvertes', icon: Users, color: '#00E5CC' },
   { label: 'Taux de résolution', value: '—', sub: 'Sur 30 derniers jours', icon: CheckCircle2, color: '#FF6B35' },
-  { label: 'Statut agent', value: 'ACTIF', sub: 'WhatsApp connecté', icon: Wifi, color: '#FF4D00' },
+  { label: 'Statut agent', value: '—', sub: 'Chargement...', icon: Wifi, color: '#FF4D00' },
 ];
 
 interface ActionCard {
@@ -192,7 +192,10 @@ export default function DashboardPage() {
             setStats(prev => prev.map((s, i) => {
               if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: superadmin ? '∞ messages' : `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
               if (i === 1) return { ...s, value: String(usageData.active_conversations ?? '—'), sub: 'Sessions ouvertes' };
-              if (i === 3) return { ...s, value: usageData.over_limit ? 'QUOTA' : waOk ? 'ACTIF' : 'INACTIF', sub: usageData.over_limit ? 'Quota dépassé' : waOk ? 'WhatsApp connecté' : 'WhatsApp non connecté' };
+              const agentActive = agentData?.is_active === true || agentData?.agent?.is_active === true;
+              const statusValue = usageData.over_limit ? 'QUOTA' : (waOk && agentActive) ? 'ACTIF' : 'INACTIF';
+              const statusSub = usageData.over_limit ? 'Quota dépassé' : !agentActive ? 'Agent désactivé' : waOk ? 'WhatsApp connecté' : 'WhatsApp non connecté';
+              if (i === 3) return { ...s, value: statusValue, sub: statusSub };
               return s;
             }));
           }
