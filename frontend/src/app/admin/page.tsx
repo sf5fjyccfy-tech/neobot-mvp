@@ -826,6 +826,11 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
 }) {
   const [newPlan, setNewPlan] = useState(detail.plan);
   const [newLimit, setNewLimit] = useState(String(detail.messages_limit));
+  const [showNewAgent, setShowNewAgent]     = useState(false);
+  const [newAgentName, setNewAgentName]     = useState('');
+  const [newAgentType, setNewAgentType]     = useState('vente');
+  const [newAgentPrompt, setNewAgentPrompt] = useState('');
+  const [creatingAgent, setCreatingAgent]   = useState(false);
   const [bonusMessages, setBonusMessages] = useState('500');
   const [renewDays, setRenewDays] = useState('30');
   const [activateDays, setActivateDays] = useState('30');
@@ -1153,6 +1158,62 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
           Agents IA
           <span className="text-gray-600 font-normal ml-2">({detail.agents.length})</span>
         </h3>
+
+        {/* Formulaire création d'agent */}
+        {!showNewAgent ? (
+          <button onClick={() => setShowNewAgent(true)}
+            className="w-full text-xs bg-[#0D0D1A] border border-dashed border-orange-800/50 hover:border-orange-600/70 text-orange-500 hover:text-orange-400 rounded-lg py-2 transition mb-3">
+            + Créer un agent pour ce client
+          </button>
+        ) : (
+          <div className="bg-[#0A0A18] border border-orange-800/30 rounded-xl p-4 mb-3 space-y-3">
+            <p className="text-xs font-semibold text-orange-400">Nouveau agent</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Nom</label>
+                <input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Ex: Agent Commercial"
+                  className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-orange-500/50" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Type</label>
+                <select value={newAgentType} onChange={e => setNewAgentType(e.target.value)}
+                  className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500/50">
+                  {AGENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Prompt système <span className="text-gray-700">(optionnel — peut être ajouté après)</span></label>
+              <textarea value={newAgentPrompt} onChange={e => setNewAgentPrompt(e.target.value)} rows={5}
+                placeholder="Tu es [NomBot], l'assistant de [Nom du business]..."
+                className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-orange-500/40 resize-y font-mono" />
+            </div>
+            <div className="flex gap-2">
+              <button
+                disabled={creatingAgent || !newAgentName.trim()}
+                onClick={async () => {
+                  setCreatingAgent(true);
+                  await onAction(`/api/admin/tenants/${detail.id}/agents`, 'POST', {
+                    name: newAgentName,
+                    agent_type: newAgentType,
+                    system_prompt: newAgentPrompt || undefined,
+                    activate: true,
+                  });
+                  setShowNewAgent(false);
+                  setNewAgentName(''); setNewAgentType('vente'); setNewAgentPrompt('');
+                  setCreatingAgent(false);
+                }}
+                className="flex-1 text-xs bg-orange-700/50 hover:bg-orange-700/80 text-white py-2 rounded-lg border border-orange-700/50 transition disabled:opacity-40">
+                {creatingAgent ? 'Création...' : 'Créer et activer'}
+              </button>
+              <button onClick={() => setShowNewAgent(false)}
+                className="text-xs text-gray-600 hover:text-gray-400 px-3 transition">
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
         {detail.agents.length === 0 ? (
           <div className="text-sm text-gray-600">Aucun agent configuré</div>
         ) : (
@@ -1221,9 +1282,30 @@ function TenantDetailPanel({ detail, onAction, onImpersonate }: {
 
 // ─── Ligne agent expandable ────────────────────────────────────────────────────
 function AgentRow({ agent, onAction }: { agent: AgentData; onAction: any }) {
-  const [open, setOpen] = useState(false);
-  const [type, setType] = useState(agent.agent_type);
-  const [tone, setTone] = useState(agent.tone || '');
+  const [open, setOpen]               = useState(false);
+  const [type, setType]               = useState(agent.agent_type);
+  const [tone, setTone]               = useState(agent.tone || '');
+  const [lang, setLang]               = useState(agent.language || 'fr');
+  const [maxLen, setMaxLen]           = useState(String(agent.max_response_length || 300));
+  const [sysPrompt, setSysPrompt]     = useState(agent.system_prompt || '');
+  const [custPrompt, setCustPrompt]   = useState(agent.custom_prompt_override || '');
+  const [kbName, setKbName]           = useState('');
+  const [kbContent, setKbContent]     = useState('');
+  const [saving, setSaving]           = useState('');
+
+  const save = async (field: string, payload: object) => {
+    setSaving(field);
+    await onAction(`/api/admin/agents/${agent.id}`, 'PATCH', payload);
+    setSaving('');
+  };
+
+  const saveKb = async () => {
+    if (!kbName.trim() || !kbContent.trim()) return;
+    setSaving('kb');
+    await onAction(`/api/admin/agents/${agent.id}/knowledge`, 'POST', { name: kbName, content: kbContent });
+    setKbName(''); setKbContent('');
+    setSaving('');
+  };
 
   return (
     <div className={`rounded-lg border overflow-hidden ${agent.is_active ? 'border-green-800/60 bg-green-950/10' : 'border-[#1A1A2E] bg-[#0A0A18]'}`}>
@@ -1246,11 +1328,13 @@ function AgentRow({ agent, onAction }: { agent: AgentData; onAction: any }) {
       </div>
 
       {open && (
-        <div className="border-t border-[#1A1A2E] px-3 pb-3 pt-3 space-y-3">
+        <div className="border-t border-[#1A1A2E] px-3 pb-4 pt-3 space-y-4">
+
+          {/* Type */}
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Type d'agent</label>
             <div className="flex gap-2">
-              <select aria-label="Type d'agent" value={type} onChange={e => setType(e.target.value)}
+              <select aria-label="Type" value={type} onChange={e => setType(e.target.value)}
                 className="flex-1 bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500/50">
                 {AGENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -1262,23 +1346,66 @@ function AgentRow({ agent, onAction }: { agent: AgentData; onAction: any }) {
             <p className="text-[10px] text-gray-700 mt-1">⚠ Changer le type remet le prompt à zéro</p>
           </div>
 
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Ton</label>
-            <div className="flex gap-2">
-              <input aria-label="Ton de l'agent" value={tone} onChange={e => setTone(e.target.value)}
-                className="flex-1 bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-yellow-500/50" />
-              <button onClick={() => onAction(`/api/admin/agents/${agent.id}`, 'PATCH', { tone })}
-                className="text-xs bg-yellow-700/30 hover:bg-yellow-700/50 text-yellow-400 px-3 py-1.5 rounded-lg border border-yellow-700/40 transition">
-                Sauver
-              </button>
+          {/* Ton + Langue + MaxLen sur une ligne */}
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Ton</label>
+              <input value={tone} onChange={e => setTone(e.target.value)} onBlur={() => save('tone', { tone })}
+                className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-yellow-500/50" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Langue</label>
+              <select value={lang} onChange={e => { setLang(e.target.value); save('lang', { language: e.target.value }); }}
+                className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500/50">
+                <option value="fr">Français</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Max tokens</label>
+              <input type="number" value={maxLen} onChange={e => setMaxLen(e.target.value)} onBlur={() => save('maxLen', { max_response_length: parseInt(maxLen) })}
+                className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500/50" />
             </div>
           </div>
 
+          {/* Prompt système */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Prompt personnalisé (lecture seule)</label>
-            <pre className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-3 py-2 text-[10px] text-gray-500 whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-              {agent.custom_prompt_override || <span className="italic text-gray-700">Aucun prompt personnalisé — utilise le prompt système du type</span>}
-            </pre>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-500">Prompt système</label>
+              <button onClick={() => save('sys', { system_prompt: sysPrompt })} disabled={saving === 'sys'}
+                className="text-[10px] bg-blue-900/40 hover:bg-blue-900/70 text-blue-400 px-2 py-0.5 rounded border border-blue-800/40 transition disabled:opacity-40">
+                {saving === 'sys' ? '...' : 'Sauver'}
+              </button>
+            </div>
+            <textarea value={sysPrompt} onChange={e => setSysPrompt(e.target.value)} rows={6}
+              className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500/40 resize-y font-mono" />
+          </div>
+
+          {/* Prompt override */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-500">Prompt override <span className="text-gray-700">(prioritaire sur le système)</span></label>
+              <button onClick={() => save('cust', { custom_prompt_override: custPrompt || null })} disabled={saving === 'cust'}
+                className="text-[10px] bg-purple-900/40 hover:bg-purple-900/70 text-purple-400 px-2 py-0.5 rounded border border-purple-800/40 transition disabled:opacity-40">
+                {saving === 'cust' ? '...' : 'Sauver'}
+              </button>
+            </div>
+            <textarea value={custPrompt} onChange={e => setCustPrompt(e.target.value)} rows={4}
+              placeholder="Laisser vide pour utiliser le prompt système"
+              className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-purple-500/40 resize-y font-mono" />
+          </div>
+
+          {/* Ajouter une source de connaissance */}
+          <div className="border-t border-[#1A1A2E] pt-3">
+            <label className="text-xs text-gray-500 mb-2 block">➕ Ajouter une source de connaissance (texte)</label>
+            <input value={kbName} onChange={e => setKbName(e.target.value)} placeholder="Nom de la source (ex: Tarifs, Produits...)"
+              className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-emerald-500/40 mb-2" />
+            <textarea value={kbContent} onChange={e => setKbContent(e.target.value)} rows={4} placeholder="Contenu de la base de connaissance..."
+              className="w-full bg-[#05050F] border border-[#1A1A2E] rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-emerald-500/40 resize-y mb-2" />
+            <button onClick={saveKb} disabled={saving === 'kb' || !kbName.trim() || !kbContent.trim()}
+              className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-800/40 transition disabled:opacity-40">
+              {saving === 'kb' ? 'Ajout...' : 'Ajouter la source'}
+            </button>
           </div>
         </div>
       )}

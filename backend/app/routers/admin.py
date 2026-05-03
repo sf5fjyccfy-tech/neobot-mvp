@@ -21,6 +21,7 @@ from app.database import get_db
 from app.models import (
     User, Tenant, AgentTemplate, AgentType, PlanType, PLAN_LIMITS,
     Subscription, Conversation, WhatsAppSession, UsageTracking, Message,
+    KnowledgeSource,
 )
 from typing import List
 from fastapi import BackgroundTasks
@@ -75,7 +76,6 @@ class WhatsAppMessageRequest(BaseModel):
 
 
 class AgentUpdateRequest(BaseModel):
-    # custom_prompt_override intentionnellement absent : l'admin ne modifie pas les prompts clients
     tone: Optional[str] = None
     name: Optional[str] = None
     max_response_length: Optional[int] = None
@@ -84,6 +84,23 @@ class AgentUpdateRequest(BaseModel):
     availability_start: Optional[str] = None
     availability_end: Optional[str] = None
     off_hours_message: Optional[str] = None
+    system_prompt: Optional[str] = None
+    custom_prompt_override: Optional[str] = None
+
+
+class AgentCreateAdminRequest(BaseModel):
+    name: str
+    agent_type: AgentType
+    system_prompt: Optional[str] = None
+    tone: str = "Friendly, Professional"
+    language: str = "fr"
+    max_response_length: int = 300
+    activate: bool = True
+
+
+class KnowledgeCreateRequest(BaseModel):
+    name: str
+    content: str
 
 
 # ======================== STATS GLOBALES ========================
@@ -592,7 +609,8 @@ def update_agent(
         raise HTTPException(status_code=404, detail="Agent non trouvé")
 
     ALLOWED_FIELDS = {"tone", "name", "max_response_length", "language",
-                      "emoji_enabled", "availability_start", "availability_end", "off_hours_message"}
+                      "emoji_enabled", "availability_start", "availability_end",
+                      "off_hours_message", "system_prompt", "custom_prompt_override"}
     for field, value in body.model_dump(exclude_none=True).items():
         if field in ALLOWED_FIELDS:
             setattr(agent, field, value)
@@ -637,6 +655,73 @@ def activate_agent(
     agent.is_active = True
     db.commit()
     return {"status": "activated", "agent_id": agent_id}
+
+
+# ======================== CRÉATION AGENT PAR L'ADMIN ========================
+
+@router.post("/tenants/{tenant_id}/agents", status_code=201)
+def create_agent_for_tenant(
+    tenant_id: int,
+    body: AgentCreateAdminRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """Crée un agent pour n'importe quel tenant, sans passer par l'auth tenant."""
+    from app.services.agent_service import AGENT_SYSTEM_PROMPTS, compute_prompt_score
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
+
+    if body.activate:
+        db.query(AgentTemplate).filter(
+            AgentTemplate.tenant_id == tenant_id,
+            AgentTemplate.is_active == True,
+        ).update({"is_active": False})
+
+    agent = AgentTemplate(
+        tenant_id=tenant_id,
+        name=body.name,
+        agent_type=body.agent_type,
+        system_prompt=body.system_prompt or AGENT_SYSTEM_PROMPTS.get(body.agent_type, ""),
+        tone=body.tone,
+        language=body.language,
+        max_response_length=body.max_response_length,
+        is_active=body.activate,
+    )
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+    agent.prompt_score = compute_prompt_score(agent, db)
+    db.commit()
+    return {"status": "created", "agent_id": agent.id, "prompt_score": agent.prompt_score}
+
+
+@router.post("/agents/{agent_id}/knowledge", status_code=201)
+def add_knowledge_source_admin(
+    agent_id: int,
+    body: KnowledgeCreateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_superadmin_user),
+):
+    """Ajoute une source de connaissance texte à un agent."""
+    agent = db.query(AgentTemplate).filter(AgentTemplate.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent non trouvé")
+
+    source = KnowledgeSource(
+        agent_id=agent_id,
+        tenant_id=agent.tenant_id,
+        source_type="TEXT",
+        name=body.name,
+        content_text=body.content,
+        content_extracted=body.content,
+        sync_status="synced",
+        last_synced_at=datetime.utcnow(),
+    )
+    db.add(source)
+    db.commit()
+    return {"status": "created"}
 
 
 # ======================== SUPPRESSION DOUCE ========================
@@ -784,7 +869,10 @@ def impersonate_tenant(
     """Token temporaire 1h pour tester un compte client sans changer de session."""
     user = db.query(User).filter(User.tenant_id == tenant_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Aucun utilisateur pour ce tenant")
+        raise HTTPException(
+            status_code=404,
+            detail="Ce tenant n'a pas encore créé son compte. Le client doit s'inscrire sur neobot-ai.com avant que tu puisses l'impersonifier. Tu peux quand même modifier son agent directement depuis ce panel."
+        )
 
     token = create_access_token(
         data={
