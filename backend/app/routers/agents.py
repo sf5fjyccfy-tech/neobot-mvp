@@ -186,7 +186,7 @@ async def create_agent(
             if existing >= max_agents:
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Votre plan permet {max_agents} agent(s) maximum. Supprimez un agent existant ou passez au plan supérieur."
+                    detail=f"Tu as déjà {existing} agent(s) configuré(s). Le plan Essential n'en autorise qu'un seul à la fois. Supprime l'agent existant avant d'en créer un nouveau, ou passe au plan Business pour en avoir plusieurs."
                 )
 
     agent = AgentService.create_agent(

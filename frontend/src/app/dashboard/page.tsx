@@ -121,6 +121,7 @@ export default function DashboardPage() {
   const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const [waConnected, setWaConnected] = useState(false);
   const [planLabel, setPlanLabel] = useState<string | null>(null);
+  const [planFeatures, setPlanFeatures] = useState<string[]>(['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload']);
   const [isSuperadminDash, setIsSuperadminDash] = useState(false);
   const [hasAgent, setHasAgent] = useState(false);
   const [totalUsed, setTotalUsed] = useState(0);
@@ -182,12 +183,21 @@ export default function DashboardPage() {
             const trialFlag = !superadmin && (usageData.is_trial ?? false);
             setIsTrial(trialFlag);
             setTrialDaysLeft(usageData.trial_days_left ?? null);
-            // Label du badge : superadmin → 'Admin', trial en cours → null (badge Essai), sinon plan
+            // Label du badge
+            const rawPlan = usageData.plan ?? 'Essential';
             if (superadmin) {
               setPlanLabel('Admin');
-            } else if (!trialFlag) {
-              setPlanLabel(usageData.plan ?? 'Essential');
+            } else {
+              setPlanLabel(rawPlan);
             }
+            // Features dynamiques selon le plan
+            const featMap: Record<string, string[]> = {
+              'Essential': ['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload'],
+              'Business':  ['3 agents', '5 000 msg/mois', 'Analytics 30j', 'Promos ciblées'],
+              'Enterprise':['Agents illimités', 'Messages illimités', 'Analytics 90j', 'Support dédié'],
+              'NeoBot Admin': ['Accès complet', 'Support prioritaire'],
+            };
+            setPlanFeatures(featMap[rawPlan] ?? featMap['Essential']);
             setTotalUsed(usageData.total_used ?? 0);
             setStats(prev => prev.map((s, i) => {
               if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: superadmin ? '∞ messages' : `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
@@ -644,7 +654,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {['1 agent', '2 500 msg/mois', 'Analytics 30j', 'PDF upload'].map((feat, i) => (
+                {planFeatures.map((feat, i) => (
                   <span key={i} style={{
                     fontSize: 11,
                     color: TEXT,
