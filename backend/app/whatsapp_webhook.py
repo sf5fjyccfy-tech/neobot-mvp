@@ -390,9 +390,15 @@ _PAYMENT_KW = [
     "j ai payé", "j ai envoyé", "j ai transféré", "jai payé", "jai envoyé",
 ]
 
+_NEOBOT_ADMIN_PHONE = "237694256267"  # Numéro personnel Tim — notif paiement
+
 def _extract_email(text: str):
     m = _EMAIL_RE.search(text)
     return m.group(0).lower() if m else None
+
+def _message_has_payment_keyword(text: str) -> bool:
+    low = text.lower()
+    return any(kw in low for kw in _PAYMENT_KW)
 
 def _has_payment_context(conversation_id: int, db) -> bool:
     try:
@@ -407,6 +413,34 @@ def _has_payment_context(conversation_id: int, db) -> bool:
         return False
     except Exception:
         return False
+
+async def _notify_admin_payment_whatsapp(
+    customer_name: str,
+    customer_phone: str,
+    message_text: str,
+) -> None:
+    """Envoie une notification WhatsApp immédiate à l'admin quand un client dit 'payé'."""
+    try:
+        whatsapp_service_url = os.getenv('WHATSAPP_SERVICE_URL', 'http://localhost:3001')
+        now = datetime.utcnow().strftime('%d/%m/%Y à %Hh%M')
+        notif = (
+            f"💰 PAIEMENT SIGNALÉ\n\n"
+            f"👤 {customer_name}\n"
+            f"📞 +{customer_phone}\n"
+            f"💬 \"{message_text[:120]}\"\n"
+            f"🕐 {now} UTC\n\n"
+            f"→ Vérifier OM/MoMo et activer le compte dans /admin"
+        )
+        client = get_http_client()
+        await client.post(
+            f"{whatsapp_service_url}/api/whatsapp/tenants/1/send-message",
+            json={"to": _NEOBOT_ADMIN_PHONE, "message": notif},
+            timeout=10,
+        )
+        logger.info(f"✅ Notif paiement envoyée à admin pour {customer_phone}")
+    except Exception as e:
+        logger.warning(f"Notif paiement WhatsApp échouée (non-bloquant): {e}")
+
 
 async def _record_bot_payment(conversation_id: int, customer_name: str,
                                customer_phone: str, customer_email: str, db) -> None:
@@ -579,9 +613,23 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         )
         
         # ── Détection paiement bot (tenant NéoBot uniquement) ──────────────
-        if tenant_id == 1:
+        if tenant_id == 1 and _message_has_payment_keyword(message.text):
+            # Notification WhatsApp immédiate à l'admin dès que le client dit "payé"
+            await _notify_admin_payment_whatsapp(
+                customer_name=message.senderName,
+                customer_phone=phone,
+                message_text=message.text,
+            )
+            # Si email trouvé → créer le PaymentEvent et envoyer l'alerte email
             _email = _extract_email(message.text)
-            if _email and _has_payment_context(conversation.id, db):
+            if not _email:
+                _email = _extract_email(" ".join(
+                    m.content for m in db.query(Message).filter(
+                        Message.conversation_id == conversation.id,
+                        Message.direction == "incoming",
+                    ).order_by(Message.id.desc()).limit(12).all()
+                ))
+            if _email:
                 await _record_bot_payment(
                     conversation_id=conversation.id,
                     customer_name=message.senderName,

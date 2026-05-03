@@ -2,7 +2,7 @@
 Router Agents — CRUD complet pour les templates d'agents IA
 Endpoints: /api/tenants/{tenant_id}/agents/*
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -142,7 +142,7 @@ async def list_agents(
     result = []
     for a in agents:
         try:
-            result.append(_agent_to_dict(a))
+            result.append(_agent_to_dict(a, expose_prompts=True))
         except Exception as exc2:
             logger.error(f"_agent_to_dict(id={a.id}): {exc2}", exc_info=True)
             # Agent corrompu — inclure version minimale sans crash
@@ -263,7 +263,7 @@ async def update_agent(
     agent = AgentService.update_agent(agent_id, tenant_id, db, **updates)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent non trouvé")
-    return {"status": "updated", "agent": _agent_to_dict(agent)}
+    return {"status": "updated", "agent": _agent_to_dict(agent, expose_prompts=True)}
 
 
 @router.post("/{tenant_id}/agents/{agent_id}/activate")
@@ -476,6 +476,66 @@ async def add_knowledge_source(
             "name": source.name,
             "source_type": source.source_type,
             "sync_status": source.sync_status,
+        },
+    }
+
+
+@router.post("/{tenant_id}/agents/{agent_id}/knowledge/upload", status_code=201)
+async def upload_pdf_knowledge(
+    tenant_id: int,
+    agent_id: int,
+    file: UploadFile = File(...),
+    name: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    """Importe un PDF comme source de connaissance — extrait le texte et le sauvegarde."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Fichier PDF requis (.pdf)")
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 10 Mo)")
+
+    # Extraction du texte PDF
+    extracted_text = ""
+    try:
+        import io
+        import pypdf
+        reader = pypdf.PdfReader(io.BytesIO(content))
+        parts = []
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                parts.append(text.strip())
+        extracted_text = "\n\n".join(parts)
+    except ImportError:
+        # pypdf pas installé — sauvegarder quand même avec un placeholder
+        logger.warning("pypdf not installed — PDF text extraction skipped")
+        extracted_text = f"[Contenu PDF : {file.filename}]"
+    except Exception as e:
+        logger.error(f"PDF extraction error: {e}")
+        raise HTTPException(status_code=422, detail=f"Impossible d'extraire le texte du PDF : {e}")
+
+    if not extracted_text.strip():
+        raise HTTPException(status_code=422, detail="Le PDF ne contient pas de texte extractible (PDF image/scanné)")
+
+    source_name = name.strip() or file.filename.replace(".pdf", "").replace("_", " ")
+    source = AgentService.add_knowledge_source(
+        agent_id=agent_id,
+        tenant_id=tenant_id,
+        source_type="pdf",
+        db=db,
+        name=source_name,
+        content_text=extracted_text,
+    )
+    return {
+        "status": "created",
+        "source": {
+            "id": source.id,
+            "name": source.name,
+            "source_type": str(source.source_type),
+            "sync_status": source.sync_status,
+            "chars_extracted": len(extracted_text),
         },
     }
 
