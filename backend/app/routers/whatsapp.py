@@ -13,7 +13,8 @@ import httpx
 
 from app.database import get_db
 from app.dependencies import verify_tenant_access
-from app.models import WhatsAppSession, Tenant, User
+from app.models import WhatsAppSession, WhatsAppSessionQR, Tenant, User
+from app.services.whatsapp_qr_service import _qr_response_cache
 
 logger = logging.getLogger(__name__)
 
@@ -271,8 +272,17 @@ async def mark_whatsapp_connected(
     if tenant:
         tenant.whatsapp_connected = True
 
+    # Marquer les QR en attente comme connectés → le cache DB ne les retournera plus
+    db.query(WhatsAppSessionQR).filter(
+        WhatsAppSessionQR.tenant_id == tenant_id,
+        WhatsAppSessionQR.status == "pending",
+    ).update({"status": "connected"})
+
     db.commit()
     db.refresh(session)
+
+    # Vider le cache mémoire QR — le prochain poll retournera "connected" immédiatement
+    _qr_response_cache.pop(tenant_id, None)
 
     logger.info(f"✅ WhatsApp session marked as connected for tenant {tenant_id}: {session.whatsapp_phone}")
 

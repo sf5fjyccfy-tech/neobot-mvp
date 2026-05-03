@@ -105,6 +105,21 @@ class WhatsAppQRService:
         if not tenant:
             raise ValueError(f"Tenant {tenant_id} not found")
 
+        # Si déjà connecté en DB → bypass tous les caches, retourner connecté directement
+        if tenant.whatsapp_connected:
+            connected_result = {
+                "tenant_id": tenant_id,
+                "status": "connected",
+                "qr_code": None,
+                "expires_in": None,
+                "message": "WhatsApp connecté",
+                "phone": tenant.whatsapp_phone if hasattr(tenant, "whatsapp_phone") else None,
+                "connected": True,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            _qr_response_cache[tenant_id] = (connected_result, datetime.utcnow())
+            return connected_result
+
         # Vérifier le cache DB : y a-t-il un QR valide et non expiré ?
         if not force_refresh:
             existing_qr = (

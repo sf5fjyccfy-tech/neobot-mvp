@@ -32,7 +32,6 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
   const [codeTimer, setCodeTimer] = useState<number>(0); // 0 = inactif
   const codeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  console.log('🔵 WhatsAppQRDisplay mounted, tenantId=', tenantId);
 
   // Sur mobile, le QR code est inutilisable (scanner son propre téléphone) — basculer sur le code de jumelage
   useEffect(() => {
@@ -290,7 +289,6 @@ export default function WhatsAppQRDisplay({ tenantId }: { tenantId: number }) {
     return <div style={{ textAlign: 'center', padding: '24px', color: MUTED, fontSize: 13 }}>⏳ Génération du QR code WhatsApp...</div>;
   }
 
-  console.log('🎨 Rendering QR display, status=', qrData.status, 'has_qr=', !!qrData.qr_code);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
