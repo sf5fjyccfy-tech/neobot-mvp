@@ -762,7 +762,7 @@ export default function AgentPage() {
                       value={selectedAgent.custom_prompt_override || ''}
                       onChange={e => setSelectedAgent(prev => prev ? { ...prev, custom_prompt_override: e.target.value } : null)}
                       rows={9}
-                      maxLength={8000}
+                      maxLength={20000}
                       placeholder="Saisissez votre prompt ici…\nUtilisez {{nom_entreprise}}, {{nom_agent}}, {{liste_services}} pour insérer des variables.\n\nOu cliquez sur ✨ Générer avec IA pour un prompt adapté à votre secteur."
                       className="w-full rounded-xl p-4 text-sm resize-y font-mono leading-relaxed placeholder:opacity-30 focus:outline-none"
                       style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', caretColor: '#FF4D00' }}
