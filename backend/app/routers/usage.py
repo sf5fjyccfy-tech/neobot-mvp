@@ -139,10 +139,14 @@ async def get_usage_summary(
     # Statut abonnement payant
     sub_expires = tenant.subscription_expires_at
     summary["subscription_expires_at"] = _fmt_sub_dt(sub_expires)
+    _sub_exp_naive = sub_expires
+    if _sub_exp_naive is not None and hasattr(_sub_exp_naive, 'utcoffset') and _sub_exp_naive.utcoffset() is not None:
+        from datetime import timezone as _tz
+        _sub_exp_naive = _sub_exp_naive.astimezone(_tz.utc).replace(tzinfo=None)
     summary["subscription_active"] = (
         not is_trial
-        and sub_expires is not None
-        and sub_expires > datetime.utcnow()
+        and _sub_exp_naive is not None
+        and _sub_exp_naive > datetime.utcnow()
     )
 
     # Messages reçus aujourd'hui (début du jour UTC — naive pour matcher les colonnes created_at naive)
