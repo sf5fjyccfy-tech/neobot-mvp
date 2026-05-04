@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from app.database import get_db
@@ -35,6 +35,10 @@ class UsageSummaryResponse(BaseModel):
     is_trial: bool
     trial_ends_at: Optional[str]
     trial_days_left: Optional[int]
+    # Infos compte
+    is_superadmin: Optional[bool] = False
+    subscription_expires_at: Optional[str] = None
+    subscription_active: Optional[bool] = False
 
 class UsageHistoryItem(BaseModel):
     month_year: str
@@ -119,7 +123,12 @@ async def get_usage_summary(
         summary["over_limit"] = False
     trial_days_left: Optional[int] = None
     if is_trial and trial_ends_at:
-        delta = trial_ends_at - datetime.utcnow()
+        # Normaliser en naive UTC pour éviter l'erreur offset-aware vs offset-naive
+        _trial_end = trial_ends_at
+        if hasattr(_trial_end, 'utcoffset') and _trial_end.utcoffset() is not None:
+            from datetime import timezone as _tz
+            _trial_end = _trial_end.astimezone(_tz.utc).replace(tzinfo=None)
+        delta = _trial_end - datetime.utcnow()
         trial_days_left = max(0, delta.days)
 
     summary["is_trial"] = is_trial
@@ -136,8 +145,8 @@ async def get_usage_summary(
         and sub_expires > datetime.utcnow()
     )
 
-    # Messages reçus aujourd'hui (début du jour UTC)
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Messages reçus aujourd'hui (début du jour UTC — naive pour matcher les colonnes created_at naive)
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     today_count = (
         db.query(func.count(Message.id))
         .join(Conversation, Message.conversation_id == Conversation.id)
@@ -176,8 +185,8 @@ async def get_dashboard_stats(
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant non trouvé")
 
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # Messages du jour (tous)
     today_messages = (

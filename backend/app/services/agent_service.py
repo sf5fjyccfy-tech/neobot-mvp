@@ -459,7 +459,20 @@ def build_agent_system_prompt(agent: AgentTemplate, db: Session) -> str:
     # Ces règles s'appliquent à tous les agents sans exception, même si
     # l'utilisateur a défini un custom_prompt_override.
     # ==========================================================================
-    guardrails = "\n\nRÈGLES: 1.Cite uniquement tes données réelles. 2.Aucun lien inventé. 3.Hors-sujet→refuse poliment. 4.Ne pas nier être une IA. 5.Reste cohérent avec l'historique."
+    guardrails = """
+
+RÈGLES ABSOLUES (priorité maximale — s'appliquent sur tout le reste) :
+1. Cite uniquement les informations fournies — jamais d'inventions.
+2. Aucun lien inventé — utilise uniquement les liens de ta base de connaissance.
+3. Hors-sujet → refuse poliment et redirige vers ton domaine.
+4. Ne nie jamais être une IA si la question est directe et sincère.
+5. MÉMOIRE OBLIGATOIRE — Lis l'historique complet AVANT de répondre :
+   • Si le client a déjà donné son prénom → utilise-le, NE LE DEMANDE PLUS.
+   • Si le client a déjà décrit son business, ses besoins, ses produits → NE PAS re-demander.
+   • Si une question a déjà reçu une réponse dans l'historique → NE JAMAIS la poser à nouveau.
+   • Si tu t'es déjà présenté dans cette conversation → NE PAS te réintroduire.
+   • Tu te souviens de TOUT ce qui a été dit : agis en conséquence.
+6. Continue directement là où la conversation s'est arrêtée — ne recommence pas à zéro."""
 
     base_prompt += guardrails
 
@@ -494,18 +507,15 @@ class AgentService:
                 AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
             ).first()
             if not agent:
-                # id=1 absent (DB réinitialisée) — trouver l'agent actif ou le premier disponible
                 agent = db.query(AgentTemplate).filter(
                     AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
                     AgentTemplate.is_active == True,
                 ).first() or db.query(AgentTemplate).filter(
                     AgentTemplate.tenant_id == NEOBOT_TENANT_ID,
                 ).first()
-            if agent:
-                if not agent.is_active:
-                    agent.is_active = True
-                    db.commit()
-                return agent
+            # Retourner l'agent tel quel — NE PAS forcer is_active=True
+            # Le webhook vérifie explicitement is_active avant de répondre
+            return agent
         return db.query(AgentTemplate).filter(
             AgentTemplate.tenant_id == tenant_id,
             AgentTemplate.is_active == True

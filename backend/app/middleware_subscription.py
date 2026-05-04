@@ -166,6 +166,7 @@ class SubscriptionMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if block_reason:
+            logger.warning(f"SubscriptionMiddleware: 402 bloqué — tenant_id={tenant_id} path={path} reason={block_reason}")
             return JSONResponse(
                 status_code=402,
                 content={"detail": block_reason},

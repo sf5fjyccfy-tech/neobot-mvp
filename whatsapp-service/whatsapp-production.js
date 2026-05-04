@@ -22,7 +22,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
-import { usePgAuthState, clearPgAuthState, pingPool } from './pg-auth-state.js';
+import { usePgAuthState, clearPgAuthState, pingPool, getRegisteredTenantIds } from './pg-auth-state.js';
 import NodeCache from '@cacheable/node-cache';
 import QRCode from 'qrcode';
 import pino from 'pino';
@@ -310,7 +310,7 @@ async function notifyBackend(tenantId, connected, phone = null) {
 }
 
 // ── Message forwarding ────────────────────────────────────────────────────────
-async function forwardMessage(tenantId, msg) {
+async function forwardMessage(tenantId, msg, options = {}) {
   const text =
     msg?.message?.conversation ||
     msg?.message?.extendedTextMessage?.text ||
@@ -328,10 +328,11 @@ async function forwardMessage(tenantId, msg) {
     from_: phone,
     reply_jid: rawFrom,
     text,
-    senderName: msg?.pushName || 'Client',
+    senderName: msg?.pushName || (options.fromMe ? 'Propriétaire' : 'Client'),
     messageKey: msg?.key || {},
     timestamp: Number(msg?.messageTimestamp || Math.floor(Date.now() / 1000)),
     isMedia: false,
+    fromMe: options.fromMe === true,
   };
 
   const sigPayload = `${payload.from_}|${payload.text}|${payload.timestamp}`;
@@ -624,7 +625,9 @@ async function connectTenant(tenantId, options = {}) {
       if (event?.type !== 'notify') return;
 
       for (const msg of event?.messages || []) {
-        if (!msg?.message || msg?.key?.fromMe) continue;
+        if (!msg?.message) continue;
+
+        const isFromMe = !!msg?.key?.fromMe;
 
         // Deduplication
         const msgId = msg?.key?.id;
@@ -646,6 +649,15 @@ async function connectTenant(tenantId, options = {}) {
 
         const senderJid = msg?.key?.remoteJid || '';
         const senderPhone = extractPhone(senderJid);
+
+        // Messages du propriétaire (fromMe=true) — transférer immédiatement sans debounce
+        // Le backend les sauvegarde et active human_takeover pour cette conversation
+        if (isFromMe) {
+          if (senderPhone) {
+            await forwardMessage(session.tenantId, msg, { fromMe: true });
+          }
+          continue;
+        }
 
         if (!senderPhone) {
           await forwardMessage(session.tenantId, msg);
@@ -1316,6 +1328,29 @@ async function start() {
       }
     } catch (e) {
       logger.warn('Startup session check failed', { error: e.message });
+    }
+
+    // Reconnecter les sessions des tenants clients avec des creds existants
+    if (process.env.DATABASE_URL) {
+      try {
+        const clientTenantIds = await getRegisteredTenantIds(DEFAULT_TENANT_ID);
+        if (clientTenantIds.length > 0) {
+          logger.info('Restoring client tenant sessions', { count: clientTenantIds.length, tenants: clientTenantIds });
+          for (const tenantId of clientTenantIds) {
+            try {
+              const session = getTenantSession(tenantId);
+              session.autoConnectEnabled = true;
+              // Décalage de 3s entre chaque tenant pour ne pas saturer Meta
+              await new Promise(r => setTimeout(r, 3_000));
+              await connectTenant(tenantId, { reason: 'startup-restore' });
+            } catch (e) {
+              logger.warn('Failed to restore session for client tenant', { tenantId, error: e.message });
+            }
+          }
+        }
+      } catch (e) {
+        logger.warn('Could not restore client tenant sessions at startup', { error: e.message });
+      }
     }
 
     startWatchdog();

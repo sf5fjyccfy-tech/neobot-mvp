@@ -139,6 +139,27 @@ export async function clearPgAuthState(tenantId) {
 }
 
 /**
+ * Retourne la liste des tenant_id qui ont des credentials enregistrés (registered=true).
+ * Utilisé au démarrage pour reconnecter automatiquement les sessions clients.
+ */
+export async function getRegisteredTenantIds(excludeTenantId = null) {
+  const pool = getPool();
+  await ensureTable(pool);
+  const res = await pool.query(
+    `SELECT tenant_id, data FROM whatsapp_auth_state WHERE key_name = 'creds'`
+  );
+  const ids = [];
+  for (const row of res.rows) {
+    if (excludeTenantId !== null && row.tenant_id === excludeTenantId) continue;
+    try {
+      const creds = JSON.parse(row.data, BufferJSON.reviver);
+      if (creds?.registered) ids.push(row.tenant_id);
+    } catch (_) {}
+  }
+  return ids;
+}
+
+/**
  * Keep-alive : évite que Neon suspende la connexion pendant les périodes d'inactivité WA.
  * À appeler toutes les 4 minutes via setInterval dans le service.
  */

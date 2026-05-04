@@ -30,17 +30,27 @@ class UsageTrackingService:
         ).first()
         
         if not tracking:
-            tracking = UsageTracking(
-                tenant_id=tenant_id,
-                month_year=month_year,
-                whatsapp_messages_used=0,
-                other_platform_messages_used=0,
-            )
-            db.add(tracking)
-            db.commit()
-            db.refresh(tracking)
-            logger.info(f"✅ Created monthly tracking for tenant {tenant_id}, month {month_year}")
-        
+            try:
+                tracking = UsageTracking(
+                    tenant_id=tenant_id,
+                    month_year=month_year,
+                    whatsapp_messages_used=0,
+                    other_platform_messages_used=0,
+                )
+                db.add(tracking)
+                db.commit()
+                db.refresh(tracking)
+                logger.info(f"✅ Created monthly tracking for tenant {tenant_id}, month {month_year}")
+            except Exception:
+                # Race condition : une requête concurrente a déjà créé la ligne
+                db.rollback()
+                tracking = db.query(UsageTracking).filter(
+                    UsageTracking.tenant_id == tenant_id,
+                    UsageTracking.month_year == month_year
+                ).first()
+                if not tracking:
+                    raise
+
         return tracking
     
     @staticmethod

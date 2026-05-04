@@ -158,6 +158,17 @@ export default function DashboardPage() {
     // Charger les stats d'usage réelles
     const tid = getTenantId();
     const token = getToken();
+    if (!tid || !token) {
+      setStats(prev => prev.map((s, i) => {
+        if (i === 0) return { ...s, value: '0', sub: 'Non connecté' };
+        if (i === 1) return { ...s, value: '0', sub: 'Sessions ouvertes' };
+        if (i === 2) return { ...s, value: '0%', sub: '0 résultats ce mois' };
+        if (i === 3) return { ...s, value: 'INACTIF', sub: 'Non connecté' };
+        return s;
+      }));
+      setStatsLoaded(true);
+      return () => clearInterval(interval);
+    }
     if (tid && token) {
       const headers = { 'Authorization': `Bearer ${token}` };
 
@@ -168,10 +179,16 @@ export default function DashboardPage() {
         .catch(() => {});
 
       Promise.all([
-        fetch(buildApiUrl(`/api/tenants/${tid}/usage`), { headers }).then(r => r.ok ? r.json() : null),
-        fetch(buildApiUrl(`/api/tenants/${tid}/dashboard/stats`), { headers }).then(r => r.ok ? r.json() : null),
-        fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/status`)).then(r => r.ok ? r.json() : null),
-        fetch(buildApiUrl(`/api/tenants/${tid}/agents/active`), { headers }).then(r => r.ok ? r.json() : null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/usage`), { headers }).then(r => {
+          if (!r.ok) { console.warn(`[Dashboard] /usage → ${r.status} ${r.statusText}`); return null; }
+          return r.json();
+        }).catch(() => null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/dashboard/stats`), { headers }).then(r => {
+          if (!r.ok) { console.warn(`[Dashboard] /dashboard/stats → ${r.status} ${r.statusText}`); return null; }
+          return r.json();
+        }).catch(() => null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/whatsapp/status`)).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(buildApiUrl(`/api/tenants/${tid}/agents/active`), { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
       ])
         .then(([usageData, statsData, waData, agentData]) => {
           setHasAgent(agentData !== null && agentData?.id !== undefined);
@@ -200,12 +217,21 @@ export default function DashboardPage() {
             setPlanFeatures(featMap[rawPlan] ?? featMap['Essential']);
             setTotalUsed(usageData.total_used ?? 0);
             setStats(prev => prev.map((s, i) => {
-              if (i === 0) return { ...s, value: String(usageData.today_messages ?? '0'), sub: superadmin ? '∞ messages' : `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
-              if (i === 1) return { ...s, value: String(usageData.active_conversations ?? '—'), sub: 'Sessions ouvertes' };
+              if (i === 0) return { ...s, value: String(usageData.today_messages ?? 0), sub: superadmin ? '∞ messages' : `${usageData.total_used ?? 0}/${usageData.plan_limit ?? '?'} ce mois` };
+              if (i === 1) return { ...s, value: String(usageData.active_conversations ?? 0), sub: 'Sessions ouvertes' };
               const agentActive = agentData?.is_active === true || agentData?.agent?.is_active === true;
               const statusValue = usageData.over_limit ? 'QUOTA' : (waOk && agentActive) ? 'ACTIF' : 'INACTIF';
               const statusSub = usageData.over_limit ? 'Quota dépassé' : !agentActive ? 'Agent désactivé' : waOk ? 'WhatsApp connecté' : 'WhatsApp non connecté';
               if (i === 3) return { ...s, value: statusValue, sub: statusSub };
+              return s;
+            }));
+          } else {
+            // /usage a échoué — afficher valeurs neutres au lieu de "—"
+            const agentActive = agentData?.is_active === true || agentData?.agent?.is_active === true;
+            setStats(prev => prev.map((s, i) => {
+              if (i === 0) return { ...s, value: '0', sub: 'Données indisponibles' };
+              if (i === 1) return { ...s, value: '0', sub: 'Sessions ouvertes' };
+              if (i === 3) return { ...s, value: waOk && agentActive ? 'ACTIF' : 'INACTIF', sub: waOk ? 'WhatsApp connecté' : 'WhatsApp non connecté' };
               return s;
             }));
           }
@@ -219,9 +245,16 @@ export default function DashboardPage() {
               if (i === 2) return { ...s, value: `${rate}%`, sub: `${totalOutcomes} résultat${totalOutcomes !== 1 ? 's' : ''} ce mois` };
               return s;
             }));
+          } else {
+            setStats(prev => prev.map((s, i) => {
+              if (i === 2) return { ...s, value: '0%', sub: '0 résultats ce mois' };
+              return s;
+            }));
           }
         })
-        .catch(() => {})
+        .catch((err) => {
+          console.error('[Dashboard] Erreur chargement stats:', err);
+        })
         .finally(() => setStatsLoaded(true));
     }
 

@@ -21,7 +21,8 @@ from app.database import get_db
 from app.models import (
     User, Tenant, AgentTemplate, AgentType, PlanType, PLAN_LIMITS,
     Subscription, Conversation, WhatsAppSession, UsageTracking, Message,
-    KnowledgeSource,
+    KnowledgeSource, Contact, PromptVariable, ConversationHumanState,
+    Escalation, ConversationContext,
 )
 from typing import List
 from fastapi import BackgroundTasks
@@ -724,33 +725,97 @@ def add_knowledge_source_admin(
     return {"status": "created"}
 
 
-# ======================== SUPPRESSION DOUCE ========================
+# ======================== SUPPRESSION PHYSIQUE COMPLÈTE ========================
+
+def _hard_delete_tenant_cascade(tenant_id: int, db: Session) -> None:
+    """Supprime toutes les données d'un tenant en cascade (ordre FK correct)."""
+    # 1. ConversationContext + ConversationHumanState + Escalations + Messages (via conversations)
+    conv_ids = [
+        c.id for c in db.query(Conversation).filter(
+            Conversation.tenant_id == tenant_id
+        ).all()
+    ]
+    if conv_ids:
+        db.query(ConversationContext).filter(
+            ConversationContext.conversation_id.in_(conv_ids)
+        ).delete(synchronize_session=False)
+        db.query(ConversationHumanState).filter(
+            ConversationHumanState.conversation_id.in_(conv_ids)
+        ).delete(synchronize_session=False)
+        db.query(Escalation).filter(
+            Escalation.conversation_id.in_(conv_ids)
+        ).delete(synchronize_session=False)
+        db.query(Message).filter(
+            Message.conversation_id.in_(conv_ids)
+        ).delete(synchronize_session=False)
+    db.query(Conversation).filter(
+        Conversation.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+
+    # 2. Contacts
+    db.query(Contact).filter(
+        Contact.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+
+    # 3. WhatsApp
+    db.query(WhatsAppSession).filter(
+        WhatsAppSession.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+
+    # 4. Subscription + UsageTracking
+    db.query(Subscription).filter(
+        Subscription.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+    db.query(UsageTracking).filter(
+        UsageTracking.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+
+    # 5. Agents → sources de connaissance + variables
+    agent_ids = [
+        a.id for a in db.query(AgentTemplate).filter(
+            AgentTemplate.tenant_id == tenant_id
+        ).all()
+    ]
+    if agent_ids:
+        db.query(KnowledgeSource).filter(
+            KnowledgeSource.agent_id.in_(agent_ids)
+        ).delete(synchronize_session=False)
+        db.query(PromptVariable).filter(
+            PromptVariable.agent_id.in_(agent_ids)
+        ).delete(synchronize_session=False)
+    db.query(AgentTemplate).filter(
+        AgentTemplate.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+
+    # 6. Users — libère l'email pour une future re-registration
+    db.query(User).filter(
+        User.tenant_id == tenant_id
+    ).delete(synchronize_session=False)
+
 
 @router.delete("/tenants/{tenant_id}")
-def soft_delete_tenant(
+def delete_tenant(
     tenant_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_superadmin_user),
 ):
-    """Suppression douce : is_deleted=True + is_suspended=True. Irréversible depuis l'UI."""
+    """Suppression physique complète en cascade — libère l'email pour re-registration."""
     if tenant_id == 1:
         raise HTTPException(status_code=400, detail="Le tenant fondateur ne peut pas être supprimé")
     if tenant_id == admin.tenant_id:
         raise HTTPException(status_code=400, detail="Impossible de supprimer son propre tenant")
 
-    tenant = db.query(Tenant).filter(
-        Tenant.id == tenant_id,
-        Tenant.is_deleted == False,
-    ).first()
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant non trouvé ou déjà supprimé")
+        raise HTTPException(status_code=404, detail="Tenant non trouvé")
 
-    tenant.is_deleted = True
-    tenant.is_suspended = True  # coupe l'accès immédiatement
-    tenant.deleted_at = datetime.utcnow()
-    tenant.suspension_reason = "Supprimé via panel admin"
+    tenant_name = tenant.name
+    _hard_delete_tenant_cascade(tenant_id, db)
+    db.delete(tenant)
     db.commit()
-    return {"status": "deleted", "tenant_id": tenant_id, "tenant_name": tenant.name}
+
+    logger.info(f"🗑️ Tenant {tenant_id} ({tenant_name}) supprimé physiquement par admin {admin.id}")
+    return {"status": "deleted", "tenant_id": tenant_id, "tenant_name": tenant_name}
 
 
 class BulkDeleteRequest(BaseModel):
@@ -785,15 +850,8 @@ def bulk_delete_tenants(
             continue
 
         if body.hard_delete:
-            # Suppression physique en cascade
-            conv_ids = [c.id for c in db.query(Conversation.id).filter(Conversation.tenant_id == tid).all()]
-            if conv_ids:
-                db.query(Message).filter(Message.conversation_id.in_(conv_ids)).delete(synchronize_session=False)
-            db.query(Conversation).filter(Conversation.tenant_id == tid).delete(synchronize_session=False)
-            db.query(WhatsAppSession).filter(WhatsAppSession.tenant_id == tid).delete(synchronize_session=False)
-            db.query(Subscription).filter(Subscription.tenant_id == tid).delete(synchronize_session=False)
-            db.query(UsageTracking).filter(UsageTracking.tenant_id == tid).delete(synchronize_session=False)
-            db.query(User).filter(User.tenant_id == tid).delete(synchronize_session=False)
+            # Suppression physique complète en cascade (réutilise la même logique)
+            _hard_delete_tenant_cascade(tid, db)
             db.delete(tenant)
             results.append({"tenant_id": tid, "name": tenant.name, "status": "hard_deleted"})
         else:
@@ -867,12 +925,32 @@ def impersonate_tenant(
     admin: User = Depends(get_superadmin_user),
 ):
     """Token temporaire 1h pour tester un compte client sans changer de session."""
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant introuvable")
+
     user = db.query(User).filter(User.tenant_id == tenant_id).first()
+
+    # Si le tenant n'a pas encore d'utilisateur : utiliser le compte admin
+    # mais avec le tenant_id cible — accès complet sans compte client requis
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="Ce tenant n'a pas encore créé son compte. Le client doit s'inscrire sur neobot-ai.com avant que tu puisses l'impersonifier. Tu peux quand même modifier son agent directement depuis ce panel."
+        token = create_access_token(
+            data={
+                "sub": admin.email,
+                "user_id": admin.id,
+                "tenant_id": tenant_id,  # ← tenant cible, pas le tenant admin
+                "impersonated_by": admin.id,
+                "ghost_impersonation": True,
+            },
+            expires_delta=timedelta(hours=1),
         )
+        return {
+            "access_token": token,
+            "tenant_id": tenant_id,
+            "tenant_name": tenant.name if tenant else "",
+            "user_email": f"[Admin → tenant {tenant_id}]",
+            "expires_in": 3600,
+        }
 
     token = create_access_token(
         data={
@@ -883,7 +961,6 @@ def impersonate_tenant(
         },
         expires_delta=timedelta(hours=1),
     )
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     return {
         "access_token": token,
         "tenant_id": tenant_id,

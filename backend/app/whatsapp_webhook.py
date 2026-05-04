@@ -65,13 +65,14 @@ class WhatsAppMessage(BaseModel):
     """Incoming message from WhatsApp service"""
     tenant_id: Optional[int] = None
     from_: Optional[str] = None  # Phone number
-    reply_jid: Optional[str] = None  # JID exact de l'expéditeur (ex: 221XXXXXXX@s.whatsapp.net ou @lid)
+    reply_jid: Optional[str] = None  # JID exact de l'expéditeur
     to: Optional[str] = None     # Bot number (optional)
     text: str
     senderName: str
     messageKey: dict
     timestamp: int
     isMedia: bool = False
+    fromMe: bool = False  # True = message envoyé par le propriétaire depuis son téléphone
 
     @field_validator('text', mode='before')
     @classmethod
@@ -300,15 +301,16 @@ Ou posez votre question!
             conversation_history = None
             if db and conversation_id:
                 try:
-                    messages = db.query(Message).filter(
+                    # 20 messages = 10 échanges → contexte suffisant pour éviter les répétitions
+                    raw_messages = db.query(Message).filter(
                         Message.conversation_id == conversation_id
-                    ).order_by(Message.id.desc()).limit(6).all()
+                    ).order_by(Message.id.desc()).limit(20).all()
 
                     conversation_history = []
-                    for msg in reversed(messages):
+                    for msg in reversed(raw_messages):
                         conversation_history.append({
                             "role": "user" if msg.direction == "incoming" else "assistant",
-                            "content": (msg.content or "")[:400]
+                            "content": (msg.content or "")[:500]
                         })
                 except Exception as e:
                     logger.warning(f"Could not get conversation history: {e}")
@@ -418,8 +420,13 @@ async def _notify_admin_payment_whatsapp(
     customer_name: str,
     customer_phone: str,
     message_text: str,
+    admin_phone: str = None,
 ) -> None:
-    """Envoie une notification WhatsApp immédiate à l'admin quand un client dit 'payé'."""
+    """Envoie une notification WhatsApp à l'admin propriétaire quand un client dit 'payé'.
+    Toujours envoyé via la session NéoBot (tenant 1) pour éviter les boucles.
+    admin_phone : numéro perso du propriétaire du tenant (différent du bot).
+    """
+    target_phone = admin_phone or _NEOBOT_ADMIN_PHONE
     try:
         whatsapp_service_url = os.getenv('WHATSAPP_SERVICE_URL', 'http://localhost:3001')
         now = datetime.utcnow().strftime('%d/%m/%Y à %Hh%M')
@@ -429,17 +436,52 @@ async def _notify_admin_payment_whatsapp(
             f"📞 +{customer_phone}\n"
             f"💬 \"{message_text[:120]}\"\n"
             f"🕐 {now} UTC\n\n"
-            f"→ Vérifier OM/MoMo et activer le compte dans /admin"
+            f"→ Vérifier le paiement et livrer le produit/service"
         )
         client = get_http_client()
         await client.post(
             f"{whatsapp_service_url}/api/whatsapp/tenants/1/send-message",
-            json={"to": _NEOBOT_ADMIN_PHONE, "message": notif},
+            json={"to": target_phone, "message": notif},
             timeout=10,
         )
-        logger.info(f"✅ Notif paiement envoyée à admin pour {customer_phone}")
+        logger.info(f"✅ Notif paiement envoyée à {target_phone} pour client {customer_phone}")
     except Exception as e:
         logger.warning(f"Notif paiement WhatsApp échouée (non-bloquant): {e}")
+
+
+async def _notify_hot_lead_whatsapp(
+    owner_phone: str,
+    customer_name: str,
+    customer_phone: str,
+    outcome: str,
+) -> None:
+    """Notifie le propriétaire d'un tenant quand l'IA détecte un lead chaud."""
+    _outcome_labels = {
+        "vente": "💳 Vente probable",
+        "vente_conclue": "✅ Vente conclue",
+        "rdv_pris": "📅 RDV confirmé",
+        "lead_qualifié": "🔥 Lead qualifié",
+    }
+    label = _outcome_labels.get(outcome, f"🔔 {outcome}")
+    try:
+        whatsapp_service_url = os.getenv('WHATSAPP_SERVICE_URL', 'http://localhost:3001')
+        now = datetime.utcnow().strftime('%d/%m/%Y à %Hh%M')
+        msg = (
+            f"{label} !\n\n"
+            f"👤 {customer_name}\n"
+            f"📞 +{customer_phone}\n"
+            f"🕐 {now} UTC\n\n"
+            f"→ Ouvrez la conversation dans votre dashboard NéoBot"
+        )
+        client = get_http_client()
+        await client.post(
+            f"{whatsapp_service_url}/api/whatsapp/tenants/1/send-message",
+            json={"to": owner_phone, "message": msg},
+            timeout=10,
+        )
+        logger.info(f"✅ Notif lead chaud ({outcome}) envoyée à {owner_phone}")
+    except Exception as e:
+        logger.warning(f"Notif lead chaud WhatsApp échouée (non-bloquant): {e}")
 
 
 async def _record_bot_payment(conversation_id: int, customer_name: str,
@@ -447,15 +489,26 @@ async def _record_bot_payment(conversation_id: int, customer_name: str,
     try:
         from .models import PaymentEvent
         from .services.email_service import send_internal_alert
+        import secrets as _secrets
+        from datetime import timedelta as _td
+
         # Idempotence — ne pas créer deux fois pour le même numéro
         existing = db.query(PaymentEvent).filter(
             PaymentEvent.customer_phone == customer_phone,
             PaymentEvent.status == "bot_pending",
         ).first()
         if existing:
-            logger.info(f"PaymentEvent bot déjà enregistré pour {customer_phone}")
+            logger.info(f"PaymentEvent bot déjà enregistré pour {customer_phone} (ref={existing.neo_ref})")
             return
+
         txid = f"bot_{customer_phone}_{int(datetime.utcnow().timestamp())}"
+
+        # Référence NEO-YYYY-NNNN séquentielle
+        from .routers.neopay import _generate_neo_ref, _build_confirm_email
+        neo_ref = _generate_neo_ref(db)
+        confirm_token = _secrets.token_urlsafe(32)
+        confirm_expires = datetime.utcnow() + _td(days=7)
+
         event = PaymentEvent(
             transaction_id=txid,
             provider="bot_whatsapp",
@@ -469,29 +522,31 @@ async def _record_bot_payment(conversation_id: int, customer_name: str,
             customer_email=customer_email,
             customer_phone=customer_phone,
             payment_metadata={"customer_name": customer_name, "conversation_id": conversation_id},
+            neo_ref=neo_ref,
+            confirm_token=confirm_token,
+            confirm_token_expires_at=confirm_expires,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
         db.add(event)
         db.commit()
-        body = (
-            f"🚨 NOUVEAU PAIEMENT EN ATTENTE — Plan Essential\n\n"
-            f"👤 Nom       : {customer_name}\n"
-            f"📞 Téléphone : {customer_phone}\n"
-            f"📧 Email     : {customer_email}\n"
-            f"💰 Montant   : 20 000 XAF (Plan Essential)\n"
-            f"🔗 Réf       : {txid}\n\n"
-            f"👉 Actions requises :\n"
-            f"1. Vérifier le paiement dans votre compte OM/MoMo\n"
-            f"2. Créer le compte dans le panel admin : https://neobot-ai.com/admin\n"
-            f"3. Activer l'abonnement depuis la fiche tenant\n\n"
-            f"⏰ Reçu le : {datetime.utcnow().strftime('%d/%m/%Y à %Hh%M')} UTC"
+
+        confirm_url = f"https://neobot-ai.com/api/neopay/confirm-payment?token={confirm_token}"
+        body = _build_confirm_email(
+            neo_ref=neo_ref,
+            customer_name=customer_name,
+            customer_email=customer_email,
+            plan_label="Essential",
+            amount=20000,
+            payment_method="mobile_money",
+            customer_phone=customer_phone,
+            confirm_url=confirm_url,
         )
         await send_internal_alert(
-            subject=f"💰 Paiement bot — {customer_name} ({customer_phone})",
+            subject=f"💰 Paiement bot — {neo_ref} — {customer_name} ({customer_phone})",
             body=body,
         )
-        logger.info(f"✅ PaymentEvent bot créé pour {customer_email} ({customer_phone})")
+        logger.info(f"✅ PaymentEvent bot créé {neo_ref} pour {customer_email} ({customer_phone})")
     except Exception as _e:
         logger.error(f"_record_bot_payment failed: {_e}", exc_info=True)
 
@@ -538,7 +593,41 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             return {"status": "error", "message": "Phone not registered"}
         
         logger.info(f"✅ Phone {phone} mapped to tenant {tenant_id}")
-        
+
+        # ── Message du propriétaire (fromMe=true) ────────────────────────────
+        # Le propriétaire a écrit manuellement depuis son téléphone WhatsApp.
+        # Sauvegarder le message, activer human_takeover, NE PAS répondre avec l'IA.
+        if message.fromMe:
+            logger.info(f"👤 Message fromMe pour conv {phone} (tenant {tenant_id}) — human_takeover activé")
+            try:
+                conversation, _ = await save_message_to_db(
+                    phone=phone,
+                    sender_name="Propriétaire",
+                    text=message.text,
+                    direction="outgoing",
+                    tenant_id=tenant_id,
+                    db=db,
+                    is_ai=False,
+                )
+                # Activer human_takeover sur cette conversation
+                human_state = db.query(ConversationHumanState).filter(
+                    ConversationHumanState.conversation_id == conversation.id
+                ).first()
+                if not human_state:
+                    human_state = ConversationHumanState(
+                        conversation_id=conversation.id,
+                        human_active=True,
+                        last_human_message_at=datetime.utcnow(),
+                    )
+                    db.add(human_state)
+                else:
+                    human_state.human_active = True
+                    human_state.last_human_message_at = datetime.utcnow()
+                db.commit()
+            except Exception as e:
+                logger.error(f"Erreur sauvegarde message fromMe: {e}")
+            return {"status": "ok", "reason": "owner_message_saved"}
+
         # CHECK QUOTA before processing message
         if UsageTrackingService.check_quota_exceeded(tenant_id, db):
             logger.warning(f"⚠️  Tenant {tenant_id} has exceeded quota. Message rejected.")
@@ -598,11 +687,17 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
                 db.commit()
                 logger.info(f"🔄 Pause temporaire expirée conv {conversation.id} — bot réactivé")
 
-        # Fetch agent settings (delay + typing) before generating response
+        # Fetch agent settings — lecture DB fraîche pour respecter les toggles en temps réel
         active_agent = AgentService.get_active_agent(tenant_id, db)
+
+        # Vérification is_active : si l'agent est désactivé (ou inexistant), ne pas répondre
+        if not active_agent or not active_agent.is_active:
+            logger.info(f"🔇 Agent désactivé ou absent pour tenant {tenant_id} — réponse IA ignorée")
+            return {"status": "skipped", "reason": "agent_disabled"}
+
         response_delay = active_agent.response_delay if active_agent else "natural"
         typing_indicator = active_agent.typing_indicator if active_agent else True
-        
+
         # Process message with brain (now with business context)
         response_text = await brain.process(
             message.text,
@@ -612,31 +707,36 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             conversation_id=conversation.id
         )
         
-        # ── Détection paiement bot (tenant NéoBot uniquement) ──────────────
-        if tenant_id == 1 and _message_has_payment_keyword(message.text):
-            # Notification WhatsApp immédiate à l'admin dès que le client dit "payé"
+        # ── Détection paiement — tous les tenants ──────────────────────────
+        if _message_has_payment_keyword(message.text):
+            from .models import Tenant as _Tenant
+            _tenant_obj = db.query(_Tenant).filter(_Tenant.id == tenant_id).first()
+            # Numéro perso du propriétaire (≠ numéro bot) pour recevoir la notif
+            _admin_phone = (_tenant_obj.phone if _tenant_obj else None) or _NEOBOT_ADMIN_PHONE
             await _notify_admin_payment_whatsapp(
                 customer_name=message.senderName,
                 customer_phone=phone,
                 message_text=message.text,
+                admin_phone=_admin_phone,
             )
-            # Si email trouvé → créer le PaymentEvent et envoyer l'alerte email
-            _email = _extract_email(message.text)
-            if not _email:
-                _email = _extract_email(" ".join(
-                    m.content for m in db.query(Message).filter(
-                        Message.conversation_id == conversation.id,
-                        Message.direction == "incoming",
-                    ).order_by(Message.id.desc()).limit(12).all()
-                ))
-            if _email:
-                await _record_bot_payment(
-                    conversation_id=conversation.id,
-                    customer_name=message.senderName,
-                    customer_phone=phone,
-                    customer_email=_email,
-                    db=db,
-                )
+            if tenant_id == 1:
+                # Logique PaymentEvent spécifique NéoBot — paiement d'un futur abonné
+                _email = _extract_email(message.text)
+                if not _email:
+                    _email = _extract_email(" ".join(
+                        m.content for m in db.query(Message).filter(
+                            Message.conversation_id == conversation.id,
+                            Message.direction == "incoming",
+                        ).order_by(Message.id.desc()).limit(12).all()
+                    ))
+                if _email:
+                    await _record_bot_payment(
+                        conversation_id=conversation.id,
+                        customer_name=message.senderName,
+                        customer_phone=phone,
+                        customer_email=_email,
+                        db=db,
+                    )
 
         # Save outgoing message to database
         _, outgoing_msg = await save_message_to_db(
@@ -653,12 +753,31 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         # DETECT OUTCOME: analyser la réponse IA pour détecter un résultat métier
         if active_agent:
             from .services.outcome_detector import update_conversation_outcome
+            from .models import Tenant as _TenantOutcome
+
+            _prev_outcome = conversation.outcome_type
             update_conversation_outcome(
                 conversation_id=conversation.id,
                 agent_type=str(active_agent.agent_type),
                 ai_response=response_text,
                 db=db,
             )
+            db.refresh(conversation)
+            _new_outcome = conversation.outcome_type
+
+            # Notifier le propriétaire si un lead chaud vient d'être détecté
+            _HOT_OUTCOMES = {"vente", "vente_conclue", "rdv_pris", "lead_qualifié"}
+            if _new_outcome in _HOT_OUTCOMES and _prev_outcome not in _HOT_OUTCOMES:
+                _t = db.query(_TenantOutcome).filter(_TenantOutcome.id == tenant_id).first()
+                _owner_phone = _t.phone if _t else None
+                if _owner_phone:
+                    background_tasks.add_task(
+                        _notify_hot_lead_whatsapp,
+                        owner_phone=_owner_phone,
+                        customer_name=message.senderName,
+                        customer_phone=phone,
+                        outcome=_new_outcome,
+                    )
 
         # INCREMENT USAGE: 1 for incoming message + 1 for outgoing message = 2 total
         UsageTrackingService.increment_whatsapp_usage(tenant_id, 2, db)
@@ -668,6 +787,7 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
         OveragePricingService.update_overage_cost(tenant_id, db)
         
         # Détecter les produits avec images mentionnés dans la réponse IA
+        # Règle : 1 seule photo par produit par conversation (pas de spam)
         products_with_images = []
         try:
             biz_config = db.query(TenantBusinessConfig).filter(
@@ -675,10 +795,25 @@ async def whatsapp_webhook(request: Request, message: WhatsAppMessage, backgroun
             ).first()
             if biz_config and biz_config.products_services:
                 prods = biz_config.products_services if isinstance(biz_config.products_services, list) else []
+
+                # Produits déjà cités dans les messages IA précédents → photo déjà envoyée
+                already_sent: set[str] = set()
+                prev_ai_msgs = db.query(Message).filter(
+                    Message.conversation_id == conversation.id,
+                    Message.direction == "outgoing",
+                    Message.is_ai == True,
+                ).order_by(Message.id.desc()).limit(30).all()
+                for prev_msg in prev_ai_msgs:
+                    for p in prods:
+                        if isinstance(p, dict) and p.get('name'):
+                            if p['name'].lower() in (prev_msg.content or '').lower():
+                                already_sent.add(p['name'].lower())
+
                 for p in prods:
                     if isinstance(p, dict) and p.get('image_url') and p.get('name'):
                         if p['name'].lower() in response_text.lower():
-                            products_with_images.append(p)
+                            if p['name'].lower() not in already_sent:
+                                products_with_images.append(p)
         except Exception as img_err:
             logger.debug(f"Product image detection failed (non-blocking): {img_err}")
 
@@ -890,8 +1025,9 @@ async def save_message_to_db(
             db.refresh(conversation)
             logger.info(f"✅ Created new conversation {conversation.id} for {phone}")
 
-    # Keep customer name fresh if we receive a better value later.
-    if sender_name and conversation.customer_name != sender_name:
+    # Ne mettre à jour le nom du client que pour les messages entrants (incoming)
+    # Les messages outgoing (IA ou propriétaire) ne doivent pas écraser le nom du client
+    if direction == "incoming" and sender_name and conversation.customer_name != sender_name:
         conversation.customer_name = sender_name
 
     message = Message(

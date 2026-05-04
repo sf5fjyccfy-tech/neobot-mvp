@@ -18,12 +18,14 @@ Endpoints superadmin :
 """
 import logging
 import re
+import secrets
 import uuid as _uuid
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import sentry_sdk
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
@@ -33,6 +35,67 @@ from app.models import PaymentLink, PaymentEvent, WebhookEvent, Tenant, PlanType
 from app.services import neopay_service, korapay_service, campay_service
 from app.services.email_service import send_internal_alert
 from app.limiter import limiter
+
+_FRONTEND_URL = "https://neobot-ai.com"
+_ADMIN_URL    = f"{_FRONTEND_URL}/admin"
+
+
+def _generate_neo_ref(db: Session) -> str:
+    """Génère une référence NEO-YYYY-NNNN séquentielle et unique."""
+    year = datetime.utcnow().year
+    prefix = f"NEO-{year}-"
+    existing = db.query(PaymentEvent.neo_ref).filter(
+        PaymentEvent.neo_ref.like(f"{prefix}%")
+    ).all()
+    max_n = 0
+    for (ref,) in existing:
+        if ref:
+            try:
+                n = int(ref[len(prefix):])
+                if n > max_n:
+                    max_n = n
+            except (ValueError, TypeError):
+                pass
+    return f"{prefix}{max_n + 1:04d}"
+
+
+def _build_confirm_email(
+    neo_ref: str,
+    customer_name: str,
+    customer_email: str,
+    plan_label: str,
+    amount: int,
+    payment_method: str,
+    customer_phone: str,
+    confirm_url: str,
+) -> str:
+    """Construit le corps de l'email admin avec 2 boutons."""
+    method_label = "Orange Money" if "om" in payment_method.lower() else (
+        "MTN MoMo" if "momo" in payment_method.lower() or "mtn" in payment_method.lower() else payment_method
+    )
+    verify_account = "Vérifiez votre compte Orange Money" if "om" in payment_method.lower() else (
+        "Vérifiez votre compte MTN MoMo" if "mtn" in payment_method.lower() or "momo" in payment_method.lower()
+        else "Vérifiez le paiement"
+    )
+    now = datetime.utcnow().strftime("%d/%m/%Y à %Hh%M")
+    return (
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 NOUVEAU PAIEMENT — {neo_ref}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Client      : {customer_name or '—'}\n"
+        f"Email       : {customer_email or '—'}\n"
+        f"Plan        : {plan_label} — {amount:,} XAF/mois\n"
+        f"Moyen       : {method_label}\n"
+        f"N° paiement : {customer_phone or '—'}\n"
+        f"Date        : {now} UTC\n\n"
+        f"🔍 {verify_account} pour le numéro {customer_phone}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✅ CONFIRMER — activation immédiate :\n"
+        f"{confirm_url}\n\n"
+        f"⚙️  OUVRIR LE PANEL ADMIN :\n"
+        f"{_ADMIN_URL}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +349,7 @@ async def webhook_campay(request: Request, db: Session = Depends(get_db)):
 class OmPaymentRequestBody(BaseModel):
     plan: str = "BASIC"
     customer_phone: str
+    payment_method: str = "om_manual"  # om_manual | momo_manual
 
     @field_validator('customer_phone')
     @classmethod
@@ -323,6 +387,11 @@ async def create_om_request(
     transaction_id = f"om_manual_{_uuid.uuid4().hex}"
     amount = plan_config.get("price_fcfa", 20000)
 
+    # G\u00e9n\u00e9rer ref NEO + token de confirmation 1-clic
+    neo_ref = _generate_neo_ref(db)
+    confirm_token = secrets.token_urlsafe(32)
+    confirm_expires = datetime.utcnow() + timedelta(days=7)
+
     event = PaymentEvent(
         transaction_id=transaction_id,
         provider="om_manual",
@@ -330,30 +399,33 @@ async def create_om_request(
         plan=plan_key,
         amount=amount,
         currency="XAF",
-        payment_method="mobile_money",
+        payment_method=body.payment_method if hasattr(body, "payment_method") else "mobile_money",
         status="pending",
         customer_email=current_user.email,
         customer_phone=body.customer_phone,
         payment_metadata={"customer_name": current_user.full_name or ""},
+        neo_ref=neo_ref,
+        confirm_token=confirm_token,
+        confirm_token_expires_at=confirm_expires,
     )
     db.add(event)
     db.commit()
     db.refresh(event)
 
+    plan_label = plan_config.get("display_name", plan_key)
+    confirm_url = f"{_FRONTEND_URL}/api/neopay/confirm-payment?token={confirm_token}"
     try:
-        _nom = current_user.full_name or "\u2014"
         await send_internal_alert(
-            subject=f"\U0001f4b0 Paiement OM en attente \u2014 {current_user.full_name or current_user.email}",
-            body=(
-                f"Tenant ID  : {current_user.tenant_id}\n"
-                f"Plan       : {plan_key} ({amount:,} XAF)\n"
-                f"T\u00e9l\u00e9phone  : {body.customer_phone}\n"
-                f"Email      : {current_user.email}\n"
-                f"Nom        : {_nom}\n"
-                f"Event ID   : {event.id}\n"
-                f"Transaction: {transaction_id}\n\n"
-                f"\u2192 Pour approuver :\n"
-                f"POST /api/neopay/om-approve/{event.id}"
+            subject=f"\ud83d\udcb0 Paiement OM en attente \u2014 {neo_ref} \u2014 {current_user.full_name or current_user.email}",
+            body=_build_confirm_email(
+                neo_ref=neo_ref,
+                customer_name=current_user.full_name or "\u2014",
+                customer_email=current_user.email,
+                plan_label=plan_label,
+                amount=amount,
+                payment_method=event.payment_method or "mobile_money",
+                customer_phone=body.customer_phone,
+                confirm_url=confirm_url,
             ),
         )
     except Exception as alert_exc:
@@ -362,8 +434,97 @@ async def create_om_request(
     return {
         "status": "pending",
         "event_id": event.id,
-        "message": "Demande enregistr\u00e9e. Votre abonnement sera activ\u00e9 dans les 24h apr\u00e8s v\u00e9rification.",
+        "neo_ref": neo_ref,
+        "message": f"Demande {neo_ref} enregistr\u00e9e. Votre abonnement sera activ\u00e9 dans les 24h apr\u00e8s v\u00e9rification.",
     }
+
+
+# ─── GET /api/neopay/confirm-payment — Activation 1-clic depuis email ─────────
+
+@router.get("/confirm-payment", summary="Confirmer un paiement via lien email (sans login)")
+async def confirm_payment_by_token(token: str, db: Session = Depends(get_db)):
+    """
+    Endpoint public — lien reçu par email admin.
+    Valide le token, active le compte du client, consume le token (usage unique).
+    Retourne une page HTML de confirmation.
+    """
+    if not token or len(token) < 10:
+        return HTMLResponse(_confirm_html("❌ Lien invalide", "Ce lien de confirmation est invalide.", error=True))
+
+    event = db.query(PaymentEvent).filter(
+        PaymentEvent.confirm_token == token,
+        PaymentEvent.confirmed_at == None,
+    ).first()
+
+    if not event:
+        return HTMLResponse(_confirm_html(
+            "❌ Lien déjà utilisé ou invalide",
+            "Ce lien a déjà été utilisé ou n'existe pas.",
+            error=True,
+        ))
+
+    if event.confirm_token_expires_at and event.confirm_token_expires_at < datetime.utcnow():
+        return HTMLResponse(_confirm_html(
+            "⏰ Lien expiré",
+            f"Ce lien a expiré. Référence : {event.neo_ref or event.transaction_id}. Approuvez manuellement depuis le panel admin.",
+            error=True,
+        ))
+
+    try:
+        await neopay_service.approve_manual_payment(db, event.id)
+    except Exception as exc:
+        logger.error("confirm_payment_by_token: erreur approve event %s: %s", event.id, exc)
+        return HTMLResponse(_confirm_html(
+            "⚠️ Erreur lors de l'activation",
+            f"Le compte n'a pas pu être activé automatiquement. Approuvez manuellement depuis le panel admin. Réf : {event.neo_ref or '—'}",
+            error=True,
+        ))
+
+    # Consommer le token — usage unique
+    event.confirmed_at = datetime.utcnow()
+    event.confirm_token = None
+    event.status = "confirmed"
+    db.commit()
+
+    neo = event.neo_ref or "—"
+    email = event.customer_email or "—"
+    logger.info("✅ Paiement %s confirmé via lien email (event_id=%s)", neo, event.id)
+
+    return HTMLResponse(_confirm_html(
+        f"✅ Compte activé — {neo}",
+        f"Le compte a été activé avec succès.<br>Un email de bienvenue a été envoyé à <strong>{email}</strong>.",
+        neo_ref=neo,
+        admin_url=_ADMIN_URL,
+    ))
+
+
+def _confirm_html(title: str, message: str, error: bool = False, neo_ref: str = "", admin_url: str = "") -> str:
+    color = "#ef4444" if error else "#22c55e"
+    extra = ""
+    if admin_url:
+        extra = f'<p style="margin-top:24px"><a href="{admin_url}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">⚙️ Ouvrir le panel admin</a></p>'
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NéoBot — {title}</title>
+  <style>body{{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+  .card{{background:#1e293b;border:1px solid {color}40;border-radius:16px;padding:40px;max-width:480px;width:90%;text-align:center}}
+  h1{{color:{color};font-size:1.6rem;margin-bottom:16px}}
+  p{{color:#94a3b8;line-height:1.6}}
+  .ref{{font-size:1.1rem;font-weight:700;color:#f1f5f9;margin:16px 0}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>{title}</h1>
+    <p>{message}</p>
+    {"<p class='ref'>Référence : " + neo_ref + "</p>" if neo_ref else ""}
+    {extra}
+  </div>
+</body>
+</html>"""
 
 
 @router.post("/om-approve/{event_id}", summary="Approuver un paiement OM (superadmin)")
@@ -439,26 +600,35 @@ def _fmt_dt(dt) -> str | None:
 
 @router.get("/bot-orders", summary="Commandes WhatsApp bot en attente (superadmin)")
 def list_bot_orders(db: Session = Depends(get_db), _=Depends(get_superadmin_user)):
-    events = (
-        db.query(PaymentEvent)
-        .filter(PaymentEvent.status == "bot_pending")
-        .order_by(PaymentEvent.created_at.desc())
-        .all()
-    )
-    return [
-        {
-            "id": e.id,
-            "transaction_id": e.transaction_id,
-            "customer_name": (e.payment_metadata or {}).get("customer_name", "—") if isinstance(e.payment_metadata, dict) else "—",
-            "customer_email": e.customer_email or "—",
-            "customer_phone": e.customer_phone or "—",
-            "plan": e.plan,
-            "amount": e.amount,
-            "currency": e.currency,
-            "created_at": _fmt_dt(e.created_at),
-        }
-        for e in events
-    ]
+    try:
+        events = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.status == "bot_pending")
+            .order_by(PaymentEvent.created_at.desc())
+            .all()
+        )
+        result = []
+        for e in events:
+            try:
+                meta = e.payment_metadata if isinstance(e.payment_metadata, dict) else {}
+                result.append({
+                    "id": e.id,
+                    "transaction_id": e.transaction_id or "—",
+                    "neo_ref": getattr(e, "neo_ref", None) or "—",
+                    "customer_name": meta.get("customer_name", "—"),
+                    "customer_email": e.customer_email or "—",
+                    "customer_phone": e.customer_phone or "—",
+                    "plan": e.plan,
+                    "amount": e.amount,
+                    "currency": e.currency,
+                    "created_at": _fmt_dt(e.created_at),
+                })
+            except Exception as row_err:
+                logger.warning("bot-orders: erreur sérialisation event id=%s: %s", getattr(e, "id", "?"), row_err)
+        return result
+    except Exception as exc:
+        logger.error("bot-orders: erreur liste: %s", exc, exc_info=True)
+        return []
 
 
 @router.post("/bot-orders/{order_id}/mark-done", summary="Marquer commande bot comme traitée (superadmin)")

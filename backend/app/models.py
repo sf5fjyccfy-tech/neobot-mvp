@@ -259,7 +259,7 @@ class Contact(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
     customer_phone = Column(String(50), nullable=False)
@@ -271,6 +271,10 @@ class Conversation(Base):
     # Outcome détecté par le bot (rdv_pris, vente, lead_qualifié, support_résolu, désintérêt)
     outcome_type = Column(String(50), nullable=True, default=None)
     outcome_detected_at = Column(DateTime, nullable=True, default=None)
+
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'customer_phone', name='uq_conversation_tenant_phone'),
+    )
 
     # Relations (en utilisant des strings)
     tenant = relationship("Tenant", back_populates="conversations")
@@ -767,24 +771,30 @@ class PaymentEvent(Base):
     """
     __tablename__ = "payment_events"
 
-    id                   = Column(Integer, primary_key=True, index=True)
-    transaction_id       = Column(String(255), unique=True, nullable=False, index=True)
-    provider             = Column(String(20), nullable=False)   # korapay | campay
-    payment_link_id      = Column(Integer, ForeignKey("payment_links.id"), nullable=True)
-    tenant_id            = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    plan                 = Column(String(50), nullable=False)
-    amount               = Column(Integer, nullable=False)
-    currency             = Column(String(10), nullable=False, default="NGN")
-    payment_method       = Column(String(50), nullable=True)    # card | mobile_money
-    status               = Column(String(30), nullable=False, default="initiated")
-    # initiated | pending | confirmed | failed | refunded | cancelled
-    provider_raw_status  = Column(String(100), nullable=True)
-    failure_reason       = Column(Text, nullable=True)
-    customer_email       = Column(String(255), nullable=True)
-    customer_phone       = Column(String(50), nullable=True)
-    payment_metadata     = Column(JSON, nullable=True)           # Données extra provider (jamais de carte)
-    created_at           = Column(DateTime, default=datetime.utcnow)
-    updated_at           = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id                      = Column(Integer, primary_key=True, index=True)
+    transaction_id          = Column(String(255), unique=True, nullable=False, index=True)
+    provider                = Column(String(20), nullable=False)   # korapay | campay | om_manual | bot_whatsapp
+    payment_link_id         = Column(Integer, ForeignKey("payment_links.id"), nullable=True)
+    tenant_id               = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    plan                    = Column(String(50), nullable=False)
+    amount                  = Column(Integer, nullable=False)
+    currency                = Column(String(10), nullable=False, default="NGN")
+    payment_method          = Column(String(50), nullable=True)    # card | mobile_money
+    status                  = Column(String(30), nullable=False, default="initiated")
+    # initiated | pending | bot_pending | confirmed | failed | refunded | cancelled
+    provider_raw_status     = Column(String(100), nullable=True)
+    failure_reason          = Column(Text, nullable=True)
+    customer_email          = Column(String(255), nullable=True)
+    customer_phone          = Column(String(50), nullable=True)
+    payment_metadata        = Column(JSON, nullable=True)           # Données extra provider (jamais de carte)
+    # Référence lisible NEO-YYYY-NNNN (générée pour OM manuel + bot WhatsApp)
+    neo_ref                 = Column(String(20), unique=True, nullable=True, index=True)
+    # Token de confirmation 1-clic (email admin)
+    confirm_token           = Column(String(64), unique=True, nullable=True, index=True)
+    confirm_token_expires_at = Column(DateTime, nullable=True)
+    confirmed_at            = Column(DateTime, nullable=True)
+    created_at              = Column(DateTime, default=datetime.utcnow)
+    updated_at              = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     tenant       = relationship("Tenant", foreign_keys=[tenant_id])
     payment_link = relationship("PaymentLink", foreign_keys=[payment_link_id])

@@ -172,13 +172,14 @@ async def request_pairing_code(
     db: Session = Depends(get_db),
 ):
     """
-    Alternative au QR : génère un code à 8 chiffres à entrer dans l'app WhatsApp.
-    Meilleur quand le QR est inaccessible (rate-limit, pas de caméra, connexion distante).
-    Instructions: WA > ⋮ > Appareils connectés > Associer un appareil > Associer avec un numéro
-    
-    PUBLIC ENDPOINT — pas d'authentification requise. Sécurité : quiconque connaît le tenant_id
-    peut générer un code, mais le code doit être saisi sur le téléphone réel. Rate-limit Meta (60s).
+    DÉSACTIVÉ — Le jumelage par code est réservé aux plans supérieurs.
+    Utilisez le QR code pour connecter WhatsApp.
     """
+    raise HTTPException(
+        status_code=410,
+        detail="Le jumelage par code est désactivé. Utilisez le QR code pour connecter WhatsApp. Cette fonctionnalité sera disponible sur les plans supérieurs.",
+    )
+    # Unreachable — kept for reference
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant non trouvé")
